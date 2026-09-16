@@ -3,7 +3,7 @@
 @layer atelier {
 	.tabBar {
 		position: relative;
-		height: var(--at-panel-header-height);
+		height: var(--atelier-panel-header-height);
 		flex-shrink: 0;
 	}
 
@@ -35,12 +35,12 @@
 
 	.tabBar::before {
 		left: 0;
-		background: linear-gradient(to right, var(--at-bg), transparent);
+		background: linear-gradient(to right, var(--atelier-bg), transparent);
 	}
 
 	.tabBar::after {
 		right: 0;
-		background: linear-gradient(to left, var(--at-bg), transparent);
+		background: linear-gradient(to left, var(--atelier-bg), transparent);
 	}
 
 	.tabBar[data-overflow-left="true"]::before {
@@ -66,7 +66,7 @@
 		top: 0;
 		height: 100%;
 		border-radius: 999px;
-		background: var(--at-scrollbar);
+		background: var(--atelier-scrollbar);
 		opacity: 0;
 	}
 

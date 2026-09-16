@@ -33,8 +33,8 @@
 	--atelier-doc-gap: calc(var(--atelier-doc-em) * 0.5);
 	--atelier-doc-radius: 4px;
 	/* Full-strength ink: Notion sets body text near-black, not a tint. */
-	color: var(--at-fg);
-	font-family: var(--at-font-sans);
+	color: var(--atelier-fg);
+	font-family: var(--atelier-font-sans);
 	font-size: var(--atelier-doc-font-size, 16px);
 	font-variant-numeric: normal;
 	letter-spacing: 0;
@@ -51,7 +51,7 @@
    no tracking, a 4px seat below, and room above that grows with the level.
    h5 and h6 stay body-size and plain; small caps read as labels. */
 .atelier-document :is(h1, h2, h3, h4, h5, h6) {
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 	font-weight: 600;
 	letter-spacing: 0;
 	line-height: 1.3;
@@ -89,7 +89,7 @@
 }
 
 .atelier-document h6 {
-	color: var(--at-fg-muted);
+	color: var(--atelier-fg-muted);
 	font-size: 1em;
 	margin-top: 0.75em;
 }
@@ -122,7 +122,7 @@
 }
 
 .atelier-document a:hover {
-	background-color: var(--at-bg-hover);
+	background-color: var(--atelier-bg-hover);
 	text-decoration-color: currentColor;
 }
 
@@ -172,12 +172,12 @@
 
 /* Markers in the body ink at body size: the list reads as one voice. */
 .atelier-document li::marker {
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 	font-size: 1em;
 }
 
 .atelier-document ol > li::marker {
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 	font-size: 1em;
 	font-variant-numeric: tabular-nums;
 	font-weight: 400;
@@ -222,20 +222,22 @@
 	/* Centred on the first line box (line-height 1.5). */
 	margin: calc((1.5em - 1em) / 2) 0 0;
 	justify-self: start;
-	border: 1.5px solid var(--at-fg-subtle);
+	border: 1.5px solid var(--atelier-fg-subtle);
 	border-radius: var(--atelier-doc-radius);
-	background-color: var(--at-panel);
-	box-shadow: inset 0 1px 0 color-mix(in srgb, var(--at-panel) 65%, transparent);
+	background-color: var(--atelier-panel);
+	box-shadow: inset 0 1px 0
+		color-mix(in srgb, var(--atelier-panel) 65%, transparent);
 }
 
 .atelier-document li[data-task] > input[type="checkbox"]:checked {
-	border-color: var(--at-accent);
-	background-color: var(--at-accent);
+	border-color: var(--atelier-accent);
+	background-color: var(--atelier-accent);
 	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6.2 5 8.1 9 3.8' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 	background-position: center;
 	background-repeat: no-repeat;
 	background-size: 0.75em 0.75em;
-	box-shadow: 0 1px 2px color-mix(in srgb, var(--at-accent) 18%, transparent);
+	box-shadow: 0 1px 2px
+		color-mix(in srgb, var(--atelier-accent) 18%, transparent);
 }
 
 /* Everything that is not the box sits in the text column. */
@@ -253,11 +255,11 @@
    text: nested tasks carry their own state. */
 .atelier-document li[data-task="x"] > p,
 .atelier-document li[data-task="x"] > div > p {
-	color: var(--at-fg-subtle);
+	color: var(--atelier-fg-subtle);
 	text-decoration: line-through;
 	text-decoration-color: color-mix(
 		in srgb,
-		var(--at-fg-subtle) 60%,
+		var(--atelier-fg-subtle) 60%,
 		transparent
 	);
 }
@@ -288,27 +290,27 @@
 	border-left: 0;
 	border-radius: var(--atelier-doc-radius);
 	padding: 1em 1em 1em 0.75em;
-	background: var(--at-tag-gray);
+	background: var(--atelier-tag-gray);
 }
 
 .atelier-document blockquote[data-alert="note"] {
-	background: var(--at-tag-blue);
+	background: var(--atelier-tag-blue);
 }
 
 .atelier-document blockquote[data-alert="tip"] {
-	background: var(--at-tag-green);
+	background: var(--atelier-tag-green);
 }
 
 .atelier-document blockquote[data-alert="important"] {
-	background: var(--at-tag-purple);
+	background: var(--atelier-tag-purple);
 }
 
 .atelier-document blockquote[data-alert="warning"] {
-	background: var(--at-tag-yellow);
+	background: var(--atelier-tag-yellow);
 }
 
 .atelier-document blockquote[data-alert="caution"] {
-	background: var(--at-tag-red);
+	background: var(--atelier-tag-red);
 }
 
 .atelier-document blockquote p {
@@ -331,10 +333,14 @@
 /* Inline code: a neutral tint, no border, 85% size, and a line-height that
    never grows the line box. */
 .atelier-document :not(pre) > code {
-	background-color: color-mix(in srgb, var(--at-fg-subtle) 15%, transparent);
-	color: var(--at-fg);
+	background-color: color-mix(
+		in srgb,
+		var(--atelier-fg-subtle) 15%,
+		transparent
+	);
+	color: var(--atelier-fg);
 	line-height: 1.25;
-	font-family: var(--at-font-mono);
+	font-family: var(--atelier-font-mono);
 	font-size: 0.85em;
 	border: 0;
 	border-radius: var(--atelier-doc-radius);
@@ -345,7 +351,7 @@
    for a language label in the top corner. */
 .atelier-document pre {
 	position: relative;
-	background: var(--at-bg-subtle);
+	background: var(--atelier-bg-subtle);
 	border: 0;
 	border-radius: var(--atelier-doc-radius);
 	box-shadow: none;
@@ -364,7 +370,7 @@
 .atelier-document pre code {
 	background-color: transparent;
 	padding: 0;
-	font-family: var(--at-font-mono);
+	font-family: var(--atelier-font-mono);
 	font-size: 0.84375em;
 	font-variant-ligatures: none;
 	font-variant-numeric: tabular-nums;
@@ -376,7 +382,7 @@
 /* The marker is the label as written, in the link ink, small and raised.
    The definition is a row: a fixed label and an ordinary body. */
 .atelier-document .markdown-footnote-ref {
-	color: var(--at-link);
+	color: var(--atelier-link);
 	font-size: 0.75em;
 	line-height: 0;
 	vertical-align: super;
@@ -393,7 +399,7 @@
 }
 
 .atelier-document .markdown-footnote-def-label {
-	color: var(--at-link);
+	color: var(--atelier-link);
 	font-size: 0.9em;
 	user-select: none;
 }
@@ -424,7 +430,7 @@
 /* A divider is a visible hairline in a short block, not 80px of air. */
 .atelier-document hr {
 	border: 0;
-	border-top: 1px solid color-mix(in srgb, var(--at-fg) 16%, transparent);
+	border-top: 1px solid color-mix(in srgb, var(--atelier-fg) 16%, transparent);
 	margin: 0.75em 0;
 }
 
@@ -465,7 +471,7 @@
 	display: table;
 	flex: 0 0 auto;
 	width: max-content;
-	border: 1px solid var(--at-border);
+	border: 1px solid var(--atelier-border);
 	border-collapse: separate;
 	border-radius: var(--atelier-doc-radius);
 	border-spacing: 0;
@@ -490,14 +496,14 @@
 }
 
 .atelier-document table tr:first-child {
-	background-color: var(--at-bg-hover);
+	background-color: var(--atelier-bg-hover);
 }
 
 /* 7px by 9px on a 16px body. */
 .atelier-document table th,
 .atelier-document table td {
-	border-right: 1px solid var(--at-border);
-	border-bottom: 1px solid var(--at-border);
+	border-right: 1px solid var(--atelier-border);
+	border-bottom: 1px solid var(--atelier-border);
 	padding: calc(var(--atelier-doc-em) * 0.4375)
 		calc(var(--atelier-doc-em) * 0.5625);
 	text-align: left;
@@ -505,7 +511,7 @@
 }
 
 .atelier-document table th {
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 	font-weight: 600;
 }
 
@@ -530,7 +536,7 @@
 }
 
 .atelier-document table tbody tr:hover {
-	background: color-mix(in srgb, var(--at-bg-hover) 68%, transparent);
+	background: color-mix(in srgb, var(--atelier-bg-hover) 68%, transparent);
 }
 
 /* ── The change itself ────────────────────────────────────────────────── */
@@ -538,30 +544,30 @@
    `data-review-status`, whether the editor's review mode or a static render
    put it there. */
 .atelier-document [data-review-status="added"] {
-	background-color: var(--at-diff-added-subtle);
+	background-color: var(--atelier-diff-added-subtle);
 	box-decoration-break: clone;
 	-webkit-box-decoration-break: clone;
 	border-radius: var(--atelier-doc-radius);
-	color: var(--at-diff-added);
+	color: var(--atelier-diff-added);
 	/* Nothing struck through: an arriving word is not a leaving one, whatever
 	   decoration the line around it carries. */
 	text-decoration: none;
 }
 
 .atelier-document [data-review-status="removed"] {
-	background-color: var(--at-diff-removed-subtle);
+	background-color: var(--atelier-diff-removed-subtle);
 	box-decoration-break: clone;
 	-webkit-box-decoration-break: clone;
 	border-radius: var(--atelier-doc-radius);
-	color: var(--at-diff-removed);
+	color: var(--atelier-diff-removed);
 	text-decoration: line-through;
-	text-decoration-color: var(--at-diff-removed);
+	text-decoration-color: var(--atelier-diff-removed);
 }
 
 /* A node whose attributes changed (a ticked task, a re-levelled heading)
    stays in place with a soft brand tint; its text is not a diff. */
 .atelier-document [data-review-status="modified"] {
-	background-color: var(--at-accent-subtle);
+	background-color: var(--atelier-accent-subtle);
 	box-decoration-break: clone;
 	-webkit-box-decoration-break: clone;
 	border-radius: var(--atelier-doc-radius);
@@ -600,7 +606,7 @@
 	display: block;
 	margin: calc(var(--atelier-doc-em) * 0.25) 0;
 	padding: calc(var(--atelier-doc-em) * 0.125) 0;
-	color: var(--at-fg-subtle);
+	color: var(--atelier-fg-subtle);
 	font-size: calc(var(--atelier-doc-em) * 0.75);
 	list-style: none;
 }
@@ -614,6 +620,6 @@
 }
 
 .atelier-document tr.md-diff-gap > td {
-	color: var(--at-fg-subtle);
+	color: var(--atelier-fg-subtle);
 	font-size: calc(var(--atelier-doc-em) * 0.75);
 }

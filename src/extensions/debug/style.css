@@ -21,8 +21,8 @@
 		.atelier-debug-toolbar {
 			height: 44px;
 			gap: 12px;
-			border-bottom: 1px solid var(--at-border-subtle);
-			background: var(--at-bg-subtle);
+			border-bottom: 1px solid var(--atelier-border-subtle);
+			background: var(--atelier-bg-subtle);
 			padding: 0 16px;
 		}
 
@@ -32,19 +32,19 @@
 			gap: 7px;
 			font-size: 12.5px;
 			font-weight: 700;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 		}
 
 		.atelier-debug-heading svg {
 			width: 14px;
 			height: 14px;
-			color: var(--at-link);
+			color: var(--atelier-link);
 		}
 
 		.atelier-debug-branch {
 			margin-left: auto;
 			font-size: 11px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 
 		.atelier-debug-branch code,
@@ -53,14 +53,14 @@
 		}
 
 		.atelier-debug-branch code {
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 		}
 
 		.atelier-debug-runbar {
 			min-height: 44px;
 			gap: 12px;
-			border-block: 1px solid var(--at-border-subtle);
-			background: var(--at-bg-subtle);
+			border-block: 1px solid var(--atelier-border-subtle);
+			background: var(--atelier-bg-subtle);
 			padding: 6px 16px;
 		}
 
@@ -79,14 +79,14 @@
 
 		.atelier-debug-run {
 			height: 30px;
-			background: var(--at-accent);
+			background: var(--atelier-accent);
 			padding: 0 12px;
-			color: var(--at-accent-on);
-			box-shadow: var(--at-shadow-accent);
+			color: var(--atelier-accent-on);
+			box-shadow: var(--atelier-shadow-accent);
 		}
 
 		.atelier-debug-run:hover {
-			background: var(--at-accent-hover);
+			background: var(--atelier-accent-hover);
 		}
 
 		.atelier-debug-run svg {
@@ -110,22 +110,22 @@
 		.atelier-debug-download:focus-visible,
 		.atelier-debug-snapshot:focus-visible {
 			outline: none;
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.atelier-debug-elapsed {
 			font-size: 11.5px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 
 		.atelier-debug-alert,
 		.atelier-debug-download-error {
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 		}
 
 		.atelier-debug-alert {
 			flex-shrink: 0;
-			border-bottom: 1px solid var(--at-border-subtle);
+			border-bottom: 1px solid var(--atelier-border-subtle);
 			padding: 8px 16px;
 			font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 			font-size: 11.5px;
@@ -137,7 +137,7 @@
 			min-width: 0;
 			flex: 1;
 			flex-direction: column;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 		}
 
 		.atelier-debug-results {
@@ -158,29 +158,29 @@
 		}
 
 		.atelier-debug-empty {
-			color: var(--at-fg-faint);
+			color: var(--atelier-fg-faint);
 		}
 
 		.atelier-debug-result-error {
 			font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 		}
 
 		.atelier-debug-result-count {
 			height: 30px;
 			flex-shrink: 0;
-			border-top: 1px solid var(--at-border-subtle);
+			border-top: 1px solid var(--atelier-border-subtle);
 			padding: 7px 12px;
 			font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 			font-size: 10.5px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 
 		.atelier-debug-comparison {
 			min-height: 48px;
 			gap: 10px;
-			border-top: 1px solid var(--at-border);
-			background: var(--at-bg-subtle);
+			border-top: 1px solid var(--atelier-border);
+			background: var(--atelier-bg-subtle);
 			padding: 7px 12px;
 		}
 
@@ -194,11 +194,11 @@
 		}
 
 		.atelier-debug-match {
-			color: var(--at-success);
+			color: var(--atelier-success);
 		}
 
 		.atelier-debug-mismatch {
-			color: var(--at-warning);
+			color: var(--atelier-warning);
 		}
 
 		.atelier-debug-match svg,
@@ -214,23 +214,23 @@
 
 		.atelier-debug-download {
 			height: 32px;
-			border: 1px solid var(--at-border);
-			background: var(--at-panel);
+			border: 1px solid var(--atelier-border);
+			background: var(--atelier-panel);
 			padding: 0 11px;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 		}
 
 		.atelier-debug-snapshot {
 			height: 30px;
 			flex-shrink: 0;
-			border: 1px solid var(--at-border);
-			background: var(--at-panel);
+			border: 1px solid var(--atelier-border);
+			background: var(--atelier-panel);
 			padding: 0 10px;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 		}
 
 		.atelier-debug-snapshot:hover {
-			background: var(--at-bg-hover);
+			background: var(--atelier-bg-hover);
 		}
 
 		.atelier-debug-snapshot svg {
@@ -239,7 +239,7 @@
 		}
 
 		.atelier-debug-download:hover {
-			background: var(--at-bg-hover);
+			background: var(--atelier-bg-hover);
 		}
 
 		.atelier-debug-download-error {

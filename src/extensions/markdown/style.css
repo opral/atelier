@@ -7,17 +7,17 @@
 			z-index: 100;
 			max-width: min(360px, calc(100vw - 16px));
 			padding: 12px 14px;
-			border: 1px solid var(--at-border);
+			border: 1px solid var(--atelier-border);
 			border-radius: 10px;
-			background: var(--at-panel);
-			color: var(--at-fg-muted);
-			box-shadow: var(--at-shadow-md);
+			background: var(--atelier-panel);
+			color: var(--atelier-fg-muted);
+			box-shadow: var(--atelier-shadow-md);
 			font-size: 12px;
 			line-height: 1.5;
 			pointer-events: auto;
 		}
 		.atelier-markdown-link-card strong {
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 		}
 		.atelier-markdown-link-path {
 			margin: 4px 0;
@@ -77,12 +77,20 @@
 
 		.markdown-format-toolbar-overflow-indicator-left {
 			left: 0;
-			background: linear-gradient(to right, var(--at-panel) 20%, transparent);
+			background: linear-gradient(
+				to right,
+				var(--atelier-panel) 20%,
+				transparent
+			);
 		}
 
 		.markdown-format-toolbar-overflow-indicator-right {
 			right: 0;
-			background: linear-gradient(to left, var(--at-panel) 20%, transparent);
+			background: linear-gradient(
+				to left,
+				var(--atelier-panel) 20%,
+				transparent
+			);
 		}
 
 		/* Hide the native scrollbar; a lightweight overlay thumb mirrors scroll
@@ -103,7 +111,7 @@
 			z-index: 10;
 			width: 6px;
 			min-height: 36px;
-			background-color: var(--at-scrollbar);
+			background-color: var(--atelier-scrollbar);
 			border-radius: 9999px;
 			opacity: 0;
 			pointer-events: none;
@@ -134,9 +142,9 @@
 			padding: 0.375rem 0.5625rem;
 			border: 0;
 			border-radius: 7px;
-			background: var(--at-bg-hover);
-			box-shadow: inset 0 0 0 1px var(--at-border);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			box-shadow: inset 0 0 0 1px var(--atelier-border);
+			color: var(--atelier-fg);
 			font-size: 0.75rem;
 			font-weight: 500;
 			line-height: 1rem;
@@ -145,9 +153,9 @@
 		}
 
 		.markdown-image-paste-hint[data-state="error"] {
-			background: var(--at-danger-subtle);
-			box-shadow: inset 0 0 0 1px var(--at-danger-subtle);
-			color: var(--at-diff-removed);
+			background: var(--atelier-danger-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-danger-subtle);
+			color: var(--atelier-diff-removed);
 		}
 
 		.markdown-image-paste-hint strong {
@@ -159,12 +167,12 @@
 			flex: 0 0 auto;
 			align-items: center;
 			justify-content: center;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 		}
 
 		.markdown-image-paste-hint[data-state="error"]
 			.markdown-image-paste-hint-icon {
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 		}
 
 		.markdown-image-paste-hint-icon svg {
@@ -231,7 +239,7 @@
 
 		/* Selection tints; the text keeps its colour instead of turning white. */
 		.markdown-view .ProseMirror ::selection {
-			background-color: var(--at-bg-selection);
+			background-color: var(--atelier-bg-selection);
 			color: inherit;
 		}
 
@@ -256,7 +264,7 @@
 			border: 0;
 			border-radius: 7px;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.78rem;
 			font-weight: 600;
 			line-height: 1;
@@ -280,8 +288,8 @@
 
 		.markdown-frontmatter-disclosure:hover,
 		.markdown-frontmatter-disclosure:focus-visible {
-			background: var(--at-bg-hover);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
 			outline: none;
 		}
 
@@ -289,7 +297,7 @@
 			opacity: 1;
 			pointer-events: auto;
 			transform: translateY(0);
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-frontmatter-disclosure svg {
@@ -320,7 +328,7 @@
 				.markdown-frontmatter.ProseMirror-selectednode
 			) {
 			border-radius: var(--markdown-radius);
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-frontmatter-header {
@@ -343,19 +351,19 @@
 			width: 0.95rem;
 			height: 0.95rem;
 			flex: 0 0 auto;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			stroke-width: 1.8;
 		}
 
 		.markdown-frontmatter-title strong {
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.78rem;
 			font-weight: 600;
 		}
 
 		.markdown-frontmatter-title span {
 			overflow: hidden;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.73rem;
 			text-overflow: ellipsis;
 			white-space: nowrap;
@@ -369,7 +377,7 @@
 			border: 0;
 			border-radius: 5px;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.71rem;
 			font-weight: 550;
 			opacity: 0;
@@ -387,12 +395,12 @@
 		}
 
 		.markdown-frontmatter-mode:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
 		}
 
 		.markdown-frontmatter-mode:focus-visible {
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 			outline: none;
 		}
 
@@ -428,7 +436,7 @@
 			align-items: center;
 			gap: 0.5rem;
 			border-radius: 6px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			margin-left: -0.5rem;
 			padding: 0 0.5rem;
 		}
@@ -436,8 +444,8 @@
 		.markdown-frontmatter-key-cell:hover,
 		.markdown-frontmatter-key-cell:focus-within,
 		.markdown-frontmatter-row-adding .markdown-frontmatter-key-cell {
-			background: var(--at-bg-hover);
-			color: var(--at-fg-muted);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
 		}
 
 		.markdown-frontmatter-key-cell > svg {
@@ -455,7 +463,7 @@
 			border: 0;
 			border-radius: 6px;
 			background: transparent;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font-family: inherit;
 			font-size: 0.84rem;
 			line-height: 1.25rem;
@@ -474,7 +482,7 @@
 		.markdown-frontmatter-key {
 			height: auto;
 			border-radius: 0;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font-size: 0.83rem;
 			font-weight: 500;
 			padding: 0;
@@ -488,7 +496,7 @@
 		.markdown-frontmatter-tags:focus-within,
 		.markdown-frontmatter-nested:hover,
 		.markdown-frontmatter-nested:focus-within {
-			background: var(--at-bg-subtle);
+			background: var(--atelier-bg-subtle);
 		}
 
 		.markdown-frontmatter-boolean {
@@ -496,7 +504,7 @@
 			min-height: 2rem;
 			align-items: center;
 			gap: 0.5rem;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font-size: 0.84rem;
 			border-radius: 6px;
 			padding-inline: 0.5rem;
@@ -505,7 +513,7 @@
 		.markdown-frontmatter-boolean input {
 			width: 1rem;
 			height: 1rem;
-			accent-color: var(--at-fg-muted);
+			accent-color: var(--atelier-fg-muted);
 		}
 
 		.markdown-frontmatter-value[type="date"]::-webkit-calendar-picker-indicator {
@@ -535,8 +543,12 @@
 			gap: 0.2rem;
 			border: 0;
 			border-radius: 5px;
-			background: color-mix(in srgb, var(--at-bg-hover) 70%, var(--at-panel));
-			color: var(--at-fg-muted);
+			background: color-mix(
+				in srgb,
+				var(--atelier-bg-hover) 70%,
+				var(--atelier-panel)
+			);
+			color: var(--atelier-fg-muted);
 			font-size: 0.72rem;
 			padding: 0 0.38rem;
 		}
@@ -563,7 +575,7 @@
 			height: 1.65rem;
 			border: 0;
 			background: transparent;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font: inherit;
 			font-size: 0.78rem;
 			outline: none;
@@ -577,7 +589,7 @@
 			border: 0;
 			border-radius: 5px;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.72rem;
 			opacity: 0;
 			padding: 0 0.4rem;
@@ -590,8 +602,8 @@
 		}
 
 		.markdown-frontmatter-tag-add:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg-muted);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
 		}
 
 		.markdown-frontmatter-tag-add svg {
@@ -622,7 +634,7 @@
 			border: 0;
 			border-radius: 6px;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			margin-top: 0.175rem;
 			opacity: 0;
 		}
@@ -633,8 +645,8 @@
 		}
 
 		.markdown-frontmatter-remove:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
 		}
 
 		.markdown-frontmatter-remove svg {
@@ -651,7 +663,7 @@
 			border: 0;
 			border-radius: 6px;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.75rem;
 			font-weight: 500;
 			margin: 0.15rem 0 0 -0.5rem;
@@ -659,12 +671,12 @@
 		}
 
 		.markdown-frontmatter-add:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
 		}
 
 		.markdown-frontmatter-add:focus-visible {
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 			outline: none;
 		}
 
@@ -676,7 +688,7 @@
 
 		.markdown-frontmatter-empty-value {
 			height: 2rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.84rem;
 			line-height: 1.25rem;
 			padding: 0.36rem 0.5rem;
@@ -692,8 +704,8 @@
 			resize: vertical;
 			border: 0;
 			border-radius: 5px;
-			background: var(--at-bg-subtle);
-			color: var(--at-fg);
+			background: var(--atelier-bg-subtle);
+			color: var(--atelier-fg);
 			font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 			font-size: 0.78rem;
 			line-height: 1.55;
@@ -702,12 +714,12 @@
 		}
 
 		.markdown-frontmatter-yaml:focus {
-			box-shadow: inset 0 0 0 1px var(--at-fg-muted);
+			box-shadow: inset 0 0 0 1px var(--atelier-fg-muted);
 		}
 
 		.markdown-frontmatter-error {
 			margin: 0.4rem 0 0;
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 			font-size: 0.72rem;
 			line-height: 1.35;
 		}
@@ -718,8 +730,8 @@
 			.markdown-frontmatter-input:disabled,
 		.markdown-frontmatter[data-disabled="true"]
 			.markdown-frontmatter-tag:disabled {
-			color: var(--at-fg-muted);
-			-webkit-text-fill-color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
+			-webkit-text-fill-color: var(--atelier-fg-muted);
 			cursor: default;
 			opacity: 1;
 		}
@@ -796,7 +808,7 @@
 		   code chip that looks like real code. */
 		.markdown-view .ProseMirror .markdown-wc-inline-html > code {
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			padding: 0;
 			font-size: 0.8em;
 		}
@@ -809,13 +821,13 @@
 		}
 
 		.markdown-view .ProseMirror .markdown-footnote-ref-link {
-			color: var(--at-link);
+			color: var(--atelier-link);
 			text-decoration: none;
 			cursor: pointer;
 		}
 
 		.markdown-view .ProseMirror .markdown-footnote-ref-link:hover {
-			color: var(--at-link-hover);
+			color: var(--atelier-link-hover);
 			text-decoration: underline;
 			text-underline-offset: 2px;
 		}
@@ -824,7 +836,7 @@
 			.ProseMirror
 			.markdown-footnote-ref--orphan
 			.markdown-footnote-ref-link {
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			text-decoration: underline dashed;
 			text-underline-offset: 2px;
 			cursor: default;
@@ -838,15 +850,15 @@
 			border: 0;
 			background: transparent;
 			padding: 0 0.25rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font: inherit;
 			cursor: pointer;
 			border-radius: 2px;
 		}
 
 		.markdown-view .ProseMirror .markdown-footnote-backref:hover {
-			color: var(--at-link);
-			background: var(--at-bg-hover);
+			color: var(--atelier-link);
+			background: var(--atelier-bg-hover);
 		}
 
 		/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
@@ -854,7 +866,11 @@
 		   deepening as the scroll came to rest, which cost most of the moment the
 		   tint exists for. */
 		.markdown-view .ProseMirror .markdown-footnote-target {
-			background-color: color-mix(in srgb, var(--at-link) 14%, transparent);
+			background-color: color-mix(
+				in srgb,
+				var(--atelier-link) 14%,
+				transparent
+			);
 			transition-duration: 120ms;
 			transition-timing-function: ease-out;
 		}
@@ -863,7 +879,7 @@
 		   as source, sized like a note. */
 		.markdown-view .ProseMirror .markdown-wc-unsupported-block {
 			margin: var(--markdown-block-gap) 0;
-			border: 1px dashed var(--at-border-strong);
+			border: 1px dashed var(--atelier-border-strong);
 			border-radius: var(--markdown-radius);
 			padding: 0.5rem 0.75rem;
 		}
@@ -871,7 +887,7 @@
 		.markdown-view .ProseMirror .markdown-wc-unsupported-block > strong {
 			display: block;
 			margin-bottom: 0.25rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 11px;
 			font-weight: 600;
 			letter-spacing: 0.04em;
@@ -896,10 +912,10 @@
 			top: 0.5rem;
 			right: 0.5rem;
 			z-index: 1;
-			border: 1px solid var(--at-border-subtle);
+			border: 1px solid var(--atelier-border-subtle);
 			border-radius: var(--markdown-radius);
-			background: color-mix(in srgb, var(--at-panel) 88%, transparent);
-			color: var(--at-fg-subtle);
+			background: color-mix(in srgb, var(--atelier-panel) 88%, transparent);
+			color: var(--atelier-fg-subtle);
 			font-family:
 				ui-sans-serif,
 				-apple-system,
@@ -922,22 +938,22 @@
 		}
 
 		.markdown-view .ProseMirror .syntax-comment {
-			color: var(--at-syntax-comment);
+			color: var(--atelier-syntax-comment);
 			font-style: italic;
 		}
 
 		.markdown-view .ProseMirror .syntax-keyword {
-			color: var(--at-syntax-keyword);
+			color: var(--atelier-syntax-keyword);
 			font-weight: 400;
 		}
 
 		.markdown-view .ProseMirror .syntax-literal,
 		.markdown-view .ProseMirror .syntax-number {
-			color: var(--at-syntax-number);
+			color: var(--atelier-syntax-number);
 		}
 
 		.markdown-view .ProseMirror .syntax-string {
-			color: var(--at-syntax-string);
+			color: var(--atelier-syntax-string);
 		}
 
 		.markdown-view .ProseMirror .syntax-property {
@@ -954,8 +970,8 @@
 		   previews exactly where an image, PDF, or later embed will land. */
 		.markdown-view .atelier-markdown-drop-indicator {
 			border-radius: 999px;
-			background: var(--at-accent);
-			box-shadow: 0 0 0 1px var(--at-panel);
+			background: var(--atelier-accent);
+			box-shadow: 0 0 0 1px var(--atelier-panel);
 			animation: markdown-drop-indicator-in 100ms ease-out;
 		}
 
@@ -1006,8 +1022,8 @@
 				.ProseMirror-selectednode
 			) {
 			box-shadow:
-				0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
-				var(--at-shadow-lg);
+				0 0 0 2px color-mix(in srgb, var(--atelier-ring) 36%, transparent),
+				var(--atelier-shadow-lg);
 		}
 
 		.markdown-view
@@ -1015,8 +1031,8 @@
 			.markdown-image-embed:hover:not(.ProseMirror-selectednode)
 			> .markdown-image-block-content {
 			box-shadow:
-				0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
-				var(--at-shadow-lg);
+				0 0 0 2px color-mix(in srgb, var(--atelier-ring) 36%, transparent),
+				var(--atelier-shadow-lg);
 		}
 
 		.markdown-view
@@ -1031,14 +1047,14 @@
 				img,
 				.markdown-pdf-embed
 			) {
-			border-color: var(--at-ring);
+			border-color: var(--atelier-ring);
 		}
 
 		.markdown-view
 			.ProseMirror
 			.markdown-image-embed.ProseMirror-selectednode
 			> .markdown-image-block-content {
-			border-color: var(--at-ring);
+			border-color: var(--atelier-ring);
 		}
 
 		.markdown-view
@@ -1055,10 +1071,10 @@
 			align-items: center;
 			justify-content: center;
 			padding: 0;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			cursor: pointer;
-			background: var(--at-panel);
-			border: 1px solid var(--at-border);
+			background: var(--atelier-panel);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.375rem;
 			opacity: 0;
 			pointer-events: none;
@@ -1092,12 +1108,12 @@
 		}
 
 		.markdown-view .ProseMirror .markdown-asset-delete:hover {
-			color: var(--at-danger);
-			background: var(--at-bg-hover);
+			color: var(--atelier-danger);
+			background: var(--atelier-bg-hover);
 		}
 
 		.markdown-view .ProseMirror .markdown-asset-delete:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 1px;
 		}
 
@@ -1106,7 +1122,8 @@
 			top: 0.5rem;
 			right: 0.5rem;
 			z-index: 2;
-			box-shadow: 0 1px 2px color-mix(in srgb, var(--at-fg) 10%, transparent);
+			box-shadow: 0 1px 2px
+				color-mix(in srgb, var(--atelier-fg) 10%, transparent);
 		}
 
 		.markdown-view
@@ -1124,10 +1141,11 @@
 			margin: 1.25rem 0;
 			overflow: hidden;
 			vertical-align: top;
-			background: var(--at-panel);
-			border: 1px solid var(--at-border);
+			background: var(--atelier-panel);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.5rem;
-			box-shadow: 0 1px 2px color-mix(in srgb, var(--at-fg) 6%, transparent);
+			box-shadow: 0 1px 2px
+				color-mix(in srgb, var(--atelier-fg) 6%, transparent);
 		}
 
 		.markdown-view
@@ -1147,8 +1165,8 @@
 			align-items: center;
 			gap: 0.625rem;
 			padding: 0 0.75rem;
-			background: var(--at-bg-subtle);
-			border-bottom: 1px solid var(--at-border);
+			background: var(--atelier-bg-subtle);
+			border-bottom: 1px solid var(--atelier-border);
 		}
 
 		.markdown-view .ProseMirror .markdown-pdf-icon {
@@ -1158,9 +1176,9 @@
 			flex: 0 0 auto;
 			align-items: center;
 			justify-content: center;
-			color: var(--at-link);
-			background: var(--at-accent-subtle);
-			border: 1px solid var(--at-accent-border);
+			color: var(--atelier-link);
+			background: var(--atelier-accent-subtle);
+			border: 1px solid var(--atelier-accent-border);
 			border-radius: 0.25rem;
 		}
 
@@ -1176,7 +1194,7 @@
 			min-width: 0;
 			flex: 1 1 auto;
 			overflow: hidden;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font-size: 0.8125rem;
 			font-weight: 600;
 			line-height: 1.25rem;
@@ -1191,19 +1209,19 @@
 			align-items: center;
 			justify-content: center;
 			padding: 0 0.625rem;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font-size: 0.75rem;
 			font-weight: 600;
 			line-height: 1;
 			text-decoration: none;
-			background: var(--at-panel);
-			border: 1px solid var(--at-border);
+			background: var(--atelier-panel);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.375rem;
 		}
 
 		.markdown-view .ProseMirror a.markdown-pdf-open:hover {
-			color: var(--at-fg);
-			background: var(--at-bg-hover);
+			color: var(--atelier-fg);
+			background: var(--atelier-bg-hover);
 		}
 
 		.markdown-view
@@ -1214,7 +1232,7 @@
 			.ProseMirror
 			.markdown-pdf-embed[data-asset-state="unavailable"]
 			a.markdown-pdf-open {
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			pointer-events: none;
 		}
 
@@ -1223,7 +1241,7 @@
 			display: flex;
 			min-height: 7.5rem;
 			flex: 1 1 auto;
-			background: var(--at-bg-subtle);
+			background: var(--atelier-bg-subtle);
 		}
 
 		.markdown-view .ProseMirror .markdown-pdf-preview {
@@ -1232,7 +1250,11 @@
 			width: 100%;
 			height: 100%;
 			overflow: hidden;
-			background: color-mix(in srgb, var(--at-fg) 72%, var(--at-panel));
+			background: color-mix(
+				in srgb,
+				var(--atelier-fg) 72%,
+				var(--atelier-panel)
+			);
 		}
 
 		.markdown-view .ProseMirror .atelier-pdf-canvas-scroll {
@@ -1254,7 +1276,7 @@
 			height: auto;
 			margin: 0 auto;
 			background: white;
-			box-shadow: var(--at-shadow-lg);
+			box-shadow: var(--atelier-shadow-lg);
 		}
 
 		.markdown-view .ProseMirror .atelier-pdf-sr-page-text {
@@ -1277,11 +1299,11 @@
 			align-items: center;
 			gap: 0.25rem;
 			padding: 0.25rem;
-			color: var(--at-fg);
-			background: color-mix(in srgb, var(--at-panel) 94%, transparent);
-			border: 1px solid var(--at-border);
+			color: var(--atelier-fg);
+			background: color-mix(in srgb, var(--atelier-panel) 94%, transparent);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.5rem;
-			box-shadow: var(--at-shadow-md);
+			box-shadow: var(--atelier-shadow-md);
 			transform: translateX(-50%);
 		}
 
@@ -1290,7 +1312,7 @@
 			height: 1.75rem;
 			align-items: center;
 			padding: 0 0.625rem;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font: inherit;
 			font-size: 0.6875rem;
 			font-weight: 600;
@@ -1301,24 +1323,24 @@
 		}
 
 		.markdown-view .ProseMirror .atelier-pdf-page-button:hover:not(:disabled) {
-			color: var(--at-fg);
-			background: var(--at-bg-hover);
+			color: var(--atelier-fg);
+			background: var(--atelier-bg-hover);
 		}
 
 		.markdown-view .ProseMirror .atelier-pdf-page-button:disabled {
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			cursor: default;
 			opacity: 0.55;
 		}
 
 		.markdown-view .ProseMirror .atelier-pdf-page-button:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 1px;
 		}
 
 		.markdown-view .ProseMirror .atelier-pdf-page-label {
 			min-width: 3.5rem;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font-size: 0.6875rem;
 			font-variant-numeric: tabular-nums;
 			font-weight: 600;
@@ -1334,10 +1356,10 @@
 			justify-content: center;
 			flex-direction: column;
 			gap: 0.75rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.8125rem;
 			line-height: 1.25rem;
-			background: var(--at-bg-subtle);
+			background: var(--atelier-bg-subtle);
 		}
 
 		.markdown-view
@@ -1365,12 +1387,12 @@
 			align-items: center;
 			justify-content: center;
 			padding: 0 0.75rem;
-			color: var(--at-accent-on);
+			color: var(--atelier-accent-on);
 			font: inherit;
 			font-size: 0.75rem;
 			font-weight: 600;
 			line-height: 1;
-			background: var(--at-accent);
+			background: var(--atelier-accent);
 			border: 0;
 			border-radius: 0.375rem;
 			cursor: pointer;
@@ -1384,11 +1406,11 @@
 		}
 
 		.markdown-view .ProseMirror .markdown-pdf-preview-action:hover {
-			background: var(--at-accent-hover);
+			background: var(--atelier-accent-hover);
 		}
 
 		.markdown-view .ProseMirror .markdown-pdf-preview-action:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 2px;
 		}
 
@@ -1419,7 +1441,7 @@
 			width: 100%;
 			aspect-ratio: 16 / 9;
 			overflow: hidden;
-			background: var(--at-overlay);
+			background: var(--atelier-overlay);
 			border-radius: 0.625rem;
 			transition: box-shadow 120ms ease-out;
 		}
@@ -1429,15 +1451,15 @@
 			.markdown-video-embed:hover:not(.ProseMirror-selectednode)
 			> .markdown-video-frame {
 			box-shadow:
-				0 0 0 2px color-mix(in srgb, var(--at-ring) 36%, transparent),
-				var(--at-shadow-lg);
+				0 0 0 2px color-mix(in srgb, var(--atelier-ring) 36%, transparent),
+				var(--atelier-shadow-lg);
 		}
 
 		.markdown-view
 			.ProseMirror
 			.markdown-video-embed.ProseMirror-selectednode
 			> .markdown-video-frame {
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view .ProseMirror .markdown-video-frame .atelier-video-player {
@@ -1450,7 +1472,7 @@
 			display: block;
 			width: 100%;
 			height: 100%;
-			background: var(--at-overlay);
+			background: var(--atelier-overlay);
 		}
 
 		.markdown-view .ProseMirror .markdown-video-toolbar {
@@ -1462,7 +1484,7 @@
 			align-items: center;
 			gap: 0.125rem;
 			padding: 0.1875rem 0.25rem;
-			background: color-mix(in srgb, var(--at-overlay) 82%, transparent);
+			background: color-mix(in srgb, var(--atelier-overlay) 82%, transparent);
 			border-radius: 0.5rem;
 			font-size: 0.6563rem;
 			font-weight: 600;
@@ -1490,19 +1512,19 @@
 
 		.markdown-view .ProseMirror .markdown-video-open {
 			padding: 0.25rem 0.4375rem;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			cursor: pointer;
 			text-decoration: none;
 		}
 
 		.markdown-view .ProseMirror .markdown-video-open:hover {
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 		}
 
 		.markdown-view .ProseMirror .markdown-video-toolbar-divider {
 			width: 1px;
 			height: 0.75rem;
-			background: var(--at-overlay-border);
+			background: var(--atelier-overlay-border);
 		}
 
 		/* The shared delete button sits inside the dark toolbar chip — restyle it
@@ -1511,7 +1533,7 @@
 			width: auto;
 			height: auto;
 			padding: 0.25rem 0.4375rem;
-			color: var(--at-overlay-fg-muted);
+			color: var(--atelier-overlay-fg-muted);
 			background: none;
 			border: none;
 			opacity: 1;
@@ -1523,7 +1545,7 @@
 			.ProseMirror
 			.markdown-video-toolbar
 			.markdown-asset-delete:hover {
-			color: var(--at-overlay-danger);
+			color: var(--atelier-overlay-danger);
 			background: none;
 		}
 
@@ -1533,7 +1555,7 @@
 			left: 50%;
 			display: none;
 			padding: 0.375rem 0.75rem;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
 			font-size: 0.6875rem;
 			transform: translate(-50%, -50%);
@@ -1562,7 +1584,7 @@
 
 		.markdown-view .ProseMirror .markdown-video-caption {
 			display: block;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.75rem;
 			line-height: 1.4;
 		}
@@ -1577,8 +1599,8 @@
 			display: flex;
 			justify-content: center;
 			padding: 0.75rem;
-			background-color: var(--at-bg-subtle);
-			border: 1px solid var(--at-border);
+			background-color: var(--atelier-bg-subtle);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.375rem;
 			overflow-x: auto;
 		}
@@ -1591,14 +1613,14 @@
 		.markdown-view .ProseMirror .markdown-mermaid-error {
 			background-color: color-mix(
 				in srgb,
-				var(--at-danger) 8%,
-				var(--at-bg-subtle)
+				var(--atelier-danger) 8%,
+				var(--atelier-bg-subtle)
 			);
 			border: 1px solid
-				color-mix(in srgb, var(--at-danger) 30%, var(--at-border));
+				color-mix(in srgb, var(--atelier-danger) 30%, var(--atelier-border));
 			border-radius: 0.375rem;
 			padding: 0.75rem;
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 			font-family:
 				ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
 				"Liberation Mono", "Courier New", monospace;
@@ -1607,8 +1629,8 @@
 		}
 
 		.markdown-view .ProseMirror .markdown-mermaid-source {
-			background-color: var(--at-bg-subtle);
-			border: 1px solid var(--at-border);
+			background-color: var(--atelier-bg-subtle);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.375rem;
 			padding: 0.75rem;
 			overflow-x: auto;
@@ -1683,15 +1705,15 @@
 			.ProseMirror
 			li[data-task]
 			> input[type="checkbox"]:hover:not(:checked) {
-			border-color: var(--at-fg-muted);
-			background-color: var(--at-bg-hover);
+			border-color: var(--atelier-fg-muted);
+			background-color: var(--atelier-bg-hover);
 		}
 
 		.markdown-view
 			.ProseMirror
 			li[data-task]
 			> input[type="checkbox"]:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 2px;
 		}
 
@@ -1704,17 +1726,18 @@
 			max-height: min(26.25rem, calc(100vh - 1.5rem));
 			flex-direction: column;
 			overflow: hidden;
-			border: 1px solid color-mix(in srgb, var(--at-border) 92%, transparent);
+			border: 1px solid
+				color-mix(in srgb, var(--atelier-border) 92%, transparent);
 			border-radius: 10px;
-			background: color-mix(in srgb, var(--at-panel) 97%, transparent);
-			color: var(--at-fg);
+			background: color-mix(in srgb, var(--atelier-panel) 97%, transparent);
+			color: var(--atelier-fg);
 			font-family:
 				ui-sans-serif,
 				-apple-system,
 				BlinkMacSystemFont,
 				"Segoe UI",
 				sans-serif;
-			box-shadow: var(--at-shadow-lg);
+			box-shadow: var(--atelier-shadow-lg);
 			backdrop-filter: blur(16px);
 		}
 
@@ -1722,19 +1745,19 @@
 			min-height: 0;
 			overflow-y: auto;
 			padding: 0.38rem;
-			scrollbar-color: var(--at-border) transparent;
+			scrollbar-color: var(--atelier-border) transparent;
 			scrollbar-width: thin;
 		}
 
 		.markdown-slash-group + .markdown-slash-group {
 			margin-top: 0.28rem;
 			padding-top: 0.28rem;
-			border-top: 1px solid var(--at-border-subtle);
+			border-top: 1px solid var(--atelier-border-subtle);
 		}
 
 		.markdown-slash-group-label {
 			padding: 0.42rem 0.55rem 0.26rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.66rem;
 			font-weight: 650;
 			letter-spacing: 0.075em;
@@ -1758,12 +1781,12 @@
 		}
 
 		.markdown-slash-option:hover {
-			background: color-mix(in srgb, var(--at-bg-hover) 72%, transparent);
+			background: color-mix(in srgb, var(--atelier-bg-hover) 72%, transparent);
 		}
 
 		.markdown-slash-option[data-selected="true"] {
-			background: var(--at-accent-subtle);
-			box-shadow: inset 0 0 0 1px var(--at-accent-border);
+			background: var(--atelier-accent-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-accent-border);
 		}
 
 		.markdown-slash-option-icon {
@@ -1772,10 +1795,10 @@
 			height: 2rem;
 			align-items: center;
 			justify-content: center;
-			border: 1px solid var(--at-border-subtle);
+			border: 1px solid var(--atelier-border-subtle);
 			border-radius: 7px;
-			background: color-mix(in srgb, var(--at-bg-subtle) 72%, transparent);
-			color: var(--at-fg-muted);
+			background: color-mix(in srgb, var(--atelier-bg-subtle) 72%, transparent);
+			color: var(--atelier-fg-muted);
 		}
 
 		.markdown-slash-option-icon svg {
@@ -1787,11 +1810,11 @@
 		.markdown-slash-option[data-selected="true"] .markdown-slash-option-icon {
 			border-color: color-mix(
 				in srgb,
-				var(--at-accent-border) 82%,
-				var(--at-panel)
+				var(--atelier-accent-border) 82%,
+				var(--atelier-panel)
 			);
-			background: color-mix(in srgb, var(--at-panel) 82%, transparent);
-			color: var(--at-link);
+			background: color-mix(in srgb, var(--atelier-panel) 82%, transparent);
+			color: var(--atelier-link);
 		}
 
 		.markdown-slash-option-copy {
@@ -1803,7 +1826,7 @@
 
 		.markdown-slash-option-label {
 			overflow: hidden;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font-size: 0.84rem;
 			font-weight: 600;
 			letter-spacing: -0.005em;
@@ -1814,7 +1837,7 @@
 
 		.markdown-slash-option-description {
 			overflow: hidden;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.71rem;
 			font-weight: 450;
 			line-height: 1.25;
@@ -1827,10 +1850,10 @@
 			flex: 0 0 auto;
 			align-items: center;
 			gap: 0.72rem;
-			border-top: 1px solid var(--at-border-subtle);
-			background: color-mix(in srgb, var(--at-bg-subtle) 52%, transparent);
+			border-top: 1px solid var(--atelier-border-subtle);
+			background: color-mix(in srgb, var(--atelier-bg-subtle) 52%, transparent);
 			padding: 0.46rem 0.8rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.64rem;
 			font-weight: 550;
 			line-height: 1;
@@ -1855,7 +1878,7 @@
 
 		.markdown-emoji-empty {
 			padding: 1.35rem 0.75rem 1.55rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.78rem;
 			line-height: 1.35;
 			text-align: center;
@@ -1867,16 +1890,16 @@
 			gap: 0.5rem;
 			margin: 0.5rem 0.5rem 0.25rem;
 			padding: 0 0.625rem;
-			border: 1px solid var(--at-border);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.5rem;
-			background: var(--at-bg-subtle);
+			background: var(--atelier-bg-subtle);
 		}
 
 		.markdown-embed-file-search svg {
 			width: 0.875rem;
 			height: 0.875rem;
 			flex-shrink: 0;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 
 		.markdown-embed-file-search input {
@@ -1884,14 +1907,14 @@
 			height: 2rem;
 			border: none;
 			background: none;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font: inherit;
 			font-size: 0.8125rem;
 			outline: none;
 		}
 
 		.markdown-embed-file-search input::placeholder {
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 
 		.markdown-embed-file-option-icon img {
@@ -1910,7 +1933,7 @@
 		.markdown-embed-file-upload-section {
 			flex-shrink: 0;
 			padding: 0.375rem 0.5rem;
-			border-top: 1px solid var(--at-border);
+			border-top: 1px solid var(--atelier-border);
 		}
 
 		.markdown-embed-file-upload {
@@ -1932,7 +1955,7 @@
 
 		.markdown-embed-file-error {
 			padding: 0.375rem 0.75rem 0.5rem;
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 			font-size: 0.75rem;
 			line-height: 1.35;
 		}
@@ -1941,19 +1964,19 @@
 		   "more results" hint are its own. */
 		.markdown-mention-match {
 			background: transparent;
-			color: var(--at-accent);
+			color: var(--atelier-accent);
 		}
 
 		.markdown-mention-more {
 			padding: 0.3rem 0.55rem 0.4rem 3.12rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.71rem;
 			font-weight: 450;
 		}
 
 		.markdown-embed-file-empty {
 			padding: 1.35rem 0.75rem 1.55rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 0.78rem;
 			line-height: 1.35;
 			text-align: center;
@@ -1971,7 +1994,7 @@
 			display: flex;
 			min-height: 0;
 			flex-direction: column;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 		}
 
 		.markdown-review .markdown-review-surface {
@@ -1995,8 +2018,8 @@
 			margin: 0 1px;
 			padding: 1px 3px;
 			border-radius: 3px;
-			background: var(--at-bg-hover-strong);
-			color: var(--at-fg-muted);
+			background: var(--atelier-bg-hover-strong);
+			color: var(--atelier-fg-muted);
 			font-family:
 				ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 			font-size: 0.72em;
@@ -2007,7 +2030,7 @@
 		}
 
 		.markdown-review .ProseMirror .markdown-review-format-glyph > s {
-			color: var(--at-diff-removed);
+			color: var(--atelier-diff-removed);
 			text-decoration: line-through;
 			text-decoration-color: currentColor;
 		}
@@ -2017,14 +2040,14 @@
 		}
 
 		.markdown-review .ProseMirror .markdown-review-format-glyph > b {
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font-weight: 700;
 		}
 
 		.markdown-review
 			.ProseMirror
 			.markdown-review-format-glyph[data-review-active="true"] {
-			box-shadow: 0 0 0 1px var(--at-ring);
+			box-shadow: 0 0 0 1px var(--atelier-ring);
 		}
 
 		/* Empty paragraphs are serialized as an invisible `<span></span>` anchor.
@@ -2044,7 +2067,7 @@
 		}
 
 		.markdown-review .ProseMirror [data-review-active="true"] {
-			box-shadow: 0 0 0 1px var(--at-ring);
+			box-shadow: 0 0 0 1px var(--atelier-ring);
 			box-decoration-break: clone;
 			-webkit-box-decoration-break: clone;
 		}
@@ -2064,17 +2087,17 @@
 			width: 13rem;
 			flex-direction: column;
 			padding: 4px;
-			border: 1px solid var(--at-border);
+			border: 1px solid var(--atelier-border);
 			border-radius: 10px;
-			background: var(--at-panel);
-			color: var(--at-fg);
+			background: var(--atelier-panel);
+			color: var(--atelier-fg);
 			font-family:
 				ui-sans-serif,
 				-apple-system,
 				BlinkMacSystemFont,
 				"Segoe UI",
 				sans-serif;
-			box-shadow: var(--at-shadow-lg);
+			box-shadow: var(--atelier-shadow-lg);
 			/* Fades in on appearance and out from where it stood on dismissal. */
 			animation: markdown-selection-toolbar-in 140ms ease;
 			transition:
@@ -2103,7 +2126,7 @@
 			gap: 6px;
 			padding: 0 6px 0 8px;
 			border-radius: 7px;
-			color: var(--at-fg);
+			color: var(--atelier-fg);
 			font-size: 12.5px;
 			font-weight: 600;
 			line-height: 1;
@@ -2115,19 +2138,19 @@
 
 		.markdown-selection-toolbar-trigger:hover,
 		.markdown-selection-toolbar-trigger-open {
-			background: var(--at-bg-hover);
+			background: var(--atelier-bg-hover);
 		}
 
 		.markdown-selection-toolbar-trigger:focus-visible {
 			outline: none;
-			box-shadow: 0 0 0 2px var(--at-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-selection-toolbar-trigger-icon {
 			width: 14px;
 			height: 14px;
 			flex: 0 0 auto;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			stroke-width: 1.9;
 		}
 
@@ -2143,13 +2166,13 @@
 		.markdown-selection-toolbar-trigger-chevron {
 			display: inline-flex;
 			flex: 0 0 auto;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 
 		.markdown-selection-toolbar-divider {
 			height: 1px;
 			margin: 4px 2px;
-			background: var(--at-border-subtle);
+			background: var(--atelier-border-subtle);
 		}
 
 		.markdown-selection-toolbar-row {
@@ -2161,7 +2184,7 @@
 		/* Pending link target: the native selection paint disappears once the
 		   link popover's input takes focus, so the range keeps its own tint. */
 		.ProseMirror .markdown-link-target {
-			background: color-mix(in srgb, var(--at-ring) 18%, transparent);
+			background: color-mix(in srgb, var(--atelier-ring) 18%, transparent);
 			border-radius: 2px;
 		}
 	}
@@ -2175,12 +2198,12 @@
 		align-items: center;
 		gap: 0.1rem;
 		padding: 0.18rem 0.24rem;
-		border: 1px solid var(--at-overlay-hairline);
+		border: 1px solid var(--atelier-overlay-hairline);
 		border-radius: 0.5rem;
-		background: var(--at-overlay);
+		background: var(--atelier-overlay);
 		box-shadow:
-			var(--at-shadow-overlay),
-			0 1px 0 var(--at-overlay-hairline) inset;
+			var(--atelier-shadow-overlay),
+			0 1px 0 var(--atelier-overlay-hairline) inset;
 		font-size: 0.66rem;
 		font-weight: 620;
 		line-height: 1;
@@ -2192,12 +2215,12 @@
 		gap: 0.26rem;
 		padding: 0.26rem 0.45rem;
 		border-radius: 0.34rem;
-		color: var(--at-overlay-danger);
+		color: var(--atelier-overlay-danger);
 		cursor: pointer;
 	}
 
 	.markdown-inline-review-chip > button:hover:not(:disabled) {
-		background: var(--at-overlay-hairline);
+		background: var(--atelier-overlay-hairline);
 	}
 
 	.markdown-inline-review-chip > button:disabled {
@@ -2206,7 +2229,7 @@
 	}
 
 	.markdown-inline-review-chip > button:focus-visible {
-		outline: 2px solid var(--at-overlay-fg);
+		outline: 2px solid var(--atelier-overlay-fg);
 		outline-offset: 1px;
 	}
 
@@ -2216,13 +2239,13 @@
 	}
 
 	.markdown-inline-review-chip > .markdown-inline-review-chip-keep {
-		color: var(--at-overlay-success);
+		color: var(--atelier-overlay-success);
 	}
 
 	.markdown-inline-review-chip-divider {
 		width: 1px;
 		height: 0.75rem;
-		background: var(--at-overlay-hairline);
+		background: var(--atelier-overlay-hairline);
 	}
 
 	.markdown-inline-review-chip-error {
@@ -2232,8 +2255,8 @@
 		width: max-content;
 		max-width: 16rem;
 		border-radius: 0.4rem;
-		background: var(--at-diff-removed);
-		color: var(--at-danger-subtle);
+		background: var(--atelier-diff-removed);
+		color: var(--atelier-danger-subtle);
 		padding: 0.28rem 0.45rem;
 		font-size: 0.66rem;
 		font-weight: 500;

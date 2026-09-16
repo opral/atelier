@@ -14,7 +14,7 @@
 			min-height: 0;
 			flex: 1 1 auto;
 			overflow: hidden;
-			background: var(--at-overlay);
+			background: var(--atelier-overlay);
 		}
 
 		.atelier-video-player {
@@ -22,7 +22,7 @@
 			display: block;
 			width: 100%;
 			height: 100%;
-			background: var(--at-overlay);
+			background: var(--atelier-overlay);
 			outline: none;
 		}
 
@@ -40,7 +40,7 @@
 		 * disappears into a bright frame of video.
 		 */
 		.atelier-video-player:focus-within {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: -3px;
 		}
 
@@ -50,13 +50,13 @@
 			z-index: 2;
 			inset: 0;
 			box-shadow: inset 0 0 0 4px
-				color-mix(in srgb, var(--at-overlay) 60%, transparent);
+				color-mix(in srgb, var(--atelier-overlay) 60%, transparent);
 			pointer-events: none;
 		}
 
 		/* Inside the ring, which control has the keyboard. */
 		.atelier-video-player button:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 2px;
 		}
 
@@ -80,13 +80,13 @@
 			align-items: center;
 			gap: 7px;
 			padding: 5px 12px 5px 9px;
-			border: 1px solid var(--at-overlay-hairline);
+			border: 1px solid var(--atelier-overlay-hairline);
 			border-radius: 999px;
-			background: var(--at-scrim);
+			background: var(--atelier-scrim);
 			backdrop-filter: blur(10px);
 			font-size: 11px;
 			font-weight: 600;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			transition: opacity 0.3s ease;
 		}
 
@@ -100,13 +100,13 @@
 			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
 			font-size: 10px;
 			font-weight: 500;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 		}
 
 		.atelier-video-chip-icon {
 			width: 12px;
 			height: 12px;
-			color: var(--at-overlay-accent);
+			color: var(--atelier-overlay-accent);
 		}
 
 		.atelier-video-chip-label {
@@ -116,14 +116,14 @@
 		.atelier-video-chip-divider {
 			width: 1px;
 			height: 10px;
-			background: var(--at-overlay-hairline);
+			background: var(--atelier-overlay-hairline);
 		}
 
 		.atelier-video-chip-muted {
 			display: inline-flex;
 			align-items: center;
 			gap: 4px;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-weight: 500;
 		}
 
@@ -144,12 +144,12 @@
 			width: 68px;
 			height: 68px;
 			padding: 0;
-			border: 1px solid var(--at-overlay-hairline);
+			border: 1px solid var(--atelier-overlay-hairline);
 			border-radius: 50%;
-			background: var(--at-scrim);
+			background: var(--atelier-scrim);
 			backdrop-filter: blur(10px);
-			box-shadow: var(--at-shadow-overlay);
-			color: var(--at-overlay-fg);
+			box-shadow: var(--atelier-shadow-overlay);
+			color: var(--atelier-overlay-fg);
 			cursor: pointer;
 			transform: translate(-50%, -50%);
 			transition:
@@ -158,7 +158,7 @@
 		}
 
 		.atelier-video-puck:hover {
-			background: color-mix(in srgb, var(--at-accent) 75%, transparent);
+			background: color-mix(in srgb, var(--atelier-accent) 75%, transparent);
 		}
 
 		.atelier-video-puck svg {
@@ -170,7 +170,7 @@
 		.atelier-video-player[data-variant="embed"] .atelier-video-puck {
 			width: 48px;
 			height: 48px;
-			box-shadow: var(--at-shadow-overlay);
+			box-shadow: var(--atelier-shadow-overlay);
 		}
 
 		.atelier-video-player[data-variant="embed"] .atelier-video-puck svg {
@@ -196,9 +196,9 @@
 			align-items: center;
 			gap: 11px;
 			padding: 9px 16px 9px 11px;
-			border: 1px solid var(--at-overlay-hairline);
+			border: 1px solid var(--atelier-overlay-hairline);
 			border-radius: 999px;
-			background: var(--at-scrim);
+			background: var(--atelier-scrim);
 			backdrop-filter: blur(14px);
 			transition: opacity 0.3s ease;
 		}
@@ -230,7 +230,7 @@
 			padding: 0;
 			border: none;
 			background: none;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			cursor: pointer;
 		}
 
@@ -267,13 +267,13 @@
 			flex-shrink: 0;
 			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
 			font-size: 11px;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			white-space: nowrap;
 		}
 
 		.atelier-video-player[data-variant="embed"] .atelier-video-timecode {
 			font-size: 10px;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 		}
 
 		.atelier-video-track {
@@ -282,7 +282,7 @@
 			flex: 1;
 			height: 4px;
 			border-radius: 2px;
-			background: var(--at-overlay-hairline-strong);
+			background: var(--atelier-overlay-hairline-strong);
 			cursor: pointer;
 			touch-action: none;
 		}
@@ -299,7 +299,11 @@
 			display: block;
 			width: 0%;
 			border-radius: 2px;
-			background: linear-gradient(90deg, var(--at-link), var(--at-link));
+			background: linear-gradient(
+				90deg,
+				var(--atelier-link),
+				var(--atelier-link)
+			);
 		}
 
 		.atelier-video-track-knob {
@@ -310,21 +314,21 @@
 			width: 10px;
 			height: 10px;
 			border-radius: 50%;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 			box-shadow: 0 1px 6px
-				color-mix(in srgb, var(--at-overlay) 50%, transparent);
+				color-mix(in srgb, var(--atelier-overlay) 50%, transparent);
 		}
 
 		.atelier-video-rate {
 			font-size: 10.5px;
 			font-weight: 700;
-			color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
+			color: color-mix(in srgb, var(--atelier-overlay-fg) 75%, transparent);
 		}
 
 		.atelier-video-mute svg {
 			width: 14px;
 			height: 14px;
-			color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
+			color: color-mix(in srgb, var(--atelier-overlay-fg) 75%, transparent);
 		}
 
 		.atelier-video-icon-muted,
@@ -339,12 +343,12 @@
 		.atelier-video-fullscreen svg {
 			width: 13px;
 			height: 13px;
-			color: color-mix(in srgb, var(--at-overlay-fg) 75%, transparent);
+			color: color-mix(in srgb, var(--atelier-overlay-fg) 75%, transparent);
 		}
 
 		.atelier-video-player[data-variant="embed"] .atelier-video-fullscreen svg {
 			width: 12px;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 		}
 
 		/* ── error state ── */
@@ -359,11 +363,11 @@
 			left: 50%;
 			display: block;
 			padding: 8px 14px;
-			border: 1px solid var(--at-overlay-hairline);
+			border: 1px solid var(--atelier-overlay-hairline);
 			border-radius: 8px;
-			background: var(--at-scrim);
+			background: var(--atelier-scrim);
 			font-size: 12.5px;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			transform: translate(-50%, -50%);
 			white-space: nowrap;
 		}

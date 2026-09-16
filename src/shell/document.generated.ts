@@ -9,8 +9,8 @@ export const DOCUMENT_CSS = `:root,
 --atelier-doc-em: var(--atelier-doc-font-size, 16px);
 --atelier-doc-gap: calc(var(--atelier-doc-em) * 0.5);
 --atelier-doc-radius: 4px;
-color: var(--at-fg);
-font-family: var(--at-font-sans);
+color: var(--atelier-fg);
+font-family: var(--atelier-font-sans);
 font-size: var(--atelier-doc-font-size, 16px);
 font-variant-numeric: normal;
 letter-spacing: 0;
@@ -20,7 +20,7 @@ line-height: 1.5;
 unicode-bidi: plaintext;
 }
 .atelier-document :is(h1, h2, h3, h4, h5, h6) {
-color: var(--at-fg);
+color: var(--atelier-fg);
 font-weight: 600;
 letter-spacing: 0;
 line-height: 1.3;
@@ -51,7 +51,7 @@ font-size: 1em;
 margin-top: 0.75em;
 }
 .atelier-document h6 {
-color: var(--at-fg-muted);
+color: var(--atelier-fg-muted);
 font-size: 1em;
 margin-top: 0.75em;
 }
@@ -76,7 +76,7 @@ background-color 120ms ease,
 text-decoration-color 120ms ease;
 }
 .atelier-document a:hover {
-background-color: var(--at-bg-hover);
+background-color: var(--atelier-bg-hover);
 text-decoration-color: currentColor;
 }
 .atelier-document ul,
@@ -111,11 +111,11 @@ list-style-type: disc;
 list-style-type: circle;
 }
 .atelier-document li::marker {
-color: var(--at-fg);
+color: var(--atelier-fg);
 font-size: 1em;
 }
 .atelier-document ol > li::marker {
-color: var(--at-fg);
+color: var(--atelier-fg);
 font-size: 1em;
 font-variant-numeric: tabular-nums;
 font-weight: 400;
@@ -150,19 +150,21 @@ font: inherit;
 color: inherit;
 margin: calc((1.5em - 1em) / 2) 0 0;
 justify-self: start;
-border: 1.5px solid var(--at-fg-subtle);
+border: 1.5px solid var(--atelier-fg-subtle);
 border-radius: var(--atelier-doc-radius);
-background-color: var(--at-panel);
-box-shadow: inset 0 1px 0 color-mix(in srgb, var(--at-panel) 65%, transparent);
+background-color: var(--atelier-panel);
+box-shadow: inset 0 1px 0
+color-mix(in srgb, var(--atelier-panel) 65%, transparent);
 }
 .atelier-document li[data-task] > input[type="checkbox"]:checked {
-border-color: var(--at-accent);
-background-color: var(--at-accent);
+border-color: var(--atelier-accent);
+background-color: var(--atelier-accent);
 background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 6.2 5 8.1 9 3.8' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 background-position: center;
 background-repeat: no-repeat;
 background-size: 0.75em 0.75em;
-box-shadow: 0 1px 2px color-mix(in srgb, var(--at-accent) 18%, transparent);
+box-shadow: 0 1px 2px
+color-mix(in srgb, var(--atelier-accent) 18%, transparent);
 }
 .atelier-document li[data-task] > :not(input) {
 grid-column: 2;
@@ -174,11 +176,11 @@ margin-bottom: 0;
 }
 .atelier-document li[data-task="x"] > p,
 .atelier-document li[data-task="x"] > div > p {
-color: var(--at-fg-subtle);
+color: var(--atelier-fg-subtle);
 text-decoration: line-through;
 text-decoration-color: color-mix(
 in srgb,
-var(--at-fg-subtle) 60%,
+var(--atelier-fg-subtle) 60%,
 transparent
 );
 }
@@ -200,22 +202,22 @@ margin: var(--atelier-doc-gap) 0;
 border-left: 0;
 border-radius: var(--atelier-doc-radius);
 padding: 1em 1em 1em 0.75em;
-background: var(--at-tag-gray);
+background: var(--atelier-tag-gray);
 }
 .atelier-document blockquote[data-alert="note"] {
-background: var(--at-tag-blue);
+background: var(--atelier-tag-blue);
 }
 .atelier-document blockquote[data-alert="tip"] {
-background: var(--at-tag-green);
+background: var(--atelier-tag-green);
 }
 .atelier-document blockquote[data-alert="important"] {
-background: var(--at-tag-purple);
+background: var(--atelier-tag-purple);
 }
 .atelier-document blockquote[data-alert="warning"] {
-background: var(--at-tag-yellow);
+background: var(--atelier-tag-yellow);
 }
 .atelier-document blockquote[data-alert="caution"] {
-background: var(--at-tag-red);
+background: var(--atelier-tag-red);
 }
 .atelier-document blockquote p {
 margin-top: 0;
@@ -231,10 +233,14 @@ margin-top: 0.25em;
 margin-bottom: 0.25em;
 }
 .atelier-document :not(pre) > code {
-background-color: color-mix(in srgb, var(--at-fg-subtle) 15%, transparent);
-color: var(--at-fg);
+background-color: color-mix(
+in srgb,
+var(--atelier-fg-subtle) 15%,
+transparent
+);
+color: var(--atelier-fg);
 line-height: 1.25;
-font-family: var(--at-font-mono);
+font-family: var(--atelier-font-mono);
 font-size: 0.85em;
 border: 0;
 border-radius: var(--atelier-doc-radius);
@@ -242,7 +248,7 @@ padding: 0.2em 0.4em;
 }
 .atelier-document pre {
 position: relative;
-background: var(--at-bg-subtle);
+background: var(--atelier-bg-subtle);
 border: 0;
 border-radius: var(--atelier-doc-radius);
 box-shadow: none;
@@ -258,7 +264,7 @@ padding-top: 1.5em;
 .atelier-document pre code {
 background-color: transparent;
 padding: 0;
-font-family: var(--at-font-mono);
+font-family: var(--atelier-font-mono);
 font-size: 0.84375em;
 font-variant-ligatures: none;
 font-variant-numeric: tabular-nums;
@@ -266,7 +272,7 @@ letter-spacing: 0;
 line-height: 1.5;
 }
 .atelier-document .markdown-footnote-ref {
-color: var(--at-link);
+color: var(--atelier-link);
 font-size: 0.75em;
 line-height: 0;
 vertical-align: super;
@@ -281,7 +287,7 @@ margin: var(--atelier-doc-gap) 0;
 border-radius: var(--atelier-doc-radius);
 }
 .atelier-document .markdown-footnote-def-label {
-color: var(--at-link);
+color: var(--atelier-link);
 font-size: 0.9em;
 user-select: none;
 }
@@ -304,7 +310,7 @@ max-width: 100%;
 }
 .atelier-document hr {
 border: 0;
-border-top: 1px solid color-mix(in srgb, var(--at-fg) 16%, transparent);
+border-top: 1px solid color-mix(in srgb, var(--atelier-fg) 16%, transparent);
 margin: 0.75em 0;
 }
 .atelier-document > table {
@@ -329,7 +335,7 @@ min-width: 0;
 display: table;
 flex: 0 0 auto;
 width: max-content;
-border: 1px solid var(--at-border);
+border: 1px solid var(--atelier-border);
 border-collapse: separate;
 border-radius: var(--atelier-doc-radius);
 border-spacing: 0;
@@ -347,19 +353,19 @@ border-bottom-left-radius: calc(var(--atelier-doc-radius) - 1px);
 border-bottom-right-radius: calc(var(--atelier-doc-radius) - 1px);
 }
 .atelier-document table tr:first-child {
-background-color: var(--at-bg-hover);
+background-color: var(--atelier-bg-hover);
 }
 .atelier-document table th,
 .atelier-document table td {
-border-right: 1px solid var(--at-border);
-border-bottom: 1px solid var(--at-border);
+border-right: 1px solid var(--atelier-border);
+border-bottom: 1px solid var(--atelier-border);
 padding: calc(var(--atelier-doc-em) * 0.4375)
 calc(var(--atelier-doc-em) * 0.5625);
 text-align: left;
 vertical-align: top;
 }
 .atelier-document table th {
-color: var(--at-fg);
+color: var(--atelier-fg);
 font-weight: 600;
 }
 .atelier-document table :is(th, td)[data-align="center"] {
@@ -378,27 +384,27 @@ border-right: 0;
 border-bottom: 0;
 }
 .atelier-document table tbody tr:hover {
-background: color-mix(in srgb, var(--at-bg-hover) 68%, transparent);
+background: color-mix(in srgb, var(--atelier-bg-hover) 68%, transparent);
 }
 .atelier-document [data-review-status="added"] {
-background-color: var(--at-diff-added-subtle);
+background-color: var(--atelier-diff-added-subtle);
 box-decoration-break: clone;
 -webkit-box-decoration-break: clone;
 border-radius: var(--atelier-doc-radius);
-color: var(--at-diff-added);
+color: var(--atelier-diff-added);
 text-decoration: none;
 }
 .atelier-document [data-review-status="removed"] {
-background-color: var(--at-diff-removed-subtle);
+background-color: var(--atelier-diff-removed-subtle);
 box-decoration-break: clone;
 -webkit-box-decoration-break: clone;
 border-radius: var(--atelier-doc-radius);
-color: var(--at-diff-removed);
+color: var(--atelier-diff-removed);
 text-decoration: line-through;
-text-decoration-color: var(--at-diff-removed);
+text-decoration-color: var(--atelier-diff-removed);
 }
 .atelier-document [data-review-status="modified"] {
-background-color: var(--at-accent-subtle);
+background-color: var(--atelier-accent-subtle);
 box-decoration-break: clone;
 -webkit-box-decoration-break: clone;
 border-radius: var(--atelier-doc-radius);
@@ -426,7 +432,7 @@ text-decoration: none;
 display: block;
 margin: calc(var(--atelier-doc-em) * 0.25) 0;
 padding: calc(var(--atelier-doc-em) * 0.125) 0;
-color: var(--at-fg-subtle);
+color: var(--atelier-fg-subtle);
 font-size: calc(var(--atelier-doc-em) * 0.75);
 list-style: none;
 }
@@ -437,6 +443,6 @@ margin-left: -1.5em;
 display: table-row;
 }
 .atelier-document tr.md-diff-gap > td {
-color: var(--at-fg-subtle);
+color: var(--atelier-fg-subtle);
 font-size: calc(var(--atelier-doc-em) * 0.75);
 }`;

@@ -8,7 +8,7 @@
 		flex: 1;
 		flex-direction: column;
 		height: 100%;
-		background: var(--at-panel);
+		background: var(--atelier-panel);
 		isolation: isolate;
 	}
 
@@ -24,33 +24,34 @@
 	 * those belong to the document, not the chrome.
 	 */
 	.atelier-excalidraw-view .excalidraw {
-		--color-primary: var(--at-link);
-		--color-primary-darker: var(--at-accent);
-		--color-primary-darkest: var(--at-accent-hover);
-		--color-primary-hover: var(--at-accent);
-		--color-primary-light: var(--at-accent-border);
-		--color-primary-light-darker: var(--at-accent-border);
-		--color-surface-primary-container: var(--at-accent-border);
-		--color-on-primary-container: var(--at-accent-hover);
-		--color-brand-hover: var(--at-accent);
-		--color-brand-active: var(--at-accent-hover);
-		--color-promo: var(--at-accent);
-		--color-logo-icon: var(--at-accent);
+		--color-primary: var(--atelier-link);
+		--color-primary-darker: var(--atelier-accent);
+		--color-primary-darkest: var(--atelier-accent-hover);
+		--color-primary-hover: var(--atelier-accent);
+		--color-primary-light: var(--atelier-accent-border);
+		--color-primary-light-darker: var(--atelier-accent-border);
+		--color-surface-primary-container: var(--atelier-accent-border);
+		--color-on-primary-container: var(--atelier-accent-hover);
+		--color-brand-hover: var(--atelier-accent);
+		--color-brand-active: var(--atelier-accent-hover);
+		--color-promo: var(--atelier-accent);
+		--color-logo-icon: var(--atelier-accent);
 
-		--island-bg-color: var(--at-panel);
-		--default-bg-color: var(--at-panel);
-		--color-surface-lowest: var(--at-panel);
-		--color-surface-low: var(--at-bg-hover);
-		--color-surface-mid: var(--at-bg-hover);
-		--color-surface-high: var(--at-bg-hover-strong);
-		--color-on-surface: var(--at-fg);
-		--text-primary-color: var(--at-fg);
+		--island-bg-color: var(--atelier-panel);
+		--default-bg-color: var(--atelier-panel);
+		--color-surface-lowest: var(--atelier-panel);
+		--color-surface-low: var(--atelier-bg-hover);
+		--color-surface-mid: var(--atelier-bg-hover);
+		--color-surface-high: var(--atelier-bg-hover-strong);
+		--color-on-surface: var(--atelier-fg);
+		--text-primary-color: var(--atelier-fg);
 
-		--color-border-outline: var(--at-fg-faint);
-		--color-border-outline-variant: var(--at-border-strong);
-		--link-color: var(--at-accent);
+		--color-border-outline: var(--atelier-fg-faint);
+		--color-border-outline-variant: var(--atelier-border-strong);
+		--link-color: var(--atelier-accent);
 
-		--shadow-island: 0 0 0 1px var(--at-border-subtle), var(--at-shadow-md);
+		--shadow-island:
+			0 0 0 1px var(--atelier-border-subtle), var(--atelier-shadow-md);
 	}
 
 	.atelier-excalidraw-save-error {
@@ -62,14 +63,14 @@
 		align-items: center;
 		gap: 6px;
 		padding: 6px 12px;
-		border: 1px solid var(--at-warning-border);
+		border: 1px solid var(--atelier-warning-border);
 		border-radius: 999px;
-		background: var(--at-warning-subtle);
-		color: var(--at-warning);
+		background: var(--atelier-warning-subtle);
+		color: var(--atelier-warning);
 		font-size: 12px;
 		line-height: 1.2;
 		transform: translateX(-50%);
-		box-shadow: var(--at-shadow-md);
+		box-shadow: var(--atelier-shadow-md);
 		pointer-events: none;
 	}
 }

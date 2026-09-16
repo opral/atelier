@@ -317,7 +317,7 @@ describe("main tabs with a pinned home", () => {
 			);
 			expect(closeFade).toBeInTheDocument();
 			expect(closeFade?.className).toContain("w-12");
-			expect(closeFade?.className).toContain("var(--at-bg-hover-strong)");
+			expect(closeFade?.className).toContain("var(--atelier-bg-hover-strong)");
 			const activeClose = activeTab.querySelector(
 				'[data-attr="panel-tab-close"]',
 			);

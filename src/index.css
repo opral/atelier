@@ -27,11 +27,11 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 0.625rem;
-		border: 1px solid var(--at-border);
+		border: 1px solid var(--atelier-border);
 		border-radius: 8px;
-		background: var(--at-panel);
-		box-shadow: var(--at-shadow-md);
-		color: var(--at-fg-muted);
+		background: var(--atelier-panel);
+		box-shadow: var(--atelier-shadow-md);
+		color: var(--atelier-fg-muted);
 		font-size: 0.75rem;
 		font-weight: 500;
 		line-height: 1rem;
@@ -41,7 +41,7 @@
 	}
 
 	.atelier-autosave-hint strong {
-		color: var(--at-fg);
+		color: var(--atelier-fg);
 		font-weight: 650;
 	}
 
@@ -52,9 +52,9 @@
 		justify-content: center;
 		width: 1.125rem;
 		height: 1.125rem;
-		border-radius: var(--at-radius-full);
-		background: var(--at-success-subtle);
-		color: var(--at-success-border);
+		border-radius: var(--atelier-radius-full);
+		background: var(--atelier-success-subtle);
+		color: var(--atelier-success-border);
 	}
 
 	.atelier-autosave-hint-icon svg {
@@ -86,11 +86,15 @@
 		inset: 0;
 		border: 0;
 		box-shadow:
-			inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
-			inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
-			inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
-			inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-			inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
+			inset 8px 0 26px
+				color-mix(in srgb, var(--atelier-accent) 24%, transparent),
+			inset -8px 0 28px
+				color-mix(in srgb, var(--atelier-accent) 20%, transparent),
+			inset 0 8px 28px
+				color-mix(in srgb, var(--atelier-accent) 18%, transparent),
+			inset 0 -8px 30px
+				color-mix(in srgb, var(--atelier-accent) 20%, transparent),
+			inset 0 0 68px color-mix(in srgb, var(--atelier-accent) 10%, transparent);
 		content: "";
 		pointer-events: none;
 		animation:
@@ -99,34 +103,49 @@
 	}
 
 	.atelier-root [data-review-mode="true"] .atelier-panel-group {
-		box-shadow: 0 0 38px color-mix(in srgb, var(--at-accent) 12%, transparent);
+		box-shadow: 0 0 38px
+			color-mix(in srgb, var(--atelier-accent) 12%, transparent);
 	}
 
 	@keyframes atelier-review-edge-glow {
 		0%,
 		100% {
 			box-shadow:
-				inset 8px 0 26px color-mix(in srgb, var(--at-accent) 24%, transparent),
-				inset -8px 0 28px color-mix(in srgb, var(--at-accent) 20%, transparent),
-				inset 0 8px 28px color-mix(in srgb, var(--at-accent) 18%, transparent),
-				inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-				inset 0 0 68px color-mix(in srgb, var(--at-accent) 10%, transparent);
+				inset 8px 0 26px
+					color-mix(in srgb, var(--atelier-accent) 24%, transparent),
+				inset -8px 0 28px
+					color-mix(in srgb, var(--atelier-accent) 20%, transparent),
+				inset 0 8px 28px
+					color-mix(in srgb, var(--atelier-accent) 18%, transparent),
+				inset 0 -8px 30px
+					color-mix(in srgb, var(--atelier-accent) 20%, transparent),
+				inset 0 0 68px
+					color-mix(in srgb, var(--atelier-accent) 10%, transparent);
 		}
 		33% {
 			box-shadow:
-				inset 8px 0 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-				inset -8px 0 24px color-mix(in srgb, var(--at-accent) 22%, transparent),
-				inset 0 8px 30px color-mix(in srgb, var(--at-accent) 20%, transparent),
-				inset 0 -8px 26px color-mix(in srgb, var(--at-accent) 17%, transparent),
-				inset 0 0 72px color-mix(in srgb, var(--at-accent) 9%, transparent);
+				inset 8px 0 30px
+					color-mix(in srgb, var(--atelier-accent) 20%, transparent),
+				inset -8px 0 24px
+					color-mix(in srgb, var(--atelier-accent) 22%, transparent),
+				inset 0 8px 30px
+					color-mix(in srgb, var(--atelier-accent) 20%, transparent),
+				inset 0 -8px 26px
+					color-mix(in srgb, var(--atelier-accent) 17%, transparent),
+				inset 0 0 72px color-mix(in srgb, var(--atelier-accent) 9%, transparent);
 		}
 		66% {
 			box-shadow:
-				inset 8px 0 24px color-mix(in srgb, var(--at-accent) 18%, transparent),
-				inset -8px 0 30px color-mix(in srgb, var(--at-accent) 22%, transparent),
-				inset 0 8px 26px color-mix(in srgb, var(--at-accent) 22%, transparent),
-				inset 0 -8px 30px color-mix(in srgb, var(--at-accent) 18%, transparent),
-				inset 0 0 70px color-mix(in srgb, var(--at-accent) 10%, transparent);
+				inset 8px 0 24px
+					color-mix(in srgb, var(--atelier-accent) 18%, transparent),
+				inset -8px 0 30px
+					color-mix(in srgb, var(--atelier-accent) 22%, transparent),
+				inset 0 8px 26px
+					color-mix(in srgb, var(--atelier-accent) 22%, transparent),
+				inset 0 -8px 30px
+					color-mix(in srgb, var(--atelier-accent) 18%, transparent),
+				inset 0 0 70px
+					color-mix(in srgb, var(--atelier-accent) 10%, transparent);
 		}
 	}
 
@@ -364,19 +383,19 @@
 
 	/* Diff rendering helpers */
 	.atelier-root .lix-diff-content [data-diff-status="added"] {
-		color: var(--at-diff-added);
+		color: var(--atelier-diff-added);
 		text-decoration: none;
 		outline: none;
 	}
 
 	.atelier-root .lix-diff-content [data-diff-status="modified"] {
-		color: var(--at-diff-modified);
+		color: var(--atelier-diff-modified);
 		text-decoration: none;
 		outline: none;
 	}
 
 	.atelier-root .lix-diff-content [data-diff-status="removed"] {
-		color: var(--at-diff-removed);
+		color: var(--atelier-diff-removed);
 		text-decoration: line-through;
 		text-decoration-color: currentColor;
 	}
@@ -389,18 +408,18 @@
 	}
 
 	.atelier-root .lix-diff-content input[data-diff-status="added"] {
-		outline: 2px solid var(--at-diff-added);
+		outline: 2px solid var(--atelier-diff-added);
 		outline-offset: 2px;
 	}
 
 	.atelier-root .lix-diff-content input[data-diff-status="removed"] {
-		outline: 2px solid var(--at-diff-removed);
+		outline: 2px solid var(--atelier-diff-removed);
 		outline-offset: 2px;
 		opacity: 0.6;
 	}
 
 	.atelier-root .lix-diff-content input[data-diff-status="modified"] {
-		outline: 2px solid var(--at-diff-modified);
+		outline: 2px solid var(--atelier-diff-modified);
 		outline-offset: 2px;
 	}
 
@@ -514,7 +533,7 @@
 		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror
 		:is(p, h1, h2, h3, h4, h5, h6).is-empty::before {
-		color: var(--at-fg-subtle);
+		color: var(--atelier-fg-subtle);
 		opacity: 0.55;
 		font-style: normal;
 		font-weight: 400;

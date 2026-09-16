@@ -7,7 +7,7 @@
 		cursor: pointer;
 	}
 	.csv-review-trigger:focus-visible {
-		outline: 2px solid var(--at-ring);
+		outline: 2px solid var(--atelier-ring);
 		outline-offset: -2px;
 	}
 	.csv-review-popover {
@@ -20,11 +20,11 @@
 		overflow: auto;
 		overscroll-behavior: contain;
 		padding: 4px 12px 12px;
-		border: 1px solid var(--at-border);
-		border-radius: var(--at-radius-panel);
-		background: var(--at-panel);
-		color: var(--at-fg-muted);
-		box-shadow: var(--at-shadow-md);
+		border: 1px solid var(--atelier-border);
+		border-radius: var(--atelier-radius-panel);
+		background: var(--atelier-panel);
+		color: var(--atelier-fg-muted);
+		box-shadow: var(--atelier-shadow-md);
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 1.5;
@@ -44,7 +44,7 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		font-weight: 500;
-		color: var(--at-fg);
+		color: var(--atelier-fg);
 	}
 	.csv-review-popover-heading button {
 		display: grid;
@@ -56,19 +56,19 @@
 		border: 0;
 		border-radius: 4px;
 		background: transparent;
-		color: var(--at-fg-muted);
+		color: var(--atelier-fg-muted);
 		cursor: pointer;
 	}
 	.csv-review-popover-heading button:hover {
-		background: var(--at-bg-hover);
+		background: var(--atelier-bg-hover);
 	}
 	.csv-review-popover-heading button:focus-visible {
-		outline: 2px solid var(--at-ring);
+		outline: 2px solid var(--atelier-ring);
 		outline-offset: 1px;
 	}
 	.csv-review-detail {
 		padding-top: 9px;
-		border-top: 1px solid var(--at-border);
+		border-top: 1px solid var(--atelier-border);
 	}
 	.csv-review-detail + .csv-review-detail {
 		margin-top: 12px;
@@ -77,7 +77,7 @@
 		margin: 0 0 8px;
 		font-size: 12px;
 		font-weight: 500;
-		color: var(--at-fg-muted);
+		color: var(--atelier-fg-muted);
 	}
 	.csv-review-detail dl {
 		display: grid;
@@ -92,7 +92,7 @@
 	}
 	.csv-review-detail dt {
 		font-size: 11px;
-		color: var(--at-fg-subtle);
+		color: var(--atelier-fg-subtle);
 	}
 	.csv-review-detail dd {
 		margin: 0;
@@ -100,13 +100,13 @@
 		overflow-wrap: anywhere;
 	}
 	.csv-review-detail [data-side="before"] dd {
-		color: var(--at-diff-removed);
+		color: var(--atelier-diff-removed);
 	}
 	.csv-review-detail [data-side="after"] dd {
-		color: var(--at-diff-added);
+		color: var(--atelier-diff-added);
 	}
 	.csv-review-absent {
-		color: var(--at-fg-subtle);
+		color: var(--atelier-fg-subtle);
 		font-style: italic;
 	}
 
@@ -114,7 +114,7 @@
 		display: inline-block;
 		max-width: 100%;
 		padding: 0 6px;
-		border-radius: var(--at-radius-tag);
+		border-radius: var(--atelier-radius-tag);
 		overflow-wrap: anywhere;
 		line-height: 20px;
 	}
@@ -122,10 +122,10 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		color: var(--at-fg-muted);
+		color: var(--atelier-fg-muted);
 	}
 	.csv-review-detail-type svg {
 		flex: none;
-		color: var(--at-fg-subtle);
+		color: var(--atelier-fg-subtle);
 	}
 }

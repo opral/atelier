@@ -8,7 +8,7 @@
 			min-height: 0;
 			flex: 1 1 auto;
 			overflow: hidden;
-			background: var(--at-bg-subtle);
+			background: var(--atelier-bg-subtle);
 		}
 
 		.atelier-pdf-preview {
@@ -40,7 +40,7 @@
 			height: auto;
 			margin: 0 auto;
 			background: white;
-			box-shadow: var(--at-shadow-lg);
+			box-shadow: var(--atelier-shadow-lg);
 		}
 
 		@media (max-width: 767px) {
@@ -57,11 +57,11 @@
 			align-items: center;
 			gap: 0.25rem;
 			padding: 0.25rem;
-			color: var(--at-fg);
-			background: color-mix(in srgb, var(--at-panel) 94%, transparent);
-			border: 1px solid var(--at-border);
+			color: var(--atelier-fg);
+			background: color-mix(in srgb, var(--atelier-panel) 94%, transparent);
+			border: 1px solid var(--atelier-border);
 			border-radius: 0.5rem;
-			box-shadow: var(--at-shadow-md);
+			box-shadow: var(--atelier-shadow-md);
 			transform: translateX(-50%);
 		}
 
@@ -70,7 +70,7 @@
 			height: 1.75rem;
 			align-items: center;
 			padding: 0 0.625rem;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font: inherit;
 			font-size: 0.6875rem;
 			font-weight: 600;
@@ -81,24 +81,24 @@
 		}
 
 		.atelier-pdf-document .atelier-pdf-page-button:hover:not(:disabled) {
-			color: var(--at-fg);
-			background: var(--at-bg-hover);
+			color: var(--atelier-fg);
+			background: var(--atelier-bg-hover);
 		}
 
 		.atelier-pdf-document .atelier-pdf-page-button:disabled {
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			cursor: default;
 			opacity: 0.55;
 		}
 
 		.atelier-pdf-document .atelier-pdf-page-button:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 1px;
 		}
 
 		.atelier-pdf-document .atelier-pdf-page-label {
 			min-width: 3.5rem;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font-size: 0.6875rem;
 			font-variant-numeric: tabular-nums;
 			font-weight: 600;
@@ -125,9 +125,9 @@
 			align-items: center;
 			justify-content: center;
 			padding: 2rem;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			text-align: center;
-			background: var(--at-bg-subtle);
+			background: var(--atelier-bg-subtle);
 		}
 	}
 }

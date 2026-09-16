@@ -4640,7 +4640,7 @@ function LayoutShellLoadedContentResolved({
 							<div className="absolute inset-y-0 -left-1 -right-1" />
 							{/* The drag indicator rides the main island's own border,
 							    not the middle of the gutter. */}
-							<div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--at-link)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+							<div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--atelier-link)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel id="main" defaultSize={`${panelSizes.main}%`} minSize="30%">
 							<div className="h-full min-h-0">
@@ -4690,7 +4690,7 @@ function LayoutShellLoadedContentResolved({
 						>
 							<div className="absolute inset-y-0 -left-1 -right-1" />
 							{/* Mirrored: the indicator hugs the island's right border. */}
-							<div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--at-link)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+							<div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--atelier-link)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 						</Separator>
 						<Panel
 							id="right"

@@ -70,7 +70,7 @@ Put the HTML inside an element with class `atelier-render` and load
 `@opral/atelier/render.css`. Or pass `document: true` to get a complete HTML
 file with the styles inlined.
 
-Colours are `--at-*` custom properties from `@opral/atelier/theme.css`, the same file the app uses; a host that redeclares one on any ancestor retints the render.
+Colours are `--atelier-*` custom properties from `@opral/atelier/theme.css`, the same file the app uses; a host that redeclares one on any ancestor retints the render.
 
 ## Entries
 

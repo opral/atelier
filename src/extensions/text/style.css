@@ -4,31 +4,31 @@
 	@scope (.atelier-root) {
 		.atelier-text-view,
 		.atelier-text-surface {
-			--at-bg-selection: var(--at-bg-selection);
-			--at-fg: var(--at-fg);
+			--atelier-bg-selection: var(--atelier-bg-selection);
+			--atelier-fg: var(--atelier-fg);
 			position: relative;
 			display: flex;
 			min-height: 0;
 			flex: 1 1 auto;
 			flex-direction: column;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 		}
 
 		.atelier-text-toolbar-status {
 			display: flex;
 			align-items: center;
 			gap: 10px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-size: 11px;
 		}
 
 		.atelier-text-toolbar {
 			display: flex;
-			height: var(--at-panel-header-height);
-			flex: 0 0 var(--at-panel-header-height);
+			height: var(--atelier-panel-header-height);
+			flex: 0 0 var(--atelier-panel-header-height);
 			align-items: center;
 			gap: 4px;
-			border-bottom: 1px solid var(--at-border-subtle);
+			border-bottom: 1px solid var(--atelier-border-subtle);
 			padding: 0 10px;
 		}
 
@@ -42,7 +42,7 @@
 			border: 0;
 			border-radius: 7px;
 			background: transparent;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font-size: 13px;
 			font-weight: 500;
 			line-height: 1;
@@ -62,13 +62,13 @@
 
 		.atelier-text-toolbar-button:hover,
 		.atelier-text-toolbar-icon-button:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
 		}
 
 		.atelier-text-toolbar-button:focus-visible,
 		.atelier-text-toolbar-icon-button:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 1px;
 		}
 
@@ -87,7 +87,7 @@
 		}
 
 		.atelier-text-editor-host .cm-scroller {
-			scrollbar-color: var(--at-border-strong) transparent;
+			scrollbar-color: var(--atelier-border-strong) transparent;
 			scrollbar-width: thin;
 		}
 
@@ -108,15 +108,15 @@
 
 		.atelier-text-editor-host .cm-panel.cm-search input {
 			height: 28px;
-			border: 1px solid var(--at-border);
+			border: 1px solid var(--atelier-border);
 			border-radius: 6px;
-			background: var(--at-panel);
-			color: var(--at-fg);
+			background: var(--atelier-panel);
+			color: var(--atelier-fg);
 			padding: 0 8px;
 		}
 
 		.atelier-text-editor-host .cm-panel.cm-search input:focus {
-			border-color: var(--at-ring);
+			border-color: var(--atelier-ring);
 			outline: none;
 		}
 
@@ -125,13 +125,13 @@
 			border: 0;
 			border-radius: 6px;
 			background: transparent;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			padding: 0 8px;
 		}
 
 		.atelier-text-editor-host .cm-panel.cm-search button:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
 		}
 
 		.atelier-text-editor-host .cm-panel.cm-search button[name="close"] {
@@ -155,7 +155,7 @@
 			min-height: 0;
 			flex: 1 1 auto;
 			overflow: auto;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 			font-size: 12px;
 		}
 	}

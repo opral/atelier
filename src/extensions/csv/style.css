@@ -31,14 +31,14 @@
 			align-items: center;
 			gap: 6px;
 			padding: 6px 12px;
-			border: 1px solid var(--at-warning-border);
+			border: 1px solid var(--atelier-warning-border);
 			border-radius: 999px;
-			background: var(--at-warning-subtle);
-			color: var(--at-warning);
+			background: var(--atelier-warning-subtle);
+			color: var(--atelier-warning);
 			font-size: 12px;
 			line-height: 1.2;
 			transform: translateX(-50%);
-			box-shadow: var(--at-shadow-md);
+			box-shadow: var(--atelier-shadow-md);
 			pointer-events: none;
 		}
 
@@ -48,10 +48,10 @@
 			gap: 6px;
 			margin-top: 8px;
 			padding: 6px 14px;
-			border: 1px solid var(--at-accent);
-			border-radius: var(--at-radius-control);
-			background: var(--at-accent);
-			color: var(--at-accent-on);
+			border: 1px solid var(--atelier-accent);
+			border-radius: var(--atelier-radius-control);
+			background: var(--atelier-accent);
+			color: var(--atelier-accent-on);
 			font-size: 13px;
 			font-weight: 500;
 			line-height: 1.2;
@@ -59,7 +59,7 @@
 		}
 
 		.csv-create-table-button:hover {
-			background: var(--at-accent-hover);
+			background: var(--atelier-accent-hover);
 		}
 
 		/* Append controls continue the grid geometry and use quiet table states. */
@@ -72,16 +72,16 @@
 			height: 40px;
 			padding: 0;
 			border: 0;
-			border-bottom: 1px solid var(--at-border-subtle);
+			border-bottom: 1px solid var(--atelier-border-subtle);
 			border-radius: 0;
-			background: var(--at-panel);
-			color: var(--at-fg-subtle);
+			background: var(--atelier-panel);
+			color: var(--atelier-fg-subtle);
 			font-size: 13px;
 			font-weight: 400;
 			cursor: pointer;
 			transition:
-				background-color var(--at-duration) ease,
-				color var(--at-duration) ease;
+				background-color var(--atelier-duration) ease,
+				color var(--atelier-duration) ease;
 		}
 		.csv-append-column-strip {
 			top: 0;
@@ -101,12 +101,12 @@
 		}
 		.csv-append-column-strip:hover,
 		.csv-append-row-strip:hover {
-			background: var(--at-bg-hover);
-			color: var(--at-fg-muted);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
 		}
 		.csv-append-column-strip:focus-visible,
 		.csv-append-row-strip:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: -2px;
 		}
 
@@ -141,12 +141,12 @@
 			position: absolute;
 			pointer-events: auto;
 			border-radius: 3px;
-			background: color-mix(in srgb, var(--at-fg) 32%, transparent);
+			background: color-mix(in srgb, var(--atelier-fg) 32%, transparent);
 			transition: background-color 160ms ease;
 		}
 		.csv-overlay-thumb:hover,
 		.csv-overlay-thumb:active {
-			background: color-mix(in srgb, var(--at-fg) 52%, transparent);
+			background: color-mix(in srgb, var(--atelier-fg) 52%, transparent);
 		}
 		.csv-overlay-thumb-horizontal {
 			left: 3px;
@@ -172,10 +172,10 @@
 			min-width: 180px;
 			flex-direction: column;
 			padding: 4px;
-			border: 1px solid var(--at-border);
-			border-radius: var(--at-radius-panel);
-			background: var(--at-panel);
-			box-shadow: var(--at-shadow-lg);
+			border: 1px solid var(--atelier-border);
+			border-radius: var(--atelier-radius-panel);
+			background: var(--atelier-panel);
+			box-shadow: var(--atelier-shadow-lg);
 		}
 
 		.csv-grid-menu-item {
@@ -183,9 +183,9 @@
 			align-items: center;
 			gap: 8px;
 			min-height: 30px;
-			border-radius: var(--at-radius-control);
+			border-radius: var(--atelier-radius-control);
 			padding: 5px 8px;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 			font-size: 12.5px;
 			line-height: 1.2;
 			text-align: left;
@@ -194,7 +194,7 @@
 
 		.csv-grid-menu-item-icon {
 			flex-shrink: 0;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 		}
 
 		.csv-grid-menu-item-destructive .csv-grid-menu-item-icon {
@@ -202,15 +202,15 @@
 		}
 
 		.csv-grid-menu-item:hover {
-			background: var(--at-bg-hover);
+			background: var(--atelier-bg-hover);
 		}
 
 		.csv-grid-menu-item-destructive {
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 		}
 
 		.csv-grid-menu-item-destructive:hover {
-			background: var(--at-danger-subtle);
+			background: var(--atelier-danger-subtle);
 		}
 	}
 

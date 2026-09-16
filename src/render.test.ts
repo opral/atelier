@@ -104,7 +104,7 @@ test("a document carries its own styles and nothing else", () => {
 	expect(isRendered(result)).toBe(true);
 	if (!isRendered(result)) return;
 	expect(result.html.startsWith("<!doctype html>")).toBe(true);
-	expect(result.html).toContain("--at-fg");
+	expect(result.html).toContain("--atelier-fg");
 	expect(result.html).toContain('class="atelier-render"');
 	expect(result.html).not.toContain("<script");
 	expect(result.html).not.toContain("<link");
@@ -112,7 +112,7 @@ test("a document carries its own styles and nothing else", () => {
 
 test("the palette is tokens a host can redefine, not literals in rules", () => {
 	const [tokens, ...rules] = RENDER_CSS.split("}\n");
-	expect(tokens).toContain("--at-fg");
+	expect(tokens).toContain("--atelier-fg");
 	// Every colour in a rule comes from a token, so a host retints by
 	// redefining one custom property and nothing here has to know.
 	const literals = rules
@@ -228,7 +228,7 @@ test("a host retints by redefining a token on an ancestor", () => {
 	// redefines one wins. Declared on the render itself they would beat the
 	// host every time, and the override would silently do nothing.
 	expect(RENDER_CSS.startsWith(":root")).toBe(true);
-	expect(RENDER_CSS).not.toContain(".atelier-render {\n\t--at-fg:");
+	expect(RENDER_CSS).not.toContain(".atelier-render {\n\t--atelier-fg:");
 });
 
 test("a script the word differ cannot split is compared whole", () => {

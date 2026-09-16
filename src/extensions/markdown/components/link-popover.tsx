@@ -224,7 +224,7 @@ export function LinkPopover({
 						className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
 						data-attr="markdown-link-popover"
 					>
-						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-border-subtle bg-bg-subtle px-2 text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-accent-border focus-within:bg-panel focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--at-accent-subtle)]">
+						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-border-subtle bg-bg-subtle px-2 text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-accent-border focus-within:bg-panel focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_0_0_2px_var(--atelier-accent-subtle)]">
 							<LinkIcon
 								className="size-3.5 shrink-0 text-fg-subtle"
 								aria-hidden

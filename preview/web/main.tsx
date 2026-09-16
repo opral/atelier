@@ -48,8 +48,8 @@ async function start() {
 							gap: 20,
 							padding: "12px 20px",
 							fontSize: 13,
-							background: "var(--at-bg)",
-							borderBottom: "1px solid var(--at-border)",
+							background: "var(--atelier-bg)",
+							borderBottom: "1px solid var(--atelier-border)",
 						}}
 					>
 						<a href="/">Atelier</a>

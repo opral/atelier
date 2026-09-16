@@ -97,7 +97,7 @@ export function drawPropertyCell(
 	drawContent: () => void,
 	search = "",
 	palette: CsvPalette = CSV_COLOR_FALLBACKS,
-	searchColor = "#fef08a", // token-literal: canvas fallback for --at-highlight
+	searchColor = "#fef08a", // token-literal: canvas fallback for --atelier-highlight
 ) {
 	const cell = args.cell as PropertyCell;
 	const info = cell.csvInfo;

@@ -1175,8 +1175,8 @@ function SidebarIllustration({
 				width="158"
 				height="102"
 				rx="10"
-				fill="var(--at-panel)"
-				stroke="var(--at-border)"
+				fill="var(--atelier-panel)"
+				stroke="var(--atelier-border)"
 				strokeWidth="2"
 			/>
 			<rect
@@ -1185,14 +1185,14 @@ function SidebarIllustration({
 				width="46"
 				height="90"
 				rx="6"
-				fill="var(--at-bg-hover-strong)"
+				fill="var(--atelier-bg-hover-strong)"
 			/>
 			<line
 				x1={dividerX}
 				y1="7"
 				x2={dividerX}
 				y2="97"
-				stroke="var(--at-border)"
+				stroke="var(--atelier-border)"
 				strokeWidth="1.5"
 			/>
 			{/* Sidebar rows — the top one active. */}
@@ -1202,7 +1202,7 @@ function SidebarIllustration({
 				width="30"
 				height="7"
 				rx="3.5"
-				fill="var(--at-link)"
+				fill="var(--atelier-link)"
 			/>
 			<rect
 				x={rowX}
@@ -1210,7 +1210,7 @@ function SidebarIllustration({
 				width="24"
 				height="7"
 				rx="3.5"
-				fill="var(--at-border-strong)"
+				fill="var(--atelier-border-strong)"
 			/>
 			<rect
 				x={rowX}
@@ -1218,7 +1218,7 @@ function SidebarIllustration({
 				width="27"
 				height="7"
 				rx="3.5"
-				fill="var(--at-border)"
+				fill="var(--atelier-border)"
 			/>
 			{/* Document lines in the main area. */}
 			<rect
@@ -1227,7 +1227,7 @@ function SidebarIllustration({
 				width="70"
 				height="8"
 				rx="4"
-				fill="var(--at-border)"
+				fill="var(--atelier-border)"
 			/>
 			<rect
 				x={contentX}
@@ -1235,7 +1235,7 @@ function SidebarIllustration({
 				width="46"
 				height="8"
 				rx="4"
-				fill="var(--at-bg-hover)"
+				fill="var(--atelier-bg-hover)"
 			/>
 		</svg>
 	);
@@ -1813,7 +1813,7 @@ const TabButtonBase = forwardRef<
 						<span
 							aria-hidden="true"
 							data-attr="panel-tab-close-fade"
-							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--at-bg-hover-strong)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover-strong)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
 						/>
 						{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all. */}
 						<span

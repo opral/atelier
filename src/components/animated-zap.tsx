@@ -17,13 +17,13 @@ export function AnimatedZap({
 	tone = "inherit",
 	variant = "solid",
 	strokeWidth = 7,
-	fill = "var(--at-panel)",
+	fill = "var(--atelier-panel)",
 }: AnimatedZapProps): JSX.Element {
 	const toneColor =
 		tone === "brand"
-			? "var(--at-link)"
+			? "var(--atelier-link)"
 			: tone === "muted"
-				? "var(--at-fg-subtle)"
+				? "var(--atelier-fg-subtle)"
 				: undefined;
 	const style = {
 		"--zap-width": typeof size === "number" ? `${size}px` : size,
@@ -49,7 +49,7 @@ export function AnimatedZap({
 				<path
 					className="atelier-zap-build__outline-fill"
 					d={BOLT_PATH}
-					fill="var(--zap-fill, var(--at-bg))"
+					fill="var(--zap-fill, var(--atelier-bg))"
 				/>
 				<path
 					className="atelier-zap-build__outline-base"

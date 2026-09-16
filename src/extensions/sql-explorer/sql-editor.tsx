@@ -55,12 +55,12 @@ const editorFocused = StateField.define<boolean>({
 const highlight = HighlightStyle.define([
 	{
 		tag: tags.keyword,
-		color: "var(--at-syntax-keyword)",
+		color: "var(--atelier-syntax-keyword)",
 		fontWeight: "600",
 	},
-	{ tag: tags.string, color: "var(--at-syntax-string)" },
-	{ tag: tags.number, color: "var(--at-syntax-number)" },
-	{ tag: tags.comment, color: "var(--at-fg-subtle)" },
+	{ tag: tags.string, color: "var(--atelier-syntax-string)" },
+	{ tag: tags.number, color: "var(--atelier-syntax-number)" },
+	{ tag: tags.comment, color: "var(--atelier-fg-subtle)" },
 ]);
 
 function extensionsForSchema(schema: Schema | null) {
@@ -198,11 +198,11 @@ export function SqlEditor({
 						".cm-gutters": {
 							backgroundColor: "transparent",
 							border: "none",
-							color: "var(--at-fg-subtle)",
+							color: "var(--atelier-fg-subtle)",
 							paddingLeft: "8px",
 						},
 						"&.cm-focused": { outline: "none" },
-						".cm-cursor": { borderLeftColor: "var(--at-fg)" },
+						".cm-cursor": { borderLeftColor: "var(--atelier-fg)" },
 					}),
 				],
 			}),

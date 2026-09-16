@@ -1518,7 +1518,7 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{isDraggingOver && (
-				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-warning-border bg-[color-mix(in_srgb,var(--at-warning-subtle)_50%,transparent)] backdrop-blur-sm pointer-events-none">
+				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-warning-border bg-[color-mix(in_srgb,var(--atelier-warning-subtle)_50%,transparent)] backdrop-blur-sm pointer-events-none">
 					<FileUp className="h-12 w-12 text-fg" />
 					<p className="mt-3 text-center text-sm font-medium text-fg">
 						Drop markdown files here

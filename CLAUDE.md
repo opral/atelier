@@ -49,7 +49,7 @@ test` (vitest) does not cover it. Run `pnpm build` before calling it directly.
 
 ## Design tokens: one vocabulary, plain CSS
 
-`src/shell/theme.css` is the design system: ~110 `--at-*` custom properties on
+`src/shell/theme.css` is the design system: ~110 `--atelier-*` custom properties on
 `:root, :host`, each with its dark value in `light-dark()` and a comment saying
 when to use it. It is plain CSS — no build step, no framework — so the shell,
 every extension, the static render, a chat card, and a host page all read the
@@ -62,7 +62,7 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
 - A colour literal (`#hex`, `rgb()`, `oklch()`…) is written in `theme.css` and
   nowhere else. Canvas code that cannot read `var()` keeps a fallback marked
   `token-literal: <why>` on the same line, equal to the token's light value.
-- In CSS, say `var(--at-…)`. In `className`, say the adapter's name
+- In CSS, say `var(--atelier-…)`. In `className`, say the adapter's name
   (`bg-panel`, `border-border-subtle`, `text-danger`). Never `bg-[var(…)]`,
   never a stock palette class.
 - Text and icons share the `fg` scale: `fg`, `fg-muted`, `fg-subtle`, `fg-faint`.

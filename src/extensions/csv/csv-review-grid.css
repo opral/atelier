@@ -7,7 +7,7 @@
 			inset: 0;
 			overflow: auto;
 			overscroll-behavior: contain;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 			/* A fold reveals by changing the height of rows on screen. Let the grid
 			   keep the scroll offset it was given: where a fold above the viewport
 			   opens, the review moves the offset itself, by exactly the height the
@@ -20,18 +20,18 @@
 			table-layout: fixed;
 			font-size: 13px;
 			font-weight: 400;
-			color: var(--at-fg-muted);
+			color: var(--atelier-fg-muted);
 		}
 		.csv-review-table th,
 		.csv-review-table td {
 			padding: 0;
 			border: 0;
-			border-right: 1px solid var(--at-border-subtle);
-			border-bottom: 1px solid var(--at-border-subtle);
+			border-right: 1px solid var(--atelier-border-subtle);
+			border-bottom: 1px solid var(--atelier-border-subtle);
 			box-sizing: border-box;
 			vertical-align: middle;
 			text-align: left;
-			background: var(--at-panel);
+			background: var(--atelier-panel);
 			font-weight: 400;
 		}
 		.csv-review-table thead th {
@@ -39,7 +39,7 @@
 			top: 0;
 			z-index: 2;
 			height: 40px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font-weight: 500;
 		}
 		/* A row's height is the height of a box inside each of its cells, never the
@@ -60,7 +60,7 @@
 			   width, so a row shut to nothing would keep a pixel, and a run of
 			   thirty-five of them would collapse to a grey ledge instead of to
 			   nothing. */
-			box-shadow: inset 0 -1px var(--at-border-subtle);
+			box-shadow: inset 0 -1px var(--atelier-border-subtle);
 		}
 		.csv-review-table .csv-review-gutter {
 			position: sticky;
@@ -68,7 +68,7 @@
 			width: 44px;
 			text-align: center;
 			z-index: 1;
-			color: var(--at-fg-faint);
+			color: var(--atelier-fg-faint);
 			font-size: 10px;
 		}
 		.csv-review-table thead .csv-review-gutter {
@@ -95,7 +95,7 @@
 		}
 		.csv-review-type-icon {
 			flex: none;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 		.csv-review-cell-content {
 			display: flex;
@@ -135,36 +135,36 @@
 			cursor: pointer;
 		}
 		.csv-review-table button:hover {
-			box-shadow: inset 0 0 0 1px var(--at-accent-border);
+			box-shadow: inset 0 0 0 1px var(--atelier-accent-border);
 		}
 		.csv-review-table button:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: -2px;
 		}
 		.csv-review-table tr[data-diff-status="added"] > *,
 		.csv-review-table td[data-diff-status="added"],
 		.csv-review-table th[data-diff-status="added"] {
-			background-color: var(--at-panel);
+			background-color: var(--atelier-panel);
 			background-image: linear-gradient(
-				var(--at-diff-added-subtle),
-				var(--at-diff-added-subtle)
+				var(--atelier-diff-added-subtle),
+				var(--atelier-diff-added-subtle)
 			);
 		}
 		.csv-review-table tr[data-diff-status="removed"] > *,
 		.csv-review-table td[data-diff-status="removed"],
 		.csv-review-table th[data-diff-status="removed"] {
-			background-color: var(--at-panel);
+			background-color: var(--atelier-panel);
 			background-image: linear-gradient(
-				var(--at-diff-removed-subtle),
-				var(--at-diff-removed-subtle)
+				var(--atelier-diff-removed-subtle),
+				var(--atelier-diff-removed-subtle)
 			);
 		}
 		.csv-review-table td[data-diff-status="modified"],
 		.csv-review-table thead th[data-diff-status="modified"] {
-			background: var(--at-accent-subtle);
+			background: var(--atelier-accent-subtle);
 		}
 		.csv-review-table thead th[data-diff-status="modified"] {
-			box-shadow: inset 0 -2px var(--at-accent);
+			box-shadow: inset 0 -2px var(--atelier-accent);
 		}
 		.csv-review-mark {
 			display: inline-flex;
@@ -173,13 +173,13 @@
 			flex: none;
 		}
 		.csv-review-mark.is-added {
-			color: var(--at-diff-added);
+			color: var(--atelier-diff-added);
 		}
 		.csv-review-mark.is-removed {
-			color: var(--at-diff-removed);
+			color: var(--atelier-diff-removed);
 		}
 		.csv-review-mark.is-modified {
-			color: var(--at-accent);
+			color: var(--atelier-accent);
 		}
 		.csv-review-row-number {
 			display: flex;
@@ -191,7 +191,7 @@
 			display: inline-block;
 			max-width: 100%;
 			padding: 0 6px;
-			border-radius: var(--at-radius-tag);
+			border-radius: var(--atelier-radius-tag);
 			line-height: 20px;
 			white-space: nowrap;
 			overflow: hidden;
@@ -207,26 +207,26 @@
 			vertical-align: middle;
 		}
 		.csv-review-checkbox.is-checked {
-			border-radius: var(--at-radius-tag);
-			background: var(--at-accent);
-			color: var(--at-accent-on);
+			border-radius: var(--atelier-radius-tag);
+			background: var(--atelier-accent);
+			color: var(--atelier-accent-on);
 		}
 		.csv-review-table mark {
-			background: var(--at-highlight);
+			background: var(--atelier-highlight);
 			color: inherit;
 			border-radius: 2px;
 		}
 		.csv-review-empty {
 			padding: 20px 52px;
 			font-size: 13px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 		/* A band is a row like any other: one row tall, on the grid's rhythm, so
 		   opening it moves what is below by the height of the rows and nothing
 		   more. */
 		.csv-review-table .csv-review-band-cell {
-			background: var(--at-bg-subtle);
-			border-bottom: 1px solid var(--at-border-subtle);
+			background: var(--atelier-bg-subtle);
+			border-bottom: 1px solid var(--atelier-border-subtle);
 		}
 		.csv-review-band-button {
 			display: flex;
@@ -237,14 +237,14 @@
 			border: 0;
 			border-radius: 0;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font: inherit;
 			font-size: 12px;
 			text-align: left;
 		}
 		.csv-review-table .csv-review-band-button:hover {
 			box-shadow: none;
-			background: var(--at-bg-hover);
+			background: var(--atelier-bg-hover);
 		}
 		.csv-review-band-label {
 			/* The label holds its place when the table is scrolled sideways: the
@@ -265,11 +265,11 @@
 			width: 43px;
 			height: calc(var(--csv-review-cell-height) - 1px);
 			margin-right: 8px;
-			border-right: 1px solid var(--at-border-subtle);
-			color: var(--at-fg-subtle);
+			border-right: 1px solid var(--atelier-border-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 		.csv-review-band-range {
-			color: var(--at-fg-faint);
+			color: var(--atelier-fg-faint);
 			font-variant-numeric: tabular-nums;
 		}
 		.csv-review-band-action {
@@ -280,7 +280,7 @@
 			margin-left: auto;
 			padding: 0 12px;
 			opacity: 0;
-			transition: opacity var(--at-duration) ease-out;
+			transition: opacity var(--atelier-duration) ease-out;
 		}
 		.csv-review-band:hover .csv-review-band-action,
 		.csv-review-band-button:focus-visible .csv-review-band-action {
@@ -297,18 +297,18 @@
 			font-size: 12px;
 			line-height: 20px;
 			white-space: nowrap;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 		.csv-toolbar button.csv-review-summary:hover {
 			background: transparent;
-			color: var(--at-accent);
+			color: var(--atelier-accent);
 		}
 		/* Part of the sentence, not a control: no border, no background, no box of
 		   its own, so entering review adds the count and a quiet link and no
 		   chrome. */
 		.csv-toolbar .csv-review-fold-separator {
 			padding: 0 5px;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 		}
 		.csv-toolbar button.csv-review-fold-action {
 			display: inline;
@@ -317,7 +317,7 @@
 			border: 0;
 			border-radius: 0;
 			background: transparent;
-			color: var(--at-fg-subtle);
+			color: var(--atelier-fg-subtle);
 			font: inherit;
 			font-weight: 400;
 			line-height: 20px;
@@ -325,10 +325,10 @@
 		}
 		.csv-toolbar button.csv-review-fold-action:hover {
 			background: transparent;
-			color: var(--at-accent);
+			color: var(--atelier-accent);
 		}
 		.csv-toolbar button.csv-review-fold-action:focus-visible {
-			outline: 2px solid var(--at-ring);
+			outline: 2px solid var(--atelier-ring);
 			outline-offset: 2px;
 			border-radius: 3px;
 		}

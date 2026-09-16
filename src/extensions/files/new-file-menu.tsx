@@ -208,7 +208,7 @@ function NewMenuItem({
 					// appears, so the control fades the row's own fill over it.
 					style={{
 						background:
-							"linear-gradient(to right, transparent 0, var(--at-bg-hover) 14px)",
+							"linear-gradient(to right, transparent 0, var(--atelier-bg-hover) 14px)",
 					}}
 				>
 					{trailing}

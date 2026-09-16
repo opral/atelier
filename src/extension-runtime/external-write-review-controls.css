@@ -75,7 +75,7 @@
 
 		/* One muted parent folder before a file name (design 12b), on dark chrome. */
 		.external-write-review-path-parent {
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-weight: 500;
 		}
 
@@ -87,8 +87,8 @@
 			gap: 0.125rem;
 			padding: 0.4375rem;
 			border-radius: 0.75rem;
-			background: var(--at-overlay);
-			box-shadow: var(--at-shadow-overlay);
+			background: var(--atelier-overlay);
+			box-shadow: var(--atelier-shadow-overlay);
 		}
 
 		.external-write-review-button-exit {
@@ -99,7 +99,7 @@
 			padding: 0 0.5rem;
 			border-radius: 0.5rem;
 			background: transparent;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			font-size: 0.75rem;
 			font-weight: 600;
 			line-height: 1;
@@ -110,16 +110,16 @@
 		}
 
 		.external-write-review-button-exit:hover {
-			background: var(--at-overlay-hairline);
-			color: var(--at-overlay-fg);
+			background: var(--atelier-overlay-hairline);
+			color: var(--atelier-overlay-fg);
 		}
 
 		.external-write-review-button-exit > kbd {
-			border: 1px solid var(--at-overlay-border-strong);
+			border: 1px solid var(--atelier-overlay-border-strong);
 			border-radius: 0.25rem;
-			background: var(--at-overlay-raised);
+			background: var(--atelier-overlay-raised);
 			padding: 0.125rem 0.25rem;
-			color: var(--at-overlay-fg-muted);
+			color: var(--atelier-overlay-fg-muted);
 			font-family:
 				-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 			font-size: 0.59rem;
@@ -131,7 +131,7 @@
 			width: 1px;
 			height: 1.25rem;
 			margin: 0 0.25rem;
-			background: var(--at-overlay-border);
+			background: var(--atelier-overlay-border);
 		}
 
 		/* The ▾ file checklist: every changed file, all ticked by default.
@@ -146,10 +146,10 @@
 			flex-direction: column;
 			gap: 1px;
 			padding: 0.375rem;
-			border: 1px solid var(--at-overlay-border);
+			border: 1px solid var(--atelier-overlay-border);
 			border-radius: 0.625rem;
-			background: var(--at-overlay);
-			box-shadow: var(--at-shadow-overlay);
+			background: var(--atelier-overlay);
+			box-shadow: var(--atelier-shadow-overlay);
 		}
 
 		.external-write-review-menu > button {
@@ -159,7 +159,7 @@
 			gap: 0.5rem;
 			padding: 0.4375rem 0.625rem;
 			border-radius: 0.375rem;
-			color: var(--at-overlay-fg-muted);
+			color: var(--atelier-overlay-fg-muted);
 			font-size: 0.75rem;
 			font-weight: 600;
 			text-align: left;
@@ -167,12 +167,12 @@
 		}
 
 		.external-write-review-menu > button[data-ticked] {
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 			font-weight: 700;
 		}
 
 		.external-write-review-menu > button:hover {
-			background: var(--at-overlay-raised);
+			background: var(--atelier-overlay-raised);
 		}
 
 		.external-write-review-menu-tick {
@@ -182,20 +182,20 @@
 			flex: none;
 			align-items: center;
 			justify-content: center;
-			border: 1.5px solid var(--at-overlay-border-strong);
+			border: 1.5px solid var(--atelier-overlay-border-strong);
 			border-radius: 0.25rem;
 			box-sizing: border-box;
 		}
 
 		.external-write-review-menu-tick[data-ticked] {
-			border-color: var(--at-accent);
-			background: var(--at-accent);
+			border-color: var(--atelier-accent);
+			background: var(--atelier-accent);
 		}
 
 		.external-write-review-menu-tick > svg {
 			width: 0.5625rem;
 			height: 0.5625rem;
-			color: var(--at-accent-on);
+			color: var(--atelier-accent-on);
 			stroke-width: 3.2;
 		}
 
@@ -222,20 +222,20 @@
 		.external-write-review-menu-divider {
 			height: 1px;
 			margin: 0.25rem 0.125rem;
-			background: var(--at-overlay-border);
+			background: var(--atelier-overlay-border);
 		}
 
 		/* Row state, right-aligned: "viewing". */
 		.external-write-review-menu-tag {
 			margin-left: auto;
 			padding-left: 0.75rem;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-size: 0.625rem;
 			font-weight: 500;
 		}
 
 		.external-write-review-menu > button[data-viewing] {
-			background: var(--at-overlay-raised);
+			background: var(--atelier-overlay-raised);
 		}
 
 		/* A verb's arrow menu: "{Verb} all N files", "Undo only {file}". */
@@ -265,7 +265,7 @@
 		}
 
 		.external-write-review-verb-menu > button:disabled {
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			cursor: default;
 		}
 
@@ -274,7 +274,7 @@
 		}
 
 		.external-write-review-verb-menu kbd {
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-family:
 				-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 			font-size: 0.59rem;
@@ -291,10 +291,10 @@
 			gap: 0.375rem;
 			margin: 0 0.25rem 0 0.0625rem;
 			padding: 0 0.5rem;
-			border: 1px solid var(--at-overlay-border);
+			border: 1px solid var(--atelier-overlay-border);
 			border-radius: 0.5rem;
-			background: var(--at-overlay-raised);
-			color: var(--at-overlay-fg);
+			background: var(--atelier-overlay-raised);
+			color: var(--atelier-overlay-fg);
 			font-size: 0.75rem;
 			font-weight: 600;
 			line-height: 1;
@@ -303,7 +303,7 @@
 		}
 
 		.external-write-review-scope-chip:hover:not(:disabled) {
-			background: var(--at-overlay-hover);
+			background: var(--atelier-overlay-hover);
 		}
 
 		.external-write-review-scope-chip:disabled {
@@ -314,7 +314,7 @@
 		.external-write-review-scope-chip > svg {
 			width: 0.625rem;
 			height: 0.625rem;
-			color: var(--at-overlay-fg-muted);
+			color: var(--atelier-overlay-fg-muted);
 		}
 
 		/* The progress ring: orange = will be acted on, the rest not. The wedge
@@ -325,8 +325,8 @@
 			flex: none;
 			border-radius: 50%;
 			background: conic-gradient(
-				var(--at-accent) 0deg var(--ring-ticked, 0deg),
-				var(--at-overlay-border-strong) var(--ring-ticked, 0deg) 360deg
+				var(--atelier-accent) 0deg var(--ring-ticked, 0deg),
+				var(--atelier-overlay-border-strong) var(--ring-ticked, 0deg) 360deg
 			);
 		}
 
@@ -343,7 +343,7 @@
 			align-items: center;
 			gap: 0.42rem;
 			padding: 0 0.55rem 0 0.12rem;
-			color: var(--at-overlay-fg);
+			color: var(--atelier-overlay-fg);
 		}
 
 		.external-write-review-navigation > button {
@@ -353,12 +353,12 @@
 			align-items: center;
 			justify-content: center;
 			border-radius: 0.4375rem;
-			color: var(--at-overlay-fg-muted);
+			color: var(--atelier-overlay-fg-muted);
 		}
 
 		.external-write-review-navigation > button:hover:not(:disabled) {
-			background: var(--at-overlay-hairline);
-			color: var(--at-overlay-fg);
+			background: var(--atelier-overlay-hairline);
+			color: var(--atelier-overlay-fg);
 		}
 
 		.external-write-review-navigation svg {
@@ -373,7 +373,7 @@
 			flex: none;
 			align-items: center;
 			gap: 0.25rem;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-size: 0.625rem;
 			font-weight: 500;
 		}
@@ -389,7 +389,7 @@
 			width: 0.875rem;
 			height: 0.875rem;
 			flex: none;
-			color: color-mix(in srgb, var(--at-overlay-fg) 72%, transparent);
+			color: color-mix(in srgb, var(--atelier-overlay-fg) 72%, transparent);
 		}
 
 		.external-write-review-navigation > span {
@@ -421,18 +421,18 @@
 			width: 0.3rem;
 			height: 0.3rem;
 			border-radius: 50%;
-			background: var(--at-overlay-fg-subtle);
+			background: var(--atelier-overlay-fg-subtle);
 			opacity: 0.55;
 		}
 
 		.external-write-review-pager i[data-active] {
-			background: var(--at-overlay-fg);
+			background: var(--atelier-overlay-fg);
 			opacity: 1;
 		}
 
 		.external-write-review-pager-index {
 			flex: none;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-size: 0.72rem;
 			font-variant-numeric: tabular-nums;
 			white-space: nowrap;
@@ -440,13 +440,13 @@
 
 		.external-write-review-navigation small {
 			flex: none;
-			color: var(--at-overlay-fg-subtle);
+			color: var(--atelier-overlay-fg-subtle);
 			font-size: 0.72rem;
 			white-space: nowrap;
 		}
 
 		.external-write-review-navigation-placeholder {
-			color: var(--at-overlay-fg-muted);
+			color: var(--atelier-overlay-fg-muted);
 			font-weight: 600;
 		}
 
@@ -477,25 +477,25 @@
 		}
 
 		.external-write-review-button-accept {
-			background: var(--at-accent);
-			color: var(--at-accent-on);
+			background: var(--atelier-accent);
+			color: var(--atelier-accent-on);
 		}
 
 		.external-write-review-button-accept:hover:not(:disabled) {
-			background: var(--at-accent-hover);
+			background: var(--atelier-accent-hover);
 		}
 
 		.external-write-review-button-reject {
 			padding: 0.3125rem 0.5625rem;
 			background: transparent;
 			/* Salmon on the fixed-dark pill: walk-back reads as caution, not danger. */
-			color: var(--at-overlay-danger);
+			color: var(--atelier-overlay-danger);
 			font-weight: 600;
 		}
 
 		.external-write-review-button-reject:hover:not(:disabled) {
-			background: var(--at-overlay-hairline);
-			color: var(--at-overlay-danger);
+			background: var(--atelier-overlay-hairline);
+			color: var(--atelier-overlay-danger);
 		}
 
 		/* A verb is a split button: the big half acts on the ticked set, the
@@ -519,7 +519,7 @@
 		.external-write-review-split-reject:has(
 			.external-write-review-split-arrow
 		) {
-			border-color: var(--at-overlay-danger-border);
+			border-color: var(--atelier-overlay-danger-border);
 		}
 
 		.external-write-review-split-arrow {
@@ -545,26 +545,26 @@
 
 		.external-write-review-split-accept .external-write-review-split-arrow {
 			border-left: 1px solid
-				color-mix(in srgb, var(--at-overlay) 25%, transparent);
-			background: var(--at-accent-hover);
-			color: var(--at-overlay-danger);
+				color-mix(in srgb, var(--atelier-overlay) 25%, transparent);
+			background: var(--atelier-accent-hover);
+			color: var(--atelier-overlay-danger);
 		}
 
 		.external-write-review-split-accept
 			.external-write-review-split-arrow:hover:not(:disabled) {
-			color: var(--at-accent-on);
+			color: var(--atelier-accent-on);
 		}
 
 		.external-write-review-split-reject .external-write-review-split-arrow {
-			border-left: 1px solid var(--at-overlay-danger-border);
-			background: var(--at-overlay-raised);
-			color: var(--at-overlay-danger);
+			border-left: 1px solid var(--atelier-overlay-danger-border);
+			background: var(--atelier-overlay-raised);
+			color: var(--atelier-overlay-danger);
 		}
 
 		.external-write-review-split-reject
 			.external-write-review-split-arrow:hover:not(:disabled) {
-			background: var(--at-overlay-hairline);
-			color: var(--at-overlay-danger);
+			background: var(--atelier-overlay-hairline);
+			color: var(--atelier-overlay-danger);
 		}
 
 		/* The pill divider between the stepper and the verbs. */
@@ -573,14 +573,14 @@
 			width: 1px;
 			height: 1rem;
 			margin-left: 0.125rem;
-			background: var(--at-overlay-border);
+			background: var(--atelier-overlay-border);
 		}
 
 		.external-write-review-shortcut {
 			border-radius: 0.25rem;
-			background: var(--at-overlay-hairline-strong);
+			background: var(--atelier-overlay-hairline-strong);
 			padding: 0.125rem 0.3125rem;
-			color: var(--at-overlay-danger);
+			color: var(--atelier-overlay-danger);
 			font-family:
 				-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 			font-size: 0.59rem;
@@ -590,9 +590,9 @@
 
 		.external-write-review-error {
 			border-radius: 0.45rem;
-			background: var(--at-danger-subtle);
+			background: var(--atelier-danger-subtle);
 			padding: 0.3rem 0.5rem;
-			color: var(--at-danger);
+			color: var(--atelier-danger);
 			font-size: 0.68rem;
 		}
 

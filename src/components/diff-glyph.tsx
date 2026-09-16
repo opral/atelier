@@ -31,11 +31,11 @@ export type DiffGlyphKind =
 	| "conflict";
 
 const GLYPH_FILL: Record<DiffGlyphKind, string> = {
-	added: "var(--at-diff-added)",
-	modified: "var(--at-link)",
-	removed: "var(--at-diff-removed)",
-	moved: "var(--at-diff-moved)",
-	conflict: "var(--at-diff-conflict)",
+	added: "var(--atelier-diff-added)",
+	modified: "var(--atelier-link)",
+	removed: "var(--atelier-diff-removed)",
+	moved: "var(--atelier-diff-moved)",
+	conflict: "var(--atelier-diff-conflict)",
 };
 
 const GLYPH_TITLE: Record<DiffGlyphKind, string> = {
@@ -58,9 +58,9 @@ export function DiffGlyph({
 	readonly dimmed?: boolean;
 	readonly className?: string;
 }) {
-	const fill = dimmed ? "var(--at-fg-faint)" : GLYPH_FILL[kind];
+	const fill = dimmed ? "var(--atelier-fg-faint)" : GLYPH_FILL[kind];
 	// The knockout is the panel ground showing through the dot.
-	const knockout = "var(--at-panel)";
+	const knockout = "var(--atelier-panel)";
 	return (
 		<span
 			title={GLYPH_TITLE[kind]}

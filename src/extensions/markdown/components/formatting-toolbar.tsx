@@ -336,7 +336,7 @@ export function FormattingToolbar({
 		<Tooltip.Provider delay={TOOLBAR_TOOLTIP_DELAY}>
 			<Toolbar.Root
 				className={clsx(
-					"flex h-[var(--at-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-border-subtle px-2.5 text-fg",
+					"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-border-subtle px-2.5 text-fg",
 					className,
 				)}
 				aria-label="Formatting toolbar"

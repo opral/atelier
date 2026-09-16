@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * One-time rename from the old vocabularies (--color-*, --atelier-*, the
- * Tailwind @theme utilities, the shadcn alias classes) to --at-* and the
+ * Tailwind @theme utilities, the shadcn alias classes) to --atelier-* and the
  * adapter's utility names. Deterministic; run it, then read what the lint
  * still finds. Usage: node scripts/tokens/codemod.mjs [dir…]  (default: src)
  */
@@ -11,7 +11,7 @@ import path from "node:path";
 const map = JSON.parse(
 	readFileSync(new URL("./rename-map.json", import.meta.url), "utf8"),
 );
-const utilityName = (token) => token.replace(/^--at-/, "");
+const utilityName = (token) => token.replace(/^--atelier-/, "");
 /** Bare Tailwind utilities whose theme keys changed. */
 const UTILITIES = {
 	"rounded-tag": "rounded-sm",

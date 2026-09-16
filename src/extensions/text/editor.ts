@@ -69,7 +69,7 @@ const atelierHighlightStyle = HighlightStyle.define([
 			tags.definitionKeyword,
 			tags.modifier,
 		],
-		color: "var(--at-syntax-keyword)",
+		color: "var(--atelier-syntax-keyword)",
 	},
 	{
 		tag: [
@@ -79,28 +79,28 @@ const atelierHighlightStyle = HighlightStyle.define([
 			tags.function(tags.variableName),
 			tags.standard(tags.variableName),
 		],
-		color: "var(--at-syntax-type)",
+		color: "var(--atelier-syntax-type)",
 	},
 	{
 		tag: [tags.string, tags.special(tags.string), tags.regexp],
-		color: "var(--at-syntax-string)",
+		color: "var(--atelier-syntax-string)",
 	},
 	{
 		tag: [tags.bool, tags.null, tags.number, tags.integer, tags.float],
-		color: "var(--at-syntax-number)",
+		color: "var(--atelier-syntax-number)",
 	},
 	{
 		tag: [tags.comment, tags.meta],
-		color: "var(--at-syntax-comment)",
+		color: "var(--atelier-syntax-comment)",
 		fontStyle: "italic",
 	},
 	{
 		tag: [tags.propertyName, tags.attributeName],
-		color: "var(--at-syntax-property)",
+		color: "var(--atelier-syntax-property)",
 	},
 	{
 		tag: [tags.invalid],
-		color: "var(--at-syntax-invalid)",
+		color: "var(--atelier-syntax-invalid)",
 		textDecoration: "underline wavy",
 	},
 ]);
@@ -108,8 +108,8 @@ const atelierHighlightStyle = HighlightStyle.define([
 const atelierEditorTheme = EditorView.theme({
 	"&": {
 		height: "100%",
-		backgroundColor: "var(--at-panel)",
-		color: "var(--at-fg)",
+		backgroundColor: "var(--atelier-panel)",
+		color: "var(--atelier-fg)",
 		fontSize: "14px",
 	},
 	"&.cm-focused": { outline: "none" },
@@ -122,26 +122,26 @@ const atelierEditorTheme = EditorView.theme({
 		paddingTop: "12px",
 	},
 	".cm-content": {
-		caretColor: "var(--at-fg)",
+		caretColor: "var(--atelier-fg)",
 		padding: "0 0 16px",
 	},
 	".cm-line": { padding: "0 20px 0 8px" },
 	".cm-cursor, .cm-dropCursor": {
-		borderLeftColor: "var(--at-fg)",
+		borderLeftColor: "var(--atelier-fg)",
 		borderLeftWidth: "1.5px",
 	},
 	".cm-content ::selection, &.cm-focused .cm-content ::selection": {
-		backgroundColor: "var(--at-bg-selection)",
-		color: "var(--at-fg)",
+		backgroundColor: "var(--atelier-bg-selection)",
+		color: "var(--atelier-fg)",
 	},
 	".cm-activeLine": {
 		backgroundColor:
-			"color-mix(in srgb, var(--at-accent-subtle) 28%, transparent)",
+			"color-mix(in srgb, var(--atelier-accent-subtle) 28%, transparent)",
 	},
 	".cm-gutters": {
 		minWidth: "38px",
-		backgroundColor: "var(--at-panel)",
-		color: "color-mix(in srgb, var(--at-fg-subtle) 58%, transparent)",
+		backgroundColor: "var(--atelier-panel)",
+		color: "color-mix(in srgb, var(--atelier-fg-subtle) 58%, transparent)",
 		border: "none",
 		fontSize: "12px",
 	},
@@ -152,23 +152,23 @@ const atelierEditorTheme = EditorView.theme({
 	},
 	".cm-activeLineGutter": {
 		backgroundColor:
-			"color-mix(in srgb, var(--at-accent-subtle) 28%, transparent)",
-		color: "var(--at-fg-subtle)",
+			"color-mix(in srgb, var(--atelier-accent-subtle) 28%, transparent)",
+		color: "var(--atelier-fg-subtle)",
 	},
 	".cm-panels": {
-		backgroundColor: "var(--at-bg-subtle)",
-		color: "var(--at-fg-muted)",
+		backgroundColor: "var(--atelier-bg-subtle)",
+		color: "var(--atelier-fg-muted)",
 	},
 	".cm-panels.cm-panels-top": {
-		borderBottom: "1px solid var(--at-border-subtle)",
+		borderBottom: "1px solid var(--atelier-border-subtle)",
 	},
 	".cm-searchMatch": {
-		backgroundColor: "var(--at-accent-subtle)",
-		outline: "1px solid var(--at-accent-border)",
+		backgroundColor: "var(--atelier-accent-subtle)",
+		outline: "1px solid var(--atelier-accent-border)",
 	},
 	".cm-searchMatch.cm-searchMatch-selected": {
-		backgroundColor: "var(--at-accent-border)",
-		outlineColor: "var(--at-link)",
+		backgroundColor: "var(--atelier-accent-border)",
+		outlineColor: "var(--atelier-link)",
 	},
 });
 

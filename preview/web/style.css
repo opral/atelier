@@ -21,20 +21,20 @@ body,
 	padding: 0 8px 0 6px;
 	border: 0;
 	border-radius: 7px;
-	background: var(--at-bg-hover-strong);
-	color: var(--at-fg-faint);
+	background: var(--atelier-bg-hover-strong);
+	color: var(--atelier-fg-faint);
 	cursor: pointer;
 	font: inherit;
 }
 
 .host-repo__chip:hover {
-	background: var(--at-bg-active);
+	background: var(--atelier-bg-active);
 }
 
 .host-repo__name {
 	font-size: 12.5px;
 	font-weight: 600;
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 }
 
 .host-repo__avatar {
@@ -45,8 +45,8 @@ body,
 	width: 17px;
 	height: 17px;
 	border-radius: 5px;
-	background: var(--at-accent-subtle);
-	color: var(--at-accent);
+	background: var(--atelier-accent-subtle);
+	color: var(--atelier-accent);
 	font-size: 8px;
 	font-weight: 700;
 	letter-spacing: 0.02em;
@@ -61,10 +61,10 @@ body,
 	flex-direction: column;
 	min-width: 180px;
 	padding: 6px;
-	border: 1px solid var(--at-border);
+	border: 1px solid var(--atelier-border);
 	border-radius: 10px;
-	background: var(--at-panel);
-	box-shadow: var(--at-shadow-lg);
+	background: var(--atelier-panel);
+	box-shadow: var(--atelier-shadow-lg);
 }
 
 .host-repo__item {
@@ -76,7 +76,7 @@ body,
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--at-fg-muted);
+	color: var(--atelier-fg-muted);
 	font: inherit;
 	font-size: 12.5px;
 	text-align: left;
@@ -84,13 +84,13 @@ body,
 }
 
 .host-repo__item[aria-checked="true"] {
-	background: var(--at-bg-hover);
+	background: var(--atelier-bg-hover);
 	font-weight: 600;
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 }
 
 .host-repo__item:hover {
-	background: var(--at-bg-hover);
+	background: var(--atelier-bg-hover);
 }
 
 .csv-demo-nav {
@@ -100,17 +100,17 @@ body,
 	flex-shrink: 0;
 }
 .csv-demo-nav a {
-	color: var(--at-fg-subtle);
+	color: var(--atelier-fg-subtle);
 	text-decoration: none;
 	font-size: 12px;
 }
 .csv-demo-nav a:first-child {
-	color: var(--at-fg-muted);
+	color: var(--atelier-fg-muted);
 	font-weight: 600;
 	margin-right: 10px;
 }
 .csv-demo-nav a:hover {
-	color: var(--at-fg);
+	color: var(--atelier-fg);
 }
 
 .csv-demo-nav {

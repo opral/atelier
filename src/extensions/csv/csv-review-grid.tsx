@@ -816,7 +816,7 @@ function startFoldReveal(
 
 function revealDuration(element: Element): number {
 	const token = getComputedStyle(element)
-		.getPropertyValue("--at-duration-slow")
+		.getPropertyValue("--atelier-duration-slow")
 		.trim();
 	const parsed = Number.parseFloat(token);
 	if (!Number.isFinite(parsed)) return 160;
@@ -864,8 +864,8 @@ function CsvReviewValue({
 				className="csv-review-pill"
 				style={
 					{
-						background: `var(--at-tag-${color})`,
-						color: `var(--at-tag-${color}-fg)`,
+						background: `var(--atelier-tag-${color})`,
+						color: `var(--atelier-tag-${color}-fg)`,
 					} as CSSProperties
 				}
 			>

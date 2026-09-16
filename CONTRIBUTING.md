@@ -25,16 +25,16 @@
 
 The rules live in `CLAUDE.md` ("Design tokens: one vocabulary, plain CSS") and
 are enforced by `pnpm tokens:check`. In short: colours only in
-`src/shell/theme.css`; `var(--at-…)` in CSS and the adapter's names in
+`src/shell/theme.css`; `var(--atelier-…)` in CSS and the adapter's names in
 `className`; one name per role; dark mode is `color-scheme`, never a second
 set of names.
 
-- **Focus.** `outline: 2px solid var(--at-ring)` with `outline-offset: 1px`
+- **Focus.** `outline: 2px solid var(--atelier-ring)` with `outline-offset: 1px`
   (or `-2px` inside clipped containers). Avoid box-shadow rings.
 - **Dark chrome** floating over the UI (review pill, media frames, player
-  controls) uses the `--at-overlay-*` set and `--at-shadow-overlay`; it stays
+  controls) uses the `--atelier-overlay-*` set and `--atelier-shadow-overlay`; it stays
   dark in both schemes.
-- **Code** uses `--at-syntax-*`; numbers, strings, keywords and constants
+- **Code** uses `--atelier-syntax-*`; numbers, strings, keywords and constants
   each have their own hue.
 - **No fallbacks in `var()`.** `theme.css` is always loaded; a fallback hides
   a missing token from the check.

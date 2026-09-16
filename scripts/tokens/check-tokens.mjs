@@ -3,7 +3,7 @@
  * The token contract, enforced.
  *
  * Every colour lives in src/shell/theme.css and nowhere else; everything else
- * says `var(--at-…)`, and only names theme.css declares. Tailwind classes use
+ * says `var(--atelier-…)`, and only names theme.css declares. Tailwind classes use
  * the adapter's names, never an arbitrary value with a colour in it. This is
  * what keeps a host, an extension, and a chat card from quietly diverging —
  * and, as the failure it prints names the nearest valid token, it is the loop
@@ -32,7 +32,7 @@ const themePath = path.resolve(opt("--theme", "src/shell/theme.css"));
 const report = flag("--report");
 
 const theme = readFileSync(themePath, "utf8");
-const tokens = new Set(theme.match(/--at-[a-z0-9-]+(?=\s*:)/g) ?? []);
+const tokens = new Set(theme.match(/--atelier-[a-z0-9-]+(?=\s*:)/g) ?? []);
 const adapter = new Set();
 try {
 	const adapterCss = readFileSync(
@@ -80,7 +80,7 @@ function nearest(name) {
 	let best = null,
 		bestScore = -1;
 	for (const t of tokens) {
-		const have = t.slice(5);
+		const have = t.slice(10);
 		const score =
 			have.split("-").filter((p) => want.includes(p)).length -
 			Math.abs(have.length - want.length) / 20;
@@ -125,7 +125,7 @@ for (const file of files) {
 		if (inComment) return;
 		for (const m of line.matchAll(VAR)) {
 			const name = m[1];
-			// A template string builds the name at runtime (`--at-tag-${colour}`).
+			// A template string builds the name at runtime (`--atelier-tag-${colour}`).
 			if (name.endsWith("-") && /\$\{/.test(line)) continue;
 			if (tokens.has(name) || local.has(name) || FOREIGN.test(name)) continue;
 			findings.push({
@@ -147,7 +147,7 @@ for (const file of files) {
 			const name = (m[0].match(/--[a-zA-Z0-9-]+/) ?? [null])[0];
 			const hint =
 				name && tokens.has(name)
-					? ` → ${m[0].split("-[")[0]}-${name.slice(5)}`
+					? ` → ${m[0].split("-[")[0]}-${name.slice(10)}`
 					: "";
 			findings.push({
 				where,
