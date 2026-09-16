@@ -6,7 +6,14 @@
  * `bg-red-500` is not a class here and `bg-danger` is.
  *
  * Utilities carry the token's name without its prefix: `bg-panel`, `text-fg-muted`,
- * `border-border-strong`, `rounded-md`, `text-sm`, `shadow-md`, `duration-fast`.
+ * `border-border-strong`, `rounded-control`, `text-ui-sm`, `shadow-md`.
+ *
+ * Only the colour palette is hidden. Tailwind's own type and radius scales stay
+ * as they are — `text-sm` is 14px here as everywhere else — and Atelier's UI
+ * scales sit beside them under their role names: `text-ui-xs|sm|md|lg` for
+ * chrome, `rounded-tag|control|panel` for the three nesting levels. A stock
+ * name that meant something else here would be a trap for anyone who knows
+ * Tailwind, which is everyone.
  */
 @theme inline {
 	--color-*: initial;
@@ -94,25 +101,21 @@
 	--color-tag-red-fg: var(--at-tag-red-fg);
 	--color-folder: var(--at-folder);
 
-	--radius-*: initial;
-	--radius-sm: var(--at-radius-sm);
-	--radius-md: var(--at-radius-md);
-	--radius-lg: var(--at-radius-lg);
-	--radius-full: var(--at-radius-full);
+	--radius-tag: var(--at-radius-tag);
+	--radius-control: var(--at-radius-control);
+	--radius-panel: var(--at-radius-panel);
 
-	--text-*: initial;
-	--text-xs: var(--at-text-xs);
-	--text-xs--line-height: var(--at-text-xs-lh);
-	--text-sm: var(--at-text-sm);
-	--text-sm--line-height: var(--at-text-sm-lh);
-	--text-md: var(--at-text-md);
-	--text-md--line-height: var(--at-text-md-lh);
-	--text-lg: var(--at-text-lg);
-	--text-lg--line-height: var(--at-text-lg-lh);
+	--text-ui-xs: var(--at-text-ui-xs);
+	--text-ui-xs--line-height: var(--at-text-ui-xs-lh);
+	--text-ui-sm: var(--at-text-ui-sm);
+	--text-ui-sm--line-height: var(--at-text-ui-sm-lh);
+	--text-ui: var(--at-text-ui-md);
+	--text-ui--line-height: var(--at-text-ui-md-lh);
+	--text-ui-lg: var(--at-text-ui-lg);
+	--text-ui-lg--line-height: var(--at-text-ui-lg-lh);
 	--font-sans: var(--at-font-sans);
 	--font-mono: var(--at-font-mono);
 
-	--shadow-*: initial;
 	--shadow-sm: var(--at-shadow-sm);
 	--shadow-md: var(--at-shadow-md);
 	--shadow-lg: var(--at-shadow-lg);

@@ -299,7 +299,7 @@ function WorkingChangesRow({
 	return (
 		<div
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-lg border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
@@ -313,7 +313,7 @@ function WorkingChangesRow({
 					onClick={toggleWorkingChanges}
 					onMouseDown={(event) => event.preventDefault()}
 					data-attr="history-working-changes"
-					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-lg py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
+					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
 				>
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
 						<WorkingDot className="ring-3 ring-accent-subtle" />
@@ -572,7 +572,7 @@ function CheckpointItem({
 	return (
 		<li
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-lg border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
@@ -598,7 +598,7 @@ function CheckpointItem({
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-lg py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
+				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
 					isViewing ? "" : "hover:bg-bg-hover-strong"
 				}`}
 			>

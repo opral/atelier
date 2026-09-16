@@ -186,13 +186,13 @@ export function TableView({
 					aria-hidden="true"
 					className="h-[13px] w-[13px] shrink-0 text-fg-muted"
 				/>
-				<span className="font-mono text-md font-semibold text-fg">
+				<span className="font-mono text-ui font-semibold text-fg">
 					{baseTable}
 				</span>
 				{description ? (
 					<span
 						data-attr="sql-table-description"
-						className="min-w-0 max-w-[38ch] truncate text-sm text-fg-subtle"
+						className="min-w-0 max-w-[38ch] truncate text-ui-sm text-fg-subtle"
 						title={description}
 					>
 						{description}
@@ -238,7 +238,7 @@ export function TableView({
 				/>
 				<span className="flex-1" />
 				{data === null ? null : (
-					<span className="font-mono text-sm whitespace-nowrap">
+					<span className="font-mono text-ui-sm whitespace-nowrap">
 						<span
 							className="font-semibold text-success"
 							title={formatQueryTimingDetails(
@@ -349,7 +349,7 @@ function FilterBar({
 			{filters.map((filter, index) => (
 				<span
 					key={`${filter.column}-${index}`}
-					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-xs text-fg"
+					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-ui-xs text-fg"
 				>
 					{filter.column} {operatorSymbol(filter.operator)} {filter.value}
 					<button
@@ -391,7 +391,7 @@ function FilterBar({
 					className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-fg placeholder:text-fg-faint focus-visible:outline-none"
 				/>
 			) : (
-				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-xs text-fg">
+				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-ui-xs text-fg">
 					{pending.column}
 					{pending.operator === null ? null : (
 						<>
@@ -414,7 +414,7 @@ function FilterBar({
 										setPending(null);
 									}
 								}}
-								className="w-24 bg-transparent font-mono text-xs focus-visible:outline-none"
+								className="w-24 bg-transparent font-mono text-ui-xs focus-visible:outline-none"
 							/>
 						</>
 					)}

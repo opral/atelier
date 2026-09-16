@@ -118,13 +118,13 @@ export function formatGridCell(
 	if (value === null || value === undefined) {
 		return {
 			text: "null",
-			className: "font-mono text-sm text-fg-faint",
+			className: "font-mono text-ui-sm text-fg-faint",
 		};
 	}
 	if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
 		return {
 			text: formatByteSize(value.byteLength),
-			className: "font-mono text-sm text-fg-subtle",
+			className: "font-mono text-ui-sm text-fg-subtle",
 		};
 	}
 	if (typeof value === "number" || typeof value === "bigint") {
@@ -142,7 +142,7 @@ export function formatGridCell(
 	if (typeof value === "object") {
 		return {
 			text: Array.isArray(value) ? "[…]" : "{…}",
-			className: "font-mono text-sm text-fg-faint",
+			className: "font-mono text-ui-sm text-fg-faint",
 		};
 	}
 	const text = String(value);
@@ -156,12 +156,12 @@ export function formatGridCell(
 	if (name.endsWith("_at") || /^\d{4}-\d{2}-\d{2}[ T]/.test(text)) {
 		return {
 			text,
-			className: "font-mono text-sm text-fg-faint",
+			className: "font-mono text-ui-sm text-fg-faint",
 		};
 	}
 	return {
 		text,
-		className: "text-md font-medium text-fg",
+		className: "text-ui font-medium text-fg",
 	};
 }
 
@@ -380,7 +380,7 @@ function JsonCell({
 				aria-expanded={isOpen}
 				data-attr={kind === "row_ref" ? "sql-row-ref-cell" : "sql-json-cell"}
 				onClick={toggle}
-				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 					isOpen
 						? "border-link text-fg-muted"
 						: "border-transparent text-fg-faint hover:border-border hover:text-fg-muted"
@@ -421,7 +421,7 @@ function JsonCell({
 									.then(() => setHasCopied(true))
 									.catch(() => undefined);
 							}}
-							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-sm font-medium text-fg-muted hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-ui-sm font-medium text-fg-muted hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						>
 							<Copy aria-hidden="true" className="h-3 w-3" />
 							{hasCopied ? "Copied" : "Copy"}
@@ -544,7 +544,7 @@ export function GridFooter({
 		<div className="atelier-sql-grid-footer flex h-9 shrink-0 items-center gap-3 border-t border-border-subtle bg-bg-subtle px-3.5">
 			<span
 				data-attr="sql-grid-row-range"
-				className="font-mono text-sm text-fg-subtle"
+				className="font-mono text-ui-sm text-fg-subtle"
 			>
 				{format(start)}–{format(end)} <span className="text-fg-faint">of</span>{" "}
 				{format(totalRows)}{" "}
@@ -569,7 +569,7 @@ export function GridFooter({
 					onClick={() => onPageChange(page - 1)}
 					path="m15 18-6-6 6-6"
 				/>
-				<span className="px-1 text-sm text-fg-muted">
+				<span className="px-1 text-ui-sm text-fg-muted">
 					Page {format(page + 1)}{" "}
 					<span className="text-fg-faint">of {format(pageCount)}</span>
 				</span>
@@ -628,7 +628,7 @@ function PageSizeSelect({
 	readonly onPageSizeChange: (pageSize: number) => void;
 }) {
 	return (
-		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-sm text-fg-muted hover:bg-bg-hover">
+		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-ui-sm text-fg-muted hover:bg-bg-hover">
 			<select
 				aria-label="Rows per page"
 				value={pageSize}

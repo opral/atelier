@@ -193,7 +193,7 @@ export function DefaultFolderSlot({
 					// A broken default gets the room to say so; the folder's name is
 					// the half of that sentence the user needs.
 					(state.kind === "missing" ? "max-w-[176px] " : "max-w-[128px] ") +
-					"flex h-5 cursor-default items-center gap-1 rounded-md border border-transparent px-1.5 text-[11px] outline-hidden select-none " +
+					"flex h-5 cursor-default items-center gap-1 rounded-control border border-transparent px-1.5 text-[11px] outline-hidden select-none " +
 					// At rest it is a caption on the row: it says where the row
 					// creates. It draws its boundary once the pointer or the arrow
 					// keys reach it, which is the same moment it can be pressed —
@@ -513,7 +513,7 @@ function FolderPicker({
 					placeholder="Search folders"
 					aria-label="Search folders"
 					data-attr="default-folder-search"
-					className="h-7 w-full rounded-md border border-border-subtle bg-border-strong pr-2 pl-7 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
+					className="h-7 w-full rounded-control border border-border-subtle bg-border-strong pr-2 pl-7 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={(event) => {
 						// Radix runs typeahead on every character typed inside its
@@ -648,7 +648,7 @@ function NewFolderField({
 					placeholder="Folder name"
 					aria-label={`New folder in ${parent}`}
 					data-attr="default-folder-new-folder-name"
-					className="h-7 w-full rounded-md border border-border-subtle bg-border-strong px-2 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
+					className="h-7 w-full rounded-control border border-border-subtle bg-border-strong px-2 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
 					onChange={(event) => setName(event.target.value)}
 					onKeyDown={(event) => {
 						event.stopPropagation();

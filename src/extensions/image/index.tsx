@@ -419,7 +419,7 @@ function ImageToolbarButton({
 				<Button
 					aria-label={ariaLabel}
 					aria-pressed={isPressed}
-					className="h-7 min-w-7 gap-1.5 rounded-md px-2 text-[11.5px] font-semibold text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-35 [&_svg]:size-3.75"
+					className="h-7 min-w-7 gap-1.5 rounded-control px-2 text-[11.5px] font-semibold text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-35 [&_svg]:size-3.75"
 					disabled={disabled}
 					onClick={onClick}
 					size="sm"

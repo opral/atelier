@@ -443,7 +443,7 @@ function QueryView({
 					onClick={() => void runQuery(query)}
 					disabled={isRunning}
 					data-attr="sql-run-query"
-					className="inline-flex items-center gap-1.5 rounded-[8px] bg-bg-hover px-3.5 py-1.5 text-md font-bold text-accent-on shadow-shadow-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+					className="inline-flex items-center gap-1.5 rounded-[8px] bg-bg-hover px-3.5 py-1.5 text-ui font-bold text-accent-on shadow-shadow-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
 				>
 					<Play aria-hidden="true" className="h-2.5 w-2.5 fill-current" />
 					Run
@@ -466,11 +466,11 @@ function QueryView({
 				</span>
 				<span className="flex-1" />
 				{isRunning ? (
-					<span className="font-mono text-sm text-fg-subtle">Running…</span>
+					<span className="font-mono text-ui-sm text-fg-subtle">Running…</span>
 				) : run === null ? null : (
 					<span
 						data-attr="sql-run-status"
-						className="font-mono text-sm text-fg-subtle"
+						className="font-mono text-ui-sm text-fg-subtle"
 					>
 						{run.hasResultColumns
 							? `${run.rows.length} ${run.rows.length === 1 ? "row" : "rows"}`
@@ -498,7 +498,7 @@ function QueryView({
 			)}
 			<div className="atelier-sql-results min-h-0 flex-1 overflow-auto">
 				{run === null || !run.hasResultColumns ? (
-					<div className="flex h-full items-center justify-center p-6 text-md text-fg-faint">
+					<div className="flex h-full items-center justify-center p-6 text-ui text-fg-faint">
 						{run === null
 							? "Run a query to see results."
 							: "Statement finished without result rows."}

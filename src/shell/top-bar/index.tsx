@@ -90,7 +90,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-md text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
+							className="h-7 w-7 justify-center rounded-control text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -198,7 +198,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-md text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
+							className="h-7 w-7 justify-center rounded-control text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"

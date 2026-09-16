@@ -18,7 +18,7 @@
 	overscroll-behavior: contain;
 	padding: 4px 12px 12px;
 	border: 1px solid var(--at-border);
-	border-radius: var(--at-radius-lg);
+	border-radius: var(--at-radius-panel);
 	background: var(--at-panel);
 	color: var(--at-fg-muted);
 	box-shadow: var(--at-shadow-md);
@@ -111,7 +111,7 @@
 	display: inline-block;
 	max-width: 100%;
 	padding: 0 6px;
-	border-radius: var(--at-radius-sm);
+	border-radius: var(--at-radius-tag);
 	overflow-wrap: anywhere;
 	line-height: 20px;
 }

@@ -222,9 +222,9 @@
 	--at-panel-header-height: 40px; /* every panel's header row, so tabs and toolbars align across panels */
 
 	/* ── Shape ────────────────────────────────────────────────────────── */
-	--at-radius-sm: 3px; /* tags and chips, which sit inside controls */
-	--at-radius-md: 7px; /* controls, which sit inside panels */
-	--at-radius-lg: 8px; /* panels, cards, popovers */
+	--at-radius-tag: 3px; /* tags and chips, which sit inside controls */
+	--at-radius-control: 7px; /* controls, which sit inside panels */
+	--at-radius-panel: 8px; /* panels, cards, popovers */
 	--at-radius-full: 9999px;
 
 	/* ── Space ────────────────────────────────────────────────────────── */
@@ -236,14 +236,14 @@
 	--at-space-6: 32px;
 
 	/* ── UI type. Documents keep their own editorial scale in document.css. */
-	--at-text-xs: 11px;
-	--at-text-xs-lh: 16px;
-	--at-text-sm: 11.5px;
-	--at-text-sm-lh: 16px;
-	--at-text-md: 12.5px;
-	--at-text-md-lh: 16px;
-	--at-text-lg: 13px;
-	--at-text-lg-lh: 20px;
+	--at-text-ui-xs: 11px;
+	--at-text-ui-xs-lh: 16px;
+	--at-text-ui-sm: 11.5px;
+	--at-text-ui-sm-lh: 16px;
+	--at-text-ui-md: 12.5px;
+	--at-text-ui-md-lh: 16px;
+	--at-text-ui-lg: 13px;
+	--at-text-ui-lg-lh: 20px;
 	--at-font-sans:
 		ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
 		"Segoe UI Symbol", "Noto Color Emoji";

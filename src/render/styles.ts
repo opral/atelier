@@ -79,7 +79,7 @@ const CSV_CSS = `
 .csv-diff {
 	overflow-x: auto;
 	border: 1px solid var(--at-border);
-	border-radius: var(--at-radius-lg);
+	border-radius: var(--at-radius-panel);
 }
 .csv-diff table {
 	width: 100%;
@@ -126,7 +126,7 @@ const CSV_CSS = `
 .csv-diff td span[data-diff-status], .csv-diff th span[data-diff-status] {
 	padding: 0 2px;
 	margin: 0 -1px;
-	border-radius: var(--at-radius-sm);
+	border-radius: var(--at-radius-tag);
 	/* Each version is its own run: without isolation, a removed and an added
 	   Arabic word reorder into each other, letter by letter. */
 	unicode-bidi: isolate;

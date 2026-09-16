@@ -46,7 +46,7 @@
 		margin-top: 8px;
 		padding: 6px 14px;
 		border: 1px solid var(--at-accent);
-		border-radius: var(--at-radius-md);
+		border-radius: var(--at-radius-control);
 		background: var(--at-accent);
 		color: var(--at-accent-on);
 		font-size: 13px;
@@ -170,7 +170,7 @@
 		flex-direction: column;
 		padding: 4px;
 		border: 1px solid var(--at-border);
-		border-radius: var(--at-radius-lg);
+		border-radius: var(--at-radius-panel);
 		background: var(--at-panel);
 		box-shadow: var(--at-shadow-lg);
 	}
@@ -180,7 +180,7 @@
 		align-items: center;
 		gap: 8px;
 		min-height: 30px;
-		border-radius: var(--at-radius-md);
+		border-radius: var(--at-radius-control);
 		padding: 5px 8px;
 		color: var(--at-fg-muted);
 		font-size: 12.5px;

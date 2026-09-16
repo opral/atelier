@@ -1043,7 +1043,7 @@ function AddViewMenu({
 				{availableViews.length === 0 ? (
 					<DropdownMenuItem
 						disabled
-						className="h-7 rounded-md px-2 text-xs font-medium text-fg-subtle"
+						className="h-7 rounded-control px-2 text-xs font-medium text-fg-subtle"
 					>
 						No views available
 					</DropdownMenuItem>
@@ -1055,7 +1055,7 @@ function AddViewMenu({
 								selectedViewRef.current = true;
 								onAddView(ext.kind);
 							}}
-							className="h-7 rounded-md px-2 text-xs font-medium text-fg-muted focus:bg-bg-hover focus:text-fg"
+							className="h-7 rounded-control px-2 text-xs font-medium text-fg-muted focus:bg-bg-hover focus:text-fg"
 						>
 							<ext.icon className="h-4 w-4" />
 							<span>{ext.label}</span>
@@ -1657,7 +1657,7 @@ const fileGlyphForLabel = (label: string): TabIcon | null => {
 };
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center rounded-md border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg";
+	"group relative flex h-7 flex-none max-w-80 items-center rounded-control border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;

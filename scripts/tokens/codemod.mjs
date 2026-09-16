@@ -59,7 +59,24 @@ for (const [oldToken, nextToken] of Object.entries(map)) {
 	if (!oldToken.startsWith("--color-")) continue;
 	const oldKey = oldToken.slice("--color-".length);
 	const nextKey = utilityName(nextToken);
-	for (const util of ["bg", "text", "border", "ring", "fill", "stroke", "outline", "from", "to", "via", "divide", "placeholder", "caret", "decoration", "ring-offset", "shadow"]) {
+	for (const util of [
+		"bg",
+		"text",
+		"border",
+		"ring",
+		"fill",
+		"stroke",
+		"outline",
+		"from",
+		"to",
+		"via",
+		"divide",
+		"placeholder",
+		"caret",
+		"decoration",
+		"ring-offset",
+		"shadow",
+	]) {
 		UTILITIES[`${util}-${oldKey}`] ??= `${util}-${nextKey}`;
 	}
 }
