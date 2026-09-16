@@ -940,16 +940,21 @@
 	}
 
 	/* Tables */
-	/* A table is read across, not down a measure, so it earns more room than
-	   the prose around it: it reaches back into the gutter on both sides, as
-	   far as the panel can spare while keeping the document's own margin, and
-	   no further than the table's cap. In a panel with no gutter to give it
-	   sits in the column like everything else and scrolls sideways. Only a
-	   table the document holds directly: the gutter belongs to the document,
-	   and a table inside a list or a quote reaching for it hung out of the
-	   block it belongs to, with the quote's own rule cutting across it.
-	   Hairlines, 14px cells, a tinted plain-case header row: Notion's simple
-	   table. */
+	/* A table is read across, not down a measure, so it may take more room
+	   than the prose around it — but only the room it needs. One that fits
+	   the column sits in it like everything else, on the prose's own left
+	   edge. One that needs more reaches back into the gutter on both sides
+	   equally, as far as the panel can spare while keeping the document's own
+	   margin, and no further than the table's cap; past that it scrolls. Only
+	   a table the document holds directly: the gutter belongs to the
+	   document, and a table inside a list or a quote reaching for it hung out
+	   of the block it belongs to.
+
+	   The table element is the room: a scroll box as wide as the column and
+	   both gutters. Its two pseudo-elements are the gutters, which give way
+	   before the table does, so the table proper sits on the column until it
+	   needs the gutters and spends them evenly when it does. Hairlines, 14px
+	   cells, a tinted plain-case header row: Notion's simple table. */
 	.markdown-view .ProseMirror > table {
 		--markdown-table-outset: max(
 			0px,
@@ -963,27 +968,54 @@
 				)
 			)
 		);
-		display: block;
-		border: 1px solid var(--color-border-panel);
-		border-collapse: separate;
-		border-radius: var(--markdown-radius);
-		border-spacing: 0;
-		box-shadow: none;
-		width: max-content;
-		min-width: calc(100% + 2 * var(--markdown-table-outset));
-		max-width: calc(100% + 2 * var(--markdown-table-outset));
+		display: flex;
+		align-items: flex-start;
+		width: calc(100% + 2 * var(--markdown-table-outset));
 		margin-top: var(--markdown-block-gap);
 		margin-bottom: var(--markdown-block-gap);
 		margin-inline: calc(-1 * var(--markdown-table-outset));
+		border: 0;
+		box-shadow: none;
 		overflow-x: auto;
 		font-size: 14px;
 	}
 
-	/* The scrolling block is the table element; its row group is the table
-	   proper and fills the block, so cells stretch to the column's width. */
+	.markdown-view .ProseMirror > table::before,
+	.markdown-view .ProseMirror > table::after {
+		content: "";
+		flex: 0 1 var(--markdown-table-outset);
+		min-width: 0;
+	}
+
+	/* The table proper: its own width, never squeezed below it — the room
+	   around it scrolls instead — and the border that used to sit on the
+	   scroll box. */
 	.markdown-view .ProseMirror table > tbody {
 		display: table;
-		width: 100%;
+		flex: 0 0 auto;
+		width: max-content;
+		border: 1px solid var(--color-border-panel);
+		border-collapse: separate;
+		border-radius: var(--markdown-radius);
+		border-spacing: 0;
+	}
+
+	/* The header row's tint would square off the rounded corners it sits
+	   under, now that nothing clips it. */
+	.markdown-view .ProseMirror table tr:first-child :is(th, td):first-child {
+		border-top-left-radius: calc(var(--markdown-radius) - 1px);
+	}
+
+	.markdown-view .ProseMirror table tr:first-child :is(th, td):last-child {
+		border-top-right-radius: calc(var(--markdown-radius) - 1px);
+	}
+
+	.markdown-view .ProseMirror table tr:last-child :is(th, td):first-child {
+		border-bottom-left-radius: calc(var(--markdown-radius) - 1px);
+	}
+
+	.markdown-view .ProseMirror table tr:last-child :is(th, td):last-child {
+		border-bottom-right-radius: calc(var(--markdown-radius) - 1px);
 	}
 
 	.markdown-view .ProseMirror table tr:first-child {

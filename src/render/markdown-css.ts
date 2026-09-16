@@ -149,10 +149,11 @@ export const MARKDOWN_CSS = `
 .md-diff img { max-width: 100%; height: auto; border-radius: 6px; }
 .md-diff hr { margin: 12px 0; border: 0; border-top: 1px solid var(--atelier-border); }
 
+/* Its own width — a table with two short columns is not a banner — and a
+   scroll past the card's edge rather than a squeeze. */
 .md-diff table {
 	display: block;
-	width: max-content;
-	min-width: 100%;
+	width: fit-content;
 	max-width: 100%;
 	margin: 0 0 8px;
 	border: 1px solid var(--atelier-border);
@@ -160,7 +161,7 @@ export const MARKDOWN_CSS = `
 	border-collapse: collapse;
 	overflow-x: auto;
 }
-.md-diff table > tbody { display: table; width: 100%; }
+.md-diff table > tbody { display: table; width: max-content; }
 .md-diff th, .md-diff td {
 	padding: 7px 9px;
 	border-bottom: 1px solid var(--atelier-border-subtle);
