@@ -422,6 +422,27 @@ function CheckpointList({
 			)
 		: allCheckpoints;
 
+	if (file && changes.status === "pending") {
+		return (
+			<p
+				role="status"
+				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+			>
+				Loading file history…
+			</p>
+		);
+	}
+	if (file && changes.status === "error") {
+		return (
+			<p
+				role="alert"
+				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+			>
+				Could not load file history.
+			</p>
+		);
+	}
+
 	if (file && changes.status === "success" && checkpoints.length === 0) {
 		return (
 			<p
