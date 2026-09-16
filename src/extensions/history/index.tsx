@@ -488,7 +488,7 @@ function CheckpointList({
 		return (
 			<p
 				role="status"
-				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+				className="px-2 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
 				Loading file history…
 			</p>
@@ -498,7 +498,7 @@ function CheckpointList({
 		return (
 			<p
 				role="alert"
-				className="px-2 py-3 text-[11.5px] leading-4 text-[var(--color-text-tertiary)]"
+				className="px-2 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
 				Could not load file history.
 			</p>
