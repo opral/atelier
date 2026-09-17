@@ -235,6 +235,17 @@ export type AtelierEvent =
 			area: AtelierArea;
 	  }
 	| {
+			/** Explicit user tab selection, emitted before activation, including
+			 * selecting an already active tab. Hosts cancel pending route work here.
+			 * Restoring state and programmatic opens do not emit this event.
+			 */
+			type: "main_view_navigation_requested";
+			viewKind: string;
+			instanceId: string;
+			filePath: string | null;
+			state?: AtelierExtensionState;
+	  }
+	| {
 			/**
 			 * The active main view changed (open, tab click, close, restore).
 			 * Hosts that own routing map this to a URL.

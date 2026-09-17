@@ -179,14 +179,40 @@ function LiveAtelier(props: AtelierProps) {
 	const current = useRef(props);
 	current.current = props;
 	const applyingLocation = useRef(false);
+	const locationController = useRef<AbortController | null>(null);
+	const requestedNavigation = useRef<string | null>(null);
 	const instance = useMemo(
 		() =>
 			createAtelier({
 				...current.current,
 				lix: props.lix,
 				onEvent: (event) => {
+					if (event.type === "main_view_navigation_requested") {
+						requestedNavigation.current = JSON.stringify([
+							event.instanceId,
+							event.filePath,
+							event.state?.path,
+						]);
+						locationController.current?.abort();
+						applyingLocation.current = false;
+					}
 					current.current.onEvent?.(event);
-					if (event.type !== "main_view_activated" || applyingLocation.current)
+					if (event.type === "main_view_activated") {
+						const alreadyNavigated =
+							requestedNavigation.current ===
+							JSON.stringify([
+								event.instanceId,
+								event.filePath,
+								event.state?.path,
+							]);
+						requestedNavigation.current = null;
+						if (alreadyNavigated) return;
+					}
+					if (
+						(event.type !== "main_view_activated" &&
+							event.type !== "main_view_navigation_requested") ||
+						applyingLocation.current
+					)
 						return;
 					const branchId =
 						getAtelierConfiguration(instance).branchSession.getSnapshot() ??
@@ -250,6 +276,7 @@ function LiveAtelier(props: AtelierProps) {
 		if (!requestedLocation || !branchId) return;
 		let cancelled = false;
 		const controller = new AbortController();
+		locationController.current = controller;
 		setRouteError(undefined);
 		applyingLocation.current = true;
 		const open = async () => {
@@ -278,7 +305,12 @@ function LiveAtelier(props: AtelierProps) {
 				.select("id")
 				.where("path", "=", location.path)
 				.executeTakeFirst();
-			if (cancelled || session.getSnapshot() !== branch) return;
+			if (
+				cancelled ||
+				controller.signal.aborted ||
+				session.getSnapshot() !== branch
+			)
+				return;
 			if (file)
 				await instance.documents.open(location.path, {
 					signal: controller.signal,
@@ -289,7 +321,12 @@ function LiveAtelier(props: AtelierProps) {
 					.select("id")
 					.where("path", "=", `${location.path}/`)
 					.executeTakeFirst();
-				if (cancelled || session.getSnapshot() !== branch) return;
+				if (
+					cancelled ||
+					controller.signal.aborted ||
+					session.getSnapshot() !== branch
+				)
+					return;
 				if (!directory) throw new Error(`Path not found: ${location.path}`);
 				await instance.views.open("atelier_files", {
 					state: { path: location.path, directoryPath: location.path },
@@ -301,6 +338,7 @@ function LiveAtelier(props: AtelierProps) {
 			.catch((error) => {
 				if (
 					!cancelled &&
+					!controller.signal.aborted &&
 					!(error instanceof Error && error.name === "AbortError")
 				) {
 					setRouteError(error);

@@ -3,7 +3,11 @@ import { expect, test, vi } from "vitest";
 import type { Lix } from "@lix-js/sdk";
 import { Atelier } from "./create-atelier";
 
-const hooks = vi.hoisted(() => ({ execute: vi.fn(), open: vi.fn() }));
+const hooks = vi.hoisted(() => ({
+	execute: vi.fn(),
+	open: vi.fn(),
+	onEvent: (_event: any) => {},
+}));
 vi.mock("@/lib/lix-kysely", () => ({
 	qb: () => {
 		const query = {
@@ -20,12 +24,15 @@ vi.mock("./shell/layout-shell", () => ({
 }));
 vi.mock("./atelier-instance", () => ({
 	disposeAtelierRuntime: vi.fn(),
-	createAtelier: (options: unknown) => ({
-		lix: (options as { lix: Lix }).lix,
-		configuration: options,
-		documents: { open: hooks.open },
-		views: { open: hooks.open },
-	}),
+	createAtelier: (options: unknown) => {
+		hooks.onEvent = (options as any).onEvent;
+		return {
+			lix: (options as { lix: Lix }).lix,
+			configuration: options,
+			documents: { open: hooks.open },
+			views: { open: hooks.open },
+		};
+	},
 	getAtelierConfiguration: (instance: { configuration: unknown }) =>
 		instance.configuration,
 }));
@@ -254,5 +261,78 @@ test("publishes a runtime handle without any repository query", () => {
 	);
 	expect(onReady).toHaveBeenCalledTimes(1);
 	expect(hooks.execute).not.toHaveBeenCalled();
+	view.unmount();
+});
+
+test("user tab intent supersedes a pending initial route without waiting for its query", async () => {
+	let release!: (value: unknown) => void;
+	hooks.execute.mockReset().mockImplementation(
+		() =>
+			new Promise((resolve) => {
+				release = resolve;
+			}),
+	);
+	hooks.open.mockReset();
+	const navigate = vi.fn();
+	const view = render(
+		<Atelier
+			lix={{} as Lix}
+			branchSession={branchSession}
+			location={{ path: "/old.md" }}
+			navigation={{ navigate, href: () => "/" }}
+		/>,
+	);
+	hooks.onEvent({
+		type: "main_view_navigation_requested",
+		viewKind: "home",
+		instanceId: "home",
+		filePath: null,
+	});
+	expect(navigate).toHaveBeenCalledWith({
+		view: "home",
+		state: undefined,
+		branchId: "branch",
+	});
+	hooks.onEvent({
+		type: "main_view_activated",
+		viewKind: "home",
+		instanceId: "home",
+		filePath: null,
+	});
+	expect(navigate).toHaveBeenCalledTimes(1);
+	release({ id: "old" });
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(hooks.open).not.toHaveBeenCalled();
+	view.unmount();
+});
+
+test("an obsolete route failure cannot replace the user's selected view", async () => {
+	let reject!: (error: Error) => void;
+	hooks.execute.mockReset().mockImplementation(
+		() =>
+			new Promise((_resolve, fail) => {
+				reject = fail;
+			}),
+	);
+	const onError = vi.fn();
+	const view = render(
+		<Atelier
+			lix={{} as Lix}
+			branchSession={branchSession}
+			location={{ path: "/old.md" }}
+			onError={onError}
+		/>,
+	);
+	hooks.onEvent({
+		type: "main_view_navigation_requested",
+		viewKind: "home",
+		instanceId: "home",
+		filePath: null,
+	});
+	reject(new Error("operation deadline exceeded"));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(screen.queryByRole("alert")).toBeNull();
+	expect(onError).not.toHaveBeenCalled();
+	expect(screen.getByText("Interactive workspace")).toBeVisible();
 	view.unmount();
 });

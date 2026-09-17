@@ -2500,6 +2500,98 @@ test("shell mounts while private preferences and review state are pending", asyn
 	}
 });
 
+test("user selection of the active tab cancels a pending replacement before activation", async () => {
+	const lix = await openLix();
+	await lix.execute(
+		"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+		[
+			fakeUuid("cancel-open"),
+			"/cancel-open.md",
+			new TextEncoder().encode("# Cancel"),
+		],
+	);
+	const sessionStateStore = createMemorySessionStateStore();
+	const onEvent = vi.fn();
+	const atelier = createAtelier({ lix, sessionStateStore });
+	const view = render(
+		<LixProvider lix={lix}>
+			<V2LayoutShell
+				instance={atelier}
+				onEvent={onEvent}
+				slots={{
+					mainTabStrip: ({ tabs }) => (
+						<>
+							{tabs.map((tab) => (
+								<button key={tab.instanceId} onClick={tab.select}>
+									Select {tab.label}
+								</button>
+							))}
+						</>
+					),
+				}}
+			/>
+		</LixProvider>,
+	);
+	await screen.findByRole("switch", { name: "Auto-accept agent changes" });
+	await act(async () => {
+		await atelier.views.open(HISTORY_EXTENSION_KIND);
+	});
+	expect(
+		onEvent.mock.calls.some(
+			([event]) => event.type === "main_view_navigation_requested",
+		),
+	).toBe(false);
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started!: () => void;
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const spy = vi
+		.spyOn(lix, "execute")
+		.mockImplementation(async (...args: Parameters<typeof lix.execute>) => {
+			if (
+				String(args[0]).toLowerCase().startsWith("select") &&
+				args[1]?.includes("/cancel-open.md")
+			) {
+				started();
+				await held;
+			}
+			return execute(...args);
+		});
+	const opening = atelier.documents.open("/cancel-open.md");
+	const rejected = expect(opening).rejects.toMatchObject({
+		name: "AbortError",
+	});
+	try {
+		await waiting;
+		fireEvent.click(screen.getByRole("button", { name: /Select History/ }));
+		expect(onEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "main_view_navigation_requested",
+				viewKind: HISTORY_EXTENSION_KIND,
+			}),
+		);
+		release();
+		await rejected;
+		expect(
+			sessionStateStore
+				.getSnapshot()
+				?.areas.main.views.some(
+					(entry) => entry.state?.filePath === "/cancel-open.md",
+				),
+		).toBe(false);
+	} finally {
+		release();
+		spy.mockRestore();
+		view.unmount();
+		await lix.close();
+	}
+});
+
 test("aborting a pending document lookup cannot open its stale tab", async () => {
 	const lix = await openLix();
 	await lix.execute(

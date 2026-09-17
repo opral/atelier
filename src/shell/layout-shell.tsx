@@ -4119,11 +4119,26 @@ function LayoutShellLoadedContentResolved({
 	);
 
 	const handleSelectCentralView = useCallback(
-		(key: string) =>
+		(key: string) => {
+			const entry = panelStatesRef.current.main.views.find(
+				(view) => view.instance === key,
+			);
+			if (!entry) return;
+			// User intent supersedes a pending replacement before either the host's
+			// route lookup or this shell's file lookup can change the active tab.
+			openGeneration.current.main += 1;
+			emitEvent({
+				type: "main_view_navigation_requested",
+				viewKind: entry.kind,
+				instanceId: entry.instance,
+				filePath: documentPathFromView(entry) ?? null,
+				...(entry.state ? { state: entry.state } : {}),
+			});
 			setAreaState("main", (area) => activatePanelExtension(area, key), {
 				focus: true,
-			}),
-		[setAreaState],
+			});
+		},
+		[emitEvent, setAreaState],
 	);
 
 	const handleSelectRightView = useCallback(
