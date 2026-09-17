@@ -2,7 +2,6 @@ import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { expect, test, vi } from "vitest";
-import { AtelierRenderContext } from "../atelier-render-context";
 const mocks = vi.hoisted(() => ({ render: vi.fn() }));
 vi.mock("../extensions/pdf/pdf-preview", () => ({
 	renderPdfPreview: mocks.render,
@@ -17,10 +16,12 @@ test("hydrates native PDF into a URL renderer without requiring a database conne
 			return { destroy };
 		},
 	);
-	const node = (hydrated: boolean) => (
-		<AtelierRenderContext value={{ hydrated, connected: false }}>
-			<PreparedPdf src="/raw/large.pdf?commit=pinned" label="large.pdf" />
-		</AtelierRenderContext>
+	const node = (enhance: boolean) => (
+		<PreparedPdf
+			src="/raw/large.pdf?commit=pinned"
+			label="large.pdf"
+			enhance={enhance}
+		/>
 	);
 	const container = document.createElement("div");
 	container.innerHTML = renderToString(node(false));

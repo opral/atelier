@@ -59,6 +59,19 @@ test("memory preferences coerce and persist changes", async () => {
 });
 
 describe("createLixBranchSession", () => {
+	test("does no reads for an abandoned render and starts on subscription", async () => {
+		const activeBranchId = vi.fn(async () => "main");
+		const lix = { activeBranchId } as unknown as Lix;
+		createLixBranchSession(lix);
+		const committed = createLixBranchSession(lix);
+		expect(activeBranchId).not.toHaveBeenCalled();
+		const unsubscribe = committed.subscribe(() => undefined);
+		await Promise.resolve();
+		expect(activeBranchId).toHaveBeenCalledOnce();
+		expect(committed.getSnapshot()).toBe("main");
+		unsubscribe();
+	});
+
 	test("publishes the active branch once initialization resolves", async () => {
 		let resolveInitialBranch: (branchId: string) => void = () => undefined;
 		const initialBranch = new Promise<string>((resolve) => {

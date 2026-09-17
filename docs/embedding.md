@@ -1,19 +1,28 @@
 # Embedding Atelier
 
-The public workspace API is `Atelier`, with `loadAtelier` for prepared rendering. The host owns Lix; Atelier owns the mounted UI runtime.
+The public workspace API is `Atelier`, which requires an open Lix handle. The host owns Lix; Atelier owns the mounted UI runtime. While the host opens Lix, it can render the separate `AtelierSkeleton` with navbar slots and an opening message. This component renders only chrome and does not open a session or query repository data.
 
 ```tsx
 <Atelier lix={lix} />
 ```
 
-For SSR, `await loadAtelier({ lix, location, extensions, readOnly })` produces portable initial state. Pass it to `<Atelier initialState={initialState} lix={browserLix} extensions={extensions} />`. The browser handle is optional until it connects. The same shell and extension components produce server HTML and hydrate it.
+The shell mounts immediately. Views query the borrowed session as needed and display their own loading and error states. Static document rendering is a separate API: `toHtml` from `@opral/atelier/render`, given authorized file bytes.
 
-Use `location={{ path: "/README.md" }}` or `location={{ view: "dashboard", state: {} }}` to control the active view. Supply `navigation={{ href, navigate }}` to map view activations to host URLs. The host opens/switches its Lix session on the requested branch before preparation.
+Use `location={{ path: "/README.md" }}` or `location={{ view: "dashboard", state: {} }}` to control the active view. Supply `navigation={{ href, navigate }}` to map view activations to host URLs. The host opens/switches its Lix session on the requested branch before mounting.
 
-`slots` supplies navbar regions and optional tab-strip presentation. Preferences, review status, and session state stores integrate host persistence. Those stores contain private UI state and should be scoped to a user and repository; avoid including it in publicly cached initial state.
+`slots` supplies navbar regions and optional tab-strip presentation. Preferences, review status, and session state stores integrate host persistence. Those stores contain private UI state and should be scoped to a user and repository; do not expose it in publicly cached responses.
 
-Host extensions are plain registrations with `id`, optional `load`, and `Component`. Components belong to the parent React tree and receive prepared JSON `data`, `atelier` commands, and `view`. A loader is rerun when its location or repository state changes. Obsolete requests are cancelled and stale results cannot replace a later view. Clean up editor instances, listeners, and object URLs in component effects.
+Host extensions are plain registrations with `id`, optional `load`, and `Component`. Components belong to the parent React tree and receive loaded JSON `data`, `atelier` commands, and `view`. A loader is rerun when its location or repository state changes. Obsolete requests are cancelled and stale results cannot replace a later view. Clean up editor instances, listeners, and object URLs in component effects.
 
 The old `createAtelier`/`instance` host choreography, `Atelier.Shell`/`FileView` object API, and host extension `{ manifest, entry.mount }` registrations have been removed from the public API. Extension runtime commands remain available inside extension components. Private internal runtime construction is an implementation detail.
 
-Only trusted bundled and host-registered extensions participate in SSR. Never evaluate an extension loaded from an untrusted repository on the application server.
+`loadAtelier`, `AtelierInitialState`, and the `initialState` prop have been removed. Do not preload a workspace snapshot before mounting. The static renderer does not evaluate repository extensions.
+
+Hosts that need workspace commands can pass a stable `onReady` callback. It receives an `AtelierHandle` containing the borrowed `lix` connection plus `documents` and `views` commands as soon as the component mounts, independently of visible view queries. Commands queue until the shell binds them. The callback receives `null` when the runtime unmounts or is replaced; Atelier never closes the host's Lix connection.
+
+```tsx
+const [workspace, setWorkspace] = useState<AtelierHandle | null>(null);
+<Atelier lix={lix} onReady={setWorkspace} />;
+// For example, in a host navigation handler:
+await workspace?.views.open("home");
+```

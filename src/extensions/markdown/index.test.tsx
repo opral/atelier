@@ -148,7 +148,7 @@ describe("MarkdownView", () => {
 			await screen.findByRole("region", { name: "Checkpoint history" }),
 		).toBeVisible();
 		await within(
-			screen.getByRole("list", { name: "Checkpoints" }),
+			await screen.findByRole("list", { name: "Checkpoints" }),
 		).findAllByRole("listitem");
 		expect(await screen.findByTestId("tiptap-editor")).toHaveTextContent(
 			"Initial delivery",

@@ -139,6 +139,8 @@ export type AtelierFilesViewOptions = {
 export type AtelierDocumentOrigin = "existing" | "new";
 
 export type AtelierDocumentOpenOptions = {
+	/** Cancels navigation before it changes the workspace. */
+	readonly signal?: AbortSignal;
 	readonly state?: AtelierExtensionState;
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;
@@ -150,6 +152,8 @@ export type AtelierDocumentOpenOptions = {
 };
 
 export type AtelierViewOpenOptions = {
+	/** Cancels navigation before it changes the workspace. */
+	readonly signal?: AbortSignal;
 	readonly state?: AtelierExtensionState;
 	/**
 	 * Stable identity for this view instance — the same value is reported back

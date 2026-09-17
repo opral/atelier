@@ -18,7 +18,7 @@ import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
 import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
-import { useQuery, useQueryResult } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviewPage,
@@ -466,10 +466,14 @@ function CheckpointList({
 	readonly wide: boolean;
 	readonly file: ScopedFile | null;
 }) {
-	const allCheckpoints = useQuery((lix) => selectCheckpoints(lix));
+	const [retryKey, setRetryKey] = useState(0);
+	const checkpointResult = useQueryResult((lix) => selectCheckpoints(lix), {
+		retryKey,
+	});
+	const allCheckpoints = checkpointResult.rows;
 	const changes = useQueryResult(
 		(lix) => selectFileCheckpointChanges(lix, file?.id ?? ""),
-		{ enabled: file !== null },
+		{ enabled: file !== null, retryKey },
 	);
 	const fileChanges = useMemo(
 		() =>
@@ -484,23 +488,32 @@ function CheckpointList({
 			)
 		: allCheckpoints;
 
-	if (file && changes.status === "pending") {
+	if (
+		checkpointResult.status === "pending" ||
+		(file && changes.status === "pending")
+	) {
 		return (
 			<p
 				role="status"
 				className="px-2 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
-				Loading file history…
+				{file ? "Loading file history…" : "Loading history…"}
 			</p>
 		);
 	}
-	if (file && changes.status === "error") {
+	if (
+		checkpointResult.status === "error" ||
+		(file && changes.status === "error")
+	) {
 		return (
 			<p
 				role="alert"
 				className="px-2 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
-				Could not load file history.
+				{file ? "Could not load file history." : "Could not load history."}{" "}
+				<button type="button" onClick={() => setRetryKey((value) => value + 1)}>
+					Retry history
+				</button>
 			</p>
 		);
 	}

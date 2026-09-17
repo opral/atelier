@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { AtelierInitialState, AtelierLocation } from "./atelier-state";
+import type { AtelierLocation } from "./atelier-state";
 
 export type AtelierNavigation = {
 	/** A real URL, used for native links even before JavaScript starts. */
@@ -14,17 +14,9 @@ export type AtelierNavigation = {
 };
 
 export const AtelierRenderContext = createContext<{
-	initialState?: AtelierInitialState;
-	hydrated: boolean;
-	connected: boolean;
 	navigation?: AtelierNavigation;
-}>({ hydrated: true, connected: true });
+}>({});
 
 export function useAtelierRenderContext() {
 	return useContext(AtelierRenderContext);
-}
-
-/** Whether an extension can issue live queries and imperative commands. */
-export function useAtelierConnected(): boolean {
-	return useAtelierRenderContext().connected;
 }

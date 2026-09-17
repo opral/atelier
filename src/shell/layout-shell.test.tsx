@@ -2469,3 +2469,99 @@ describe("a file the view cannot diff in place", () => {
 		}
 	});
 });
+
+test("shell mounts while private preferences and review state are pending", async () => {
+	const lix = await openLix();
+	const preferencesStore = {
+		load: vi.fn(() => new Promise<null>(() => {})),
+		save: vi.fn(async () => {}),
+	};
+	const reviewStatusStore = {
+		loadResolvedReviewIds: vi.fn(
+			() => new Promise<readonly string[]>(() => {}),
+		),
+		resolve: vi.fn(async () => {}),
+	};
+	const atelier = createAtelier({ lix, preferencesStore, reviewStatusStore });
+	const view = render(
+		<LixProvider lix={lix}>
+			<V2LayoutShell instance={atelier} />
+		</LixProvider>,
+	);
+	try {
+		expect(
+			await screen.findByRole("switch", { name: "Auto-accept agent changes" }),
+		).toBeVisible();
+		expect(preferencesStore.load).toHaveBeenCalled();
+		expect(reviewStatusStore.loadResolvedReviewIds).toHaveBeenCalled();
+	} finally {
+		view.unmount();
+		await lix.close();
+	}
+});
+
+test("aborting a pending document lookup cannot open its stale tab", async () => {
+	const lix = await openLix();
+	await lix.execute(
+		"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+		[
+			fakeUuid("cancel-open"),
+			"/cancel-open.md",
+			new TextEncoder().encode("# Cancel"),
+		],
+	);
+	const sessionStateStore = createMemorySessionStateStore();
+	const atelier = createAtelier({ lix, sessionStateStore });
+	const view = render(
+		<LixProvider lix={lix}>
+			<V2LayoutShell instance={atelier} />
+		</LixProvider>,
+	);
+	await screen.findByRole("switch", { name: "Auto-accept agent changes" });
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started!: () => void;
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const spy = vi
+		.spyOn(lix, "execute")
+		.mockImplementation(async (...args: Parameters<typeof lix.execute>) => {
+			if (
+				String(args[0]).toLowerCase().startsWith("select") &&
+				args[1]?.includes("/cancel-open.md")
+			) {
+				started();
+				await held;
+			}
+			return execute(...args);
+		});
+	const controller = new AbortController();
+	const opening = atelier.documents.open("/cancel-open.md", {
+		signal: controller.signal,
+	});
+	const rejected = expect(opening).rejects.toMatchObject({
+		name: "AbortError",
+	});
+	try {
+		await waiting;
+		controller.abort();
+		release();
+		await rejected;
+		expect(
+			sessionStateStore
+				.getSnapshot()
+				?.areas.main.views.some(
+					(entry) => entry.state?.filePath === "/cancel-open.md",
+				),
+		).toBe(false);
+	} finally {
+		release();
+		spy.mockRestore();
+		view.unmount();
+		await lix.close();
+	}
+});

@@ -60,8 +60,6 @@ describe("native server media", () => {
 			const html = renderToString(
 				<AtelierRenderContext
 					value={{
-						hydrated: false,
-						connected: false,
 						navigation: { href: () => "/", fileHref: href },
 					}}
 				>
@@ -89,8 +87,6 @@ describe("native server media", () => {
 		const node = (
 			<AtelierRenderContext
 				value={{
-					hydrated: true,
-					connected: true,
 					navigation: { href: () => "/", fileHref: () => "/raw/movie.mp4" },
 				}}
 			>
@@ -129,8 +125,6 @@ it("refreshes changed media while preserving playback across unrelated commits a
 	const node = (changeId: string, commitId: string, pin?: string) => (
 		<AtelierRenderContext
 			value={{
-				hydrated: true,
-				connected: true,
 				navigation: { href: () => "/", fileHref: href },
 			}}
 		>
@@ -168,7 +162,7 @@ it("refreshes changed media while preserving playback across unrelated commits a
 
 describe("a surface whose view is about to show a comparison", () => {
 	const node = (diff: boolean) => (
-		<AtelierRenderContext value={{ hydrated: true, connected: true }}>
+		<AtelierRenderContext value={{}}>
 			<PreparedMediaSurface
 				data={{
 					id: "shot",

@@ -1,11 +1,8 @@
 /* oxlint-disable react/jsx-no-constructed-context-values -- Test fixtures deliberately replace provider snapshots. */
 import { act, render, waitFor } from "@testing-library/react";
-import { hydrateRoot, type Root } from "react-dom/client";
-import { renderToString } from "react-dom/server";
 import { describe, expect, test, vi } from "vitest";
 import { Search } from "lucide-react";
 import { AtelierRenderContext } from "../atelier-render-context";
-import type { AtelierInitialState } from "../atelier-state";
 import type { ExtensionRuntime, ExtensionView } from "./types";
 import { DeclarativeExtension } from "./declarative-extension";
 import { PreparedFileSurface } from "./prepared-file";
@@ -44,9 +41,7 @@ describe("declarative extension hydration", () => {
 			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
 		};
 		const mounted = render(
-			<AtelierRenderContext.Provider
-				value={{ connected: true, hydrated: true }}
-			>
+			<AtelierRenderContext.Provider value={{}}>
 				<DeclarativeExtension
 					definition={definition}
 					atelier={atelier}
@@ -104,9 +99,7 @@ describe("declarative extension hydration", () => {
 			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
 		};
 		const mounted = render(
-			<AtelierRenderContext.Provider
-				value={{ connected: true, hydrated: true }}
-			>
+			<AtelierRenderContext.Provider value={{}}>
 				<DeclarativeExtension
 					definition={definition}
 					atelier={atelier}
@@ -162,9 +155,7 @@ describe("declarative extension hydration", () => {
 			afterCommitId: "commit-after",
 		};
 		const tree = (state: Record<string, string>) => (
-			<AtelierRenderContext.Provider
-				value={{ connected: true, hydrated: true }}
-			>
+			<AtelierRenderContext.Provider value={{}}>
 				<DeclarativeExtension
 					definition={definition}
 					atelier={atelier}
@@ -219,6 +210,7 @@ describe("declarative extension hydration", () => {
 	});
 
 	test("does not report a loaded document while its renderer is suspended", async () => {
+		const lix = await openLix();
 		let ready = false;
 		let resolve!: () => void;
 		const gate = new Promise<void>((done) => {
@@ -226,7 +218,7 @@ describe("declarative extension hydration", () => {
 		});
 		const emit = vi.fn();
 		const atelier = {
-			lix: {},
+			lix,
 			branches: { activeId: "branch" },
 			events: { emit },
 		} as unknown as ExtensionRuntime;
@@ -235,18 +227,14 @@ describe("declarative extension hydration", () => {
 			label: "Custom",
 			description: "Custom",
 			icon: Search,
+			load: async () => "Loaded",
 			Component: () => {
 				if (!ready) throw gate;
 				return <h1>Ready</h1>;
 			},
 		};
-		const initialState = {
-			views: { view1: { extensionId: "custom", data: "Prepared" } },
-		} as unknown as AtelierInitialState;
 		const mounted = render(
-			<AtelierRenderContext.Provider
-				value={{ initialState, connected: true, hydrated: true }}
-			>
+			<AtelierRenderContext.Provider value={{}}>
 				<DeclarativeExtension
 					atelier={atelier}
 					definition={definition}
@@ -263,138 +251,73 @@ describe("declarative extension hydration", () => {
 				ready = true;
 				resolve();
 			});
-			expect(mounted.getByRole("heading")).toHaveTextContent("Ready");
-			expect(emit).toHaveBeenCalledTimes(1);
-		} finally {
-			mounted.unmount();
-		}
-	});
-
-	test("surfaces refresh errors while preserving prepared content", async () => {
-		const lix = await openLix();
-		const atelier = {
-			lix,
-			branches: { activeId: await lix.activeBranchId() },
-		} as unknown as ExtensionRuntime;
-		const definition = {
-			kind: "custom",
-			label: "Custom",
-			description: "Custom",
-			icon: Search,
-			load: async () => {
-				throw new Error("Refresh unavailable");
-			},
-			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
-		};
-		const initialState = {
-			views: { view1: { extensionId: "custom", data: "Prepared repository" } },
-		} as unknown as AtelierInitialState;
-		const mounted = render(
-			<AtelierRenderContext.Provider
-				value={{ initialState, connected: true, hydrated: true }}
-			>
-				<DeclarativeExtension
-					definition={definition}
-					atelier={atelier}
-					view={view}
-				/>
-			</AtelierRenderContext.Provider>,
-		);
-		try {
-			const heading = mounted.getByRole("heading");
-			expect(await mounted.findByRole("alert")).toHaveTextContent(
-				"Refresh unavailable",
-			);
-			expect(mounted.getByRole("heading")).toBe(heading);
-			expect(heading).toHaveTextContent("Prepared repository");
+			expect(await mounted.findByRole("heading")).toHaveTextContent("Ready");
+			await waitFor(() => expect(emit).toHaveBeenCalledTimes(1));
 		} finally {
 			await act(async () => mounted.unmount());
 			await lix.close();
 		}
 	});
 
-	test("hydrates the exact prepared custom extension with no live Lix or loader calls", async () => {
-		const load = vi.fn(async () => "unexpected");
-		const execute = vi.fn(() => {
-			throw new Error("No connection");
-		});
+	test("shows a later load failure without discarding the visible document", async () => {
+		const lix = await openLix();
 		const atelier = {
-			lix: { execute },
-			branches: { activeId: "branch" },
+			lix,
+			branches: { activeId: await lix.activeBranchId() },
 		} as unknown as ExtensionRuntime;
+		let fail = false;
 		const definition = {
 			kind: "custom",
 			label: "Custom",
 			description: "Custom",
 			icon: Search,
-			load,
+			load: async () => {
+				if (fail) throw new Error("Refresh unavailable");
+				return "Loaded document";
+			},
 			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
 		};
-		const initialState = {
-			views: { view1: { extensionId: "custom", data: "Prepared repository" } },
-		} as unknown as AtelierInitialState;
-		const context = { initialState, hydrated: false, connected: false };
-		const ui = (
-			<AtelierRenderContext.Provider value={context}>
-				<DeclarativeExtension
-					definition={definition}
-					atelier={atelier}
-					view={view}
-				/>
-			</AtelierRenderContext.Provider>
+		const tree = (sourceCommitId: string) => (
+			<DeclarativeExtension
+				definition={definition}
+				atelier={atelier}
+				view={{ ...view, state: { filePath: "/file.txt", sourceCommitId } }}
+			/>
 		);
-		const container = document.createElement("div");
-		container.innerHTML = renderToString(ui);
-		document.body.appendChild(container);
-		const heading = container.querySelector("h1");
-		const onRecoverableError = vi.fn();
-		let root: Root | undefined;
-		await act(async () => {
-			root = hydrateRoot(container, ui, { onRecoverableError });
-		});
-		expect(container.querySelector("h1")).toBe(heading);
-		expect(heading?.textContent).toBe("Prepared repository");
-		expect(onRecoverableError).not.toHaveBeenCalled();
-		expect(load).not.toHaveBeenCalled();
-		expect(execute).not.toHaveBeenCalled();
-		await act(async () => root?.unmount());
-		container.remove();
+		const mounted = render(tree("/first.txt"));
+		try {
+			const heading = await mounted.findByRole("heading");
+			fail = true;
+			mounted.rerender(tree("/second.txt"));
+			expect(await mounted.findByRole("alert")).toHaveTextContent(
+				"Refresh unavailable",
+			);
+			expect(mounted.getByRole("heading")).toBe(heading);
+			expect(heading).toHaveTextContent("Loaded document");
+		} finally {
+			await act(async () => mounted.unmount());
+			await lix.close();
+		}
 	});
-	test("keeps formatted content until the connected editor is ready", async () => {
-		const container = document.createElement("div");
-		document.body.appendChild(container);
-		const contexts = {
-			live: { hydrated: true, connected: true },
-			disconnected: { hydrated: false, connected: false },
-		};
-		const ui = (connected: boolean) => (
-			<AtelierRenderContext.Provider
-				value={connected ? contexts.live : contexts.disconnected}
+
+	test("keeps formatted content until the mounted editor is ready", async () => {
+		const tree = (ready: boolean) => (
+			<PreparedFileSurface
+				initial={<h1>Formatted document</h1>}
+				readySelector=".ready-editor"
 			>
-				<PreparedFileSurface
-					initial={<h1>Formatted document</h1>}
-					readySelector=".ready-editor"
-				>
+				{ready ? (
 					<div className="ready-editor">Interactive document</div>
-				</PreparedFileSurface>
-			</AtelierRenderContext.Provider>
+				) : null}
+			</PreparedFileSurface>
 		);
-		container.innerHTML = renderToString(ui(false));
-		expect(container.textContent).toBe("Formatted document");
-		let root: Root | undefined;
-		await act(async () => {
-			root = hydrateRoot(container, ui(false));
-		});
-		expect(container.textContent).toBe("Formatted document");
-		await act(async () => {
-			root?.render(ui(true));
-		});
-		expect(container.textContent).toBe("Interactive document");
-		await act(async () => {
-			root?.render(ui(false));
-		});
-		expect(container.textContent).toBe("Formatted document");
-		await act(async () => root?.unmount());
-		container.remove();
+		const mounted = render(tree(false));
+		expect(mounted.getByRole("heading")).toHaveTextContent(
+			"Formatted document",
+		);
+		mounted.rerender(tree(true));
+		await waitFor(() => expect(mounted.queryByRole("heading")).toBeNull());
+		expect(mounted.getByText("Interactive document")).toBeVisible();
+		mounted.unmount();
 	});
 });

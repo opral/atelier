@@ -4,24 +4,19 @@ import {
 	AtelierRenderContext,
 	type AtelierNavigation,
 } from "../../atelier-render-context";
-import type { AtelierInitialState } from "../../atelier-state";
-import {
-	createInitialAtelierUiState,
-	coerceAtelierUserPreferences,
-} from "../../shell/ui-state";
 import { RepositoryMarkdownContent } from "./repository-markdown-content";
 
 function render(
 	content: string,
 	navigation?: AtelierNavigation,
-	prepared?: AtelierInitialState,
 	commitId?: string,
 ) {
 	const value = {
-		hydrated: false,
-		connected: false,
-		navigation,
-		initialState: prepared,
+		navigation: {
+			...navigation,
+			href: navigation?.href ?? (() => "/"),
+			fileHref: navigation?.fileHref ?? (() => ""),
+		},
 	};
 	return renderToStaticMarkup(
 		// Static server rendering has no provider rerenders.
@@ -37,44 +32,24 @@ function render(
 	);
 }
 
-function snapshot(content: string): AtelierInitialState {
-	return {
-		version: 1,
-		identity: "repo",
-		branchId: "main",
-		commitId: "prepared-revision",
-		location: { path: "/docs/README.md" },
-		readOnly: true,
-		ui: createInitialAtelierUiState() as AtelierInitialState["ui"],
-		preferences: coerceAtelierUserPreferences(null),
-		queries: [],
-		views: {
-			readme: {
-				extensionId: "atelier_file",
-				data: { path: "/docs/README.md", content },
-			},
-		},
-	};
-}
-
 describe("repository Markdown URLs", () => {
-	test("renders relative and root images using the matching prepared revision", () => {
+	test("renders relative and root images using the explicit document revision", () => {
 		const content = "![Relative](../assets/diagram.png)\n\n![Root](/logo.png)";
 		const fileHref = vi.fn(({ path }) => `/raw${path}?branch=main`);
 		const html = render(
 			content,
 			{ href: () => "/repo", fileHref },
-			snapshot(content),
+			"document-revision",
 		);
 		expect(fileHref).toHaveBeenCalledWith({
 			path: "/assets/diagram.png",
 			branchId: "main",
-			commitId: "prepared-revision",
+			commitId: "document-revision",
 		});
 		expect(fileHref).toHaveBeenCalledWith({
 			path: "/logo.png",
 			branchId: "main",
-			commitId: "prepared-revision",
+			commitId: "document-revision",
 		});
 		expect(html).toContain('src="/raw/assets/diagram.png?branch=main"');
 	});
@@ -92,18 +67,18 @@ describe("repository Markdown URLs", () => {
 		const content = "![Image](image.png)";
 		const fileHref = vi.fn(() => "/raw/image.png");
 		const navigation = { href: () => "/repo", fileHref };
-		render(content, navigation, snapshot("Old document"));
+		render(content, navigation);
 		expect(fileHref).toHaveBeenLastCalledWith({
 			path: "/docs/image.png",
 			branchId: "main",
 		});
-		render(content, navigation, snapshot(content), "historical-revision");
+		render(content, navigation, "historical-revision");
 		expect(fileHref).toHaveBeenLastCalledWith({
 			path: "/docs/image.png",
 			branchId: "main",
 			commitId: "historical-revision",
 		});
-		render(content, navigation, { ...snapshot(content), branchId: "other" });
+		render(content, navigation);
 		expect(fileHref).toHaveBeenLastCalledWith({
 			path: "/docs/image.png",
 			branchId: "main",
