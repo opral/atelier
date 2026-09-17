@@ -1195,6 +1195,84 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("ignores retained session decorations outside review and clears them on exit", async () => {
+		const lix = await openLix();
+		await insertFile(
+			lix,
+			fakeUuid("session-modified"),
+			"/modified.md",
+			"content",
+		);
+		await insertFile(
+			lix,
+			fakeUuid("session-added"),
+			"/new/added.md",
+			"content",
+		);
+		const sessionFiles = [
+			{ path: "/modified.md", changeKind: "modified" as const },
+			{ path: "/new/added.md", changeKind: "added" as const },
+			{ path: "/removed.md", changeKind: "removed" as const },
+		];
+		let view: ReturnType<typeof render> | undefined;
+		const assertPlainTree = () => {
+			const host = screen.getByLabelText("Files");
+			expect(getFilesTreeItem("modified.md")).toBeVisible();
+			expect(getFilesTreeItem("new/")).toBeVisible();
+			expect(host).not.toHaveAttribute("data-review-focus");
+			expect(
+				host.shadowRoot?.querySelector("[data-item-git-status]"),
+			).toBeNull();
+			expect(
+				host.shadowRoot?.querySelector(
+					"[data-item-contains-git-change='true']",
+				),
+			).toBeNull();
+			expect(queryFilesTreeItem("removed.md")).toBeNull();
+		};
+		try {
+			await act(async () => {
+				view = renderFilesView(lix, { sessionFiles });
+			});
+			await waitFor(assertPlainTree);
+			await act(async () => {
+				view?.rerender(
+					<FilesViewFixture
+						lix={lix}
+						context={{ sessionFiles, reviewModeActive: true }}
+					/>,
+				);
+			});
+			await waitFor(() => {
+				expect(getFilesTreeItem("modified.md")).toHaveAttribute(
+					"data-item-git-status",
+					"modified",
+				);
+				expect(getFilesTreeItem("new/")).toHaveAttribute(
+					"data-item-git-status",
+					"added",
+				);
+				expect(screen.getByLabelText("Files")).toHaveAttribute(
+					"data-review-focus",
+					"true",
+				);
+			});
+			// Retained session data must not keep decorations alive after exit.
+			await act(async () => {
+				view?.rerender(
+					<FilesViewFixture
+						lix={lix}
+						context={{ sessionFiles, reviewModeActive: false }}
+					/>,
+				);
+			});
+			await waitFor(assertPlainTree);
+		} finally {
+			await act(async () => view?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("shows changed-file status only while review mode is active", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();
