@@ -235,7 +235,7 @@ export function HistoryView({
 			className="min-h-0 flex-1 overflow-y-auto py-2 pr-1"
 		>
 			<ShowPathParentsContext.Provider value={showParents}>
-				<div className={wide ? "w-full max-w-[60rem] py-4 pr-5" : "w-full"}>
+				<div className={wide ? "w-full max-w-[60rem] pr-5" : "w-full"}>
 					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
 					<CheckpointList atelier={atelier} wide={wide} file={file} />
 				</div>

@@ -418,7 +418,7 @@
 
 /* ── Media and rules ──────────────────────────────────────────────────── */
 /* The image itself, no frame or shadow. */
-.atelier-document img {
+.atelier-document img:not(.markdown-document-link-icon) {
 	border: 0;
 	border-radius: var(--atelier-doc-radius);
 	box-shadow: none;
