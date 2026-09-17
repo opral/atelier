@@ -327,7 +327,8 @@ export function buildCsvReviewModel(input: {
 					? "added"
 					: a === null
 						? "removed"
-						: details.length || cells.some((cell) => cell.status === "modified")
+						: details.length ||
+							  cells.some((cell) => cell.status !== "unchanged")
 							? "modified"
 							: "unchanged",
 		};

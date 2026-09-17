@@ -227,6 +227,26 @@ const names = () =>
 	].map((cell) => cell.textContent);
 
 describe("folded CSV review", () => {
+	test.each(["added", "removed"])(
+		"keeps rows visible when a column is %s",
+		(status) => {
+			const narrow = "name,status\nMarkdown,ready\nCSV,ready\n";
+			const wide =
+				"name,status,notes\nMarkdown,ready,Default editor format\nCSV,ready,Table view enabled\n";
+			render(
+				<Review
+					review={
+						status === "added" ? model(narrow, wide) : model(wide, narrow)
+					}
+				/>,
+			);
+			expect(screen.getByText("Default editor format")).toBeVisible();
+			expect(screen.getByText("Table view enabled")).toBeVisible();
+			expect(names()).toEqual(["1", "2"]);
+			expect(document.querySelector(".csv-review-band")).toBeNull();
+			expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+		},
+	);
 	test("a review opens folded, with a band standing in for each run", () => {
 		grid(model(sheet(10), sheet(10, { 5: "five" })));
 		expect(names()).toEqual(["4", "5", "6"]);
