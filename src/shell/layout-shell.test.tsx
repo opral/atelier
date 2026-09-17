@@ -2424,10 +2424,19 @@ describe("a file the view cannot diff in place", () => {
 					</LixProvider>,
 				);
 			});
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
+				await showRepositoryHistory();
+			});
 			await openWorkingChangesFromHistory();
+			const workingFiles = await screen.findByRole("list", {
+				name: "Files in working changes",
+			});
 			await act(async () => {
 				fireEvent.click(
-					await screen.findByRole("button", { name: "Next changed file" }),
+					await within(workingFiles).findByRole("button", {
+						name: /^shot\.png/,
+					}),
 				);
 			});
 
