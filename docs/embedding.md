@@ -1,6 +1,6 @@
 # Embedding Atelier
 
-The public workspace API is `Atelier`, which requires an open Lix handle. The host owns Lix; Atelier owns the mounted UI runtime.
+The public workspace API is `Atelier`, which requires an open Lix handle. The host owns Lix; Atelier owns the mounted UI runtime. While the host opens Lix, it can render the separate `AtelierSkeleton` with navbar slots and an opening message. This component renders only chrome and does not open a session or query repository data.
 
 ```tsx
 <Atelier lix={lix} />

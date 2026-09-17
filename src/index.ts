@@ -1,3 +1,5 @@
+export { AtelierSkeleton } from "./create-atelier";
+export type { AtelierSkeletonProps } from "./create-atelier";
 export { Atelier } from "./atelier";
 export type { AtelierProps } from "./atelier";
 export type { AtelierLocation } from "./atelier-state";

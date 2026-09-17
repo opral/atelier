@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { toHtml } from "@opral/atelier/render";
 import * as atelier from "@opral/atelier";
 
@@ -20,4 +22,12 @@ test("the workspace API exposes no prepared startup compatibility entry", () => 
 	assert.equal(typeof atelier.Atelier, "function");
 	assert.equal("loadAtelier" in atelier, false);
 	assert.equal("createAtelier" in atelier, false);
+});
+
+test("the opening skeleton renders without a Lix session", () => {
+	const html = renderToString(
+		createElement(atelier.AtelierSkeleton, null, "Opening repository…"),
+	);
+	assert.match(html, /Opening repository…/);
+	assert.match(html, /<header/);
 });
