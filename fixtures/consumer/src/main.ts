@@ -4,7 +4,6 @@ import {
 	type AtelierProps,
 	type AtelierHistoryProps,
 	type AtelierExtensionRegistration,
-	loadAtelier,
 	type AtelierSlots,
 } from "@opral/atelier";
 import { fileIconUrl } from "@opral/atelier/file-icons";
@@ -42,7 +41,7 @@ export function mountAtelier(lix: Lix): void {
 		Component: ({ data }) =>
 			createElement("article", null, JSON.stringify(data)),
 	};
-	void loadAtelier({
+	void createElement(Atelier, {
 		lix,
 		location: { view: extension.id },
 		extensions: [extension],

@@ -9,7 +9,6 @@ import {
 } from "react";
 import type { AtelierJsonValue } from "../extension-api";
 import type { AtelierLocation } from "../atelier-state";
-import { useAtelierRenderContext } from "../atelier-render-context";
 import { AtelierErrorBoundary } from "../atelier-error-boundary";
 import { LixProvider } from "../lib/lix-react";
 import type {
@@ -35,10 +34,6 @@ export function DeclarativeExtension({
 	 */
 	readonly onShown?: () => void;
 }) {
-	const context = useAtelierRenderContext();
-	const prepared = context.initialState?.views[view.instanceId];
-	const initialData =
-		prepared?.extensionId === definition.kind ? prepared.data : undefined;
 	const [loaded, setLoaded] = useState<{
 		key: string;
 		fileKey: string;
@@ -69,7 +64,6 @@ export function DeclarativeExtension({
 		definition.kind,
 		view.state.fileId ?? view.state.filePath ?? null,
 	]);
-	const initialKey = useRef(key);
 	// The state the running load belongs to: a read is answered together with
 	// the state that asked for it, so the view is never handed one document's
 	// bytes under another document's name.
@@ -95,21 +89,19 @@ export function DeclarativeExtension({
 		| undefined =
 		loaded?.key === key
 			? { data: loaded.data, view, held: false }
-			: key === initialKey.current && initialData !== undefined
-				? { data: initialData, view, held: false }
-				: loaded?.fileKey === fileKey
-					? { data: loaded.data, view, held: false }
-					: loaded
-						? {
-								data: loaded.data,
-								view: {
-									...view,
-									instanceId: loaded.instanceId,
-									state: loaded.state,
-								},
-								held: true,
-							}
-						: undefined;
+			: loaded?.fileKey === fileKey
+				? { data: loaded.data, view, held: false }
+				: loaded
+					? {
+							data: loaded.data,
+							view: {
+								...view,
+								instanceId: loaded.instanceId,
+								state: loaded.state,
+							},
+							held: true,
+						}
+					: undefined;
 	const data = shown?.data;
 
 	const opening = useMemo(
@@ -118,7 +110,7 @@ export function DeclarativeExtension({
 	);
 
 	useEffect(() => {
-		if (!context.connected || !context.hydrated || !definition.load) return;
+		if (!definition.load) return;
 		let disposed = false;
 		let loading = false;
 		let dirty = false;
@@ -182,15 +174,7 @@ export function DeclarativeExtension({
 			clearTimeout(timer);
 			events.close();
 		};
-	}, [
-		atelier.lix,
-		context.connected,
-		context.hydrated,
-		definition,
-		fileKey,
-		key,
-		location,
-	]);
+	}, [atelier.lix, definition, fileKey, key, location]);
 
 	const Component = definition.Component!;
 	const settled =

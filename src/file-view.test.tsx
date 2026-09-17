@@ -1,15 +1,13 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test, vi } from "vitest";
 import { File } from "lucide-react";
 import { Atelier } from "./atelier";
-import { loadAtelier } from "./load-atelier";
 import { openLix } from "./test-utils/node-lix-sdk";
 import type { AtelierExtensionRegistration } from "./extension-api";
 
 describe("Atelier file locations", () => {
-	test("server and browser render formatted read-only Markdown without changing the file", async () => {
+	test("renders formatted read-only Markdown without changing the file", async () => {
 		const lix = await openLix();
 		const content = new TextEncoder().encode(
 			"# Published heading\n\nA **formatted** paragraph.",
@@ -20,17 +18,9 @@ describe("Atelier file locations", () => {
 		]);
 		let view: ReturnType<typeof render> | undefined;
 		try {
-			const initialState = await loadAtelier({
-				lix,
-				location: { path: "/readme.md" },
-				readOnly: true,
-			});
-			const html = renderToStaticMarkup(
-				<Atelier initialState={initialState} />,
+			view = render(
+				<Atelier lix={lix} location={{ path: "/readme.md" }} readOnly />,
 			);
-			expect(html).toContain("Published heading");
-			expect(html).toContain("<strong>formatted</strong>");
-			view = render(<Atelier lix={lix} initialState={initialState} readOnly />);
 			expect(
 				await screen.findByRole("heading", { name: "Published heading" }),
 			).toBeVisible();

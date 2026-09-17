@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useAtelierRenderContext } from "../atelier-render-context";
 import {
 	renderPdfPreview,
 	type PdfPreviewController,
@@ -15,13 +14,12 @@ export function PreparedPdf({
 	label: string;
 	enhance?: boolean;
 }) {
-	const { hydrated } = useAtelierRenderContext();
 	const container = useRef<HTMLDivElement>(null);
 	const [state, setState] = useState<"native" | "loading" | "ready" | "error">(
 		"native",
 	);
 	useEffect(() => {
-		if (!enhance || !hydrated || !container.current) return;
+		if (!enhance || !container.current) return;
 		const abort = new AbortController();
 		let renderer: PdfPreviewController | undefined;
 		setState("loading");
@@ -48,7 +46,7 @@ export function PreparedPdf({
 			abort.abort();
 			renderer?.destroy();
 		};
-	}, [src, hydrated, enhance]);
+	}, [src, enhance]);
 	return (
 		<div
 			className="relative flex min-h-96 min-w-0 flex-1 flex-col"

@@ -420,6 +420,7 @@ async function runAtelierDocumentsCommand(
 ): Promise<AtelierDocumentsRuntimeCommandResult> {
 	switch (command.kind) {
 		case "open":
+			command.options?.signal?.throwIfAborted();
 			return command.options
 				? binding.open(command.path, command.options)
 				: binding.open(command.path);
@@ -432,6 +433,7 @@ async function runAtelierDocumentsCommand(
 		case "close-all":
 			return binding.closeAll();
 		case "open-view":
+			command.options?.signal?.throwIfAborted();
 			return command.options
 				? binding.openView(command.extensionId, command.options)
 				: binding.openView(command.extensionId);

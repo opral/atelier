@@ -133,7 +133,7 @@ export function MediaContent({
 	readonly branchId?: string;
 	readonly commitId?: string;
 }) {
-	const { navigation, initialState } = useAtelierRenderContext();
+	const { navigation } = useAtelierRenderContext();
 	const stableSource = useRef<{ identity: string; commitId?: string } | null>(
 		null,
 	);
@@ -157,18 +157,14 @@ export function MediaContent({
 			identity,
 			commitId:
 				commitId ??
-				(typeof file.commitId === "string"
-					? file.commitId
-					: initialState?.branchId === (branchId ?? initialState?.branchId)
-						? (initialState?.commitId ?? undefined)
-						: undefined),
+				(typeof file.commitId === "string" ? file.commitId : undefined),
 		};
 	}
 	const raw =
 		typeof file.path === "string"
 			? navigation?.fileHref?.({
 					path: file.path,
-					branchId: branchId ?? initialState?.branchId,
+					branchId,
 					commitId: stableSource.current.commitId,
 				})
 			: undefined;

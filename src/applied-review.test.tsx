@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { openLix } from "./test-utils/node-lix-sdk";
-import { createAtelier } from "./atelier-instance";
+import { createAtelier, getAtelierConfiguration } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
 import { selectAppliedFileDiffSnapshot } from "./queries";
 import { createCheckpoint } from "./lib/lix-diff-commands";
@@ -73,7 +73,9 @@ for (const decision of ["keep", "undo", "stale"] as const) {
 				],
 			});
 			await act(async () => {
-				rendered = render(<Atelier instance={instance} />);
+				rendered = render(
+					<Atelier lix={lix} {...getAtelierConfiguration(instance)} />,
+				);
 			});
 			await screen.findByText("Review harness");
 			await act(async () => {

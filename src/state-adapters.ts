@@ -102,6 +102,7 @@ export function createLixBranchSession(
 	let branchId = initialBranchId;
 	const listeners = new Set<() => void>();
 	const activeBranchLix = lix as ActiveBranchLix;
+	let refresh: (() => Promise<void>) | undefined;
 	let startObserving: (() => void) | undefined;
 	let stopObserving: (() => void) | undefined;
 	const publish = (nextBranchId: string) => {
@@ -118,13 +119,14 @@ export function createLixBranchSession(
 				const version = ++refreshVersion;
 				try {
 					const resolvedBranchId = await activeBranchId.call(lix);
-					if (version === refreshVersion) publish(resolvedBranchId);
+					if (version === refreshVersion && listeners.size > 0)
+						publish(resolvedBranchId);
 				} catch (error) {
 					if (version !== refreshVersion || isLixWorkerClosed(error)) return;
 					console.error("Failed to resolve the active Atelier branch", error);
 				}
 			};
-			void refreshActiveBranch();
+			refresh = refreshActiveBranch;
 			const subscribeActiveBranch = activeBranchLix.subscribeActiveBranch;
 			if (typeof subscribeActiveBranch === "function") {
 				startObserving = () => {
@@ -178,7 +180,9 @@ export function createLixBranchSession(
 	return {
 		getSnapshot: () => branchId,
 		subscribe: (listener) => {
+			const first = listeners.size === 0;
 			listeners.add(listener);
+			if (first) void refresh?.();
 			startObserving?.();
 			return () => {
 				listeners.delete(listener);
@@ -191,7 +195,9 @@ export function createLixBranchSession(
 		return {
 			getSnapshot: () => branchId,
 			subscribe: (listener) => {
+				const first = listeners.size === 0;
 				listeners.add(listener);
+				if (first) void refresh?.();
 				return () => listeners.delete(listener);
 			},
 		};
