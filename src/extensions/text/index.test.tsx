@@ -87,9 +87,11 @@ describe("TextView", () => {
 			);
 		});
 
-		expect(await screen.findByTestId("text-editor-view")).toHaveTextContent(
-			"checkpoint bytes",
-		);
+		await waitFor(() => {
+			expect(screen.getByTestId("text-editor-view")).toHaveTextContent(
+				"checkpoint bytes",
+			);
+		});
 		utils?.unmount();
 		await lix.close();
 	});
@@ -125,9 +127,11 @@ describe("TextView", () => {
 			);
 		});
 
-		expect(await screen.findByTestId("text-editor-view")).toHaveTextContent(
-			"AgentSession",
-		);
+		await waitFor(() => {
+			expect(screen.getByTestId("text-editor-view")).toHaveTextContent(
+				"AgentSession",
+			);
+		});
 		expect(screen.queryByRole("button", { name: "Wrap" })).toBeNull();
 		expect(
 			utils!.container.querySelector(".cm-lineWrapping"),
@@ -174,6 +178,7 @@ describe("TextView", () => {
 		});
 		const view = EditorView.findFromDOM(content);
 		if (!view) throw new Error("Editor view not found");
+		await waitFor(() => expect(view.state.doc.toString()).toBe("initial"));
 		act(() => {
 			view.dispatch({
 				changes: { from: 0, to: view.state.doc.length, insert: "user edit" },
@@ -249,6 +254,7 @@ describe("TextView", () => {
 		});
 		const view = EditorView.findFromDOM(content);
 		if (!view) throw new Error("Editor view not found");
+		await waitFor(() => expect(view.state.doc.toString()).toBe("initial"));
 		expect(scopedOriginReadCount()).toBe(0);
 		act(() => {
 			view.dispatch({

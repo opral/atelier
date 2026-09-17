@@ -714,9 +714,11 @@ describe("diff review navigation", () => {
 				activeHistoryInstance = leftPanel?.activeInstance ?? null;
 			});
 			await openWorkingChangesFromHistory();
-			expect(
-				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(
+					screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+				).toBeVisible();
+			});
 			// A working review shows live documents, never a historical diff.
 			await waitFor(() => {
 				const main = sessionStateStore.getSnapshot()?.areas.main;
