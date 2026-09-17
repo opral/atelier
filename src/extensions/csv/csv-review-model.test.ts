@@ -24,6 +24,31 @@ const diff = (
 	});
 
 describe("CSV review union model", () => {
+	test.each(["added", "removed"] as const)(
+		"marks matched rows modified when a column is %s, including empty cells",
+		(status) => {
+			const narrow = "name,status\nMarkdown,ready\nCSV,ready\n";
+			const wide =
+				"name,status,notes\nMarkdown,ready,Default editor format\nCSV,ready,\n";
+			const result =
+				status === "added" ? diff(narrow, wide) : diff(wide, narrow);
+			expect(result.rows.map((row) => row.status)).toEqual([
+				"modified",
+				"modified",
+			]);
+			expect(
+				result.rows.map((row) => [row.beforeIndex, row.afterIndex]),
+			).toEqual([
+				[0, 0],
+				[1, 1],
+			]);
+			expect(result.rows.map((row) => row.cells[2]?.status)).toEqual([
+				status,
+				status,
+			]);
+			expect(result.rows[1]?.cells[2]?.value).toBe("");
+		},
+	);
 	test("metadata initialization reports only the changed property, without marking data added", () => {
 		const csv = "name,stage\nAda,Trial\nGrace,Qualified\n";
 		const result = diff(
@@ -88,6 +113,7 @@ describe("CSV review union model", () => {
 			["new", "added"],
 		]);
 		expect(result.rows).toHaveLength(1);
+		expect(result.rows[0]?.status).toBe("modified");
 		expect(result.rows[0]?.cells.map((entry) => entry.status)).toEqual([
 			"unchanged",
 			"removed",
