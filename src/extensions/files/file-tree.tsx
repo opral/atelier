@@ -204,10 +204,10 @@ const FILE_TREE_UNSAFE_CSS = `
 
 	/* The label carries the action color across the board — the library
 	   tints [data-item-section='content'] with the status color, and
-	   modified shares the glyph's brand orange (see the git-modified
+	   modified carries the diff palette's orange (see the git-modified
 	   override), so a changed file reads without hunting for its dot. */
 	[data-item-git-status='modified'] > [data-item-section='git'] {
-		color: var(--atelier-link);
+		color: var(--atelier-diff-modified);
 		font-size: 0;
 	}
 
@@ -276,7 +276,7 @@ const FILE_TREE_UNSAFE_CSS = `
 	   status (a fully-added folder reads solid green like its files). */
 	[data-item-contains-git-change='true']:not([data-item-git-status])
 		> [data-item-section='git'] {
-		color: var(--atelier-link);
+		color: var(--atelier-diff-modified);
 		opacity: 0.75;
 	}
 
@@ -1543,7 +1543,7 @@ function treeHostStyle(
 		"--trees-focus-ring-color-override": "var(--atelier-ring)",
 		"--trees-font-family-override": "inherit",
 		"--trees-font-size-override": isSpacious ? "15px" : "13px",
-		"--trees-git-modified-color-override": "var(--atelier-link)",
+		"--trees-git-modified-color-override": "var(--atelier-diff-modified)",
 		"--trees-git-added-color-override": "var(--atelier-diff-added)",
 		"--trees-git-deleted-color-override": "var(--atelier-diff-removed)",
 		"--trees-icon-width-override": isSpacious ? "26px" : "14px",

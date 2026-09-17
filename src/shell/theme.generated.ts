@@ -122,10 +122,13 @@ rgb(34 197 94 / 0.16)
 rgb(239 68 68 / 0.07),
 rgb(239 68 68 / 0.16)
 );
---atelier-diff-modified: light-dark(rgb(133 77 14), rgb(253 224 71));
+--atelier-diff-modified: light-dark(
+rgb(194 65 12),
+rgb(253 186 116)
+);
 --atelier-diff-modified-subtle: light-dark(
-rgb(250 204 21 / 0.11),
-rgb(250 204 21 / 0.16)
+rgb(249 115 22 / 0.1),
+rgb(249 115 22 / 0.16)
 );
 --atelier-diff-moved: light-dark(rgb(68 112 157), rgb(125 170 220));
 --atelier-diff-conflict: light-dark(rgb(125 78 158), rgb(180 140 210));
@@ -145,6 +148,11 @@ rgb(250 204 21 / 0.16)
 --atelier-overlay-danger: rgb(235 165 156);
 --atelier-overlay-danger-border: rgb(90 58 58);
 --atelier-overlay-success: rgb(167 217 180);
+--atelier-overlay-diff-added: rgb(134 239 172);
+--atelier-overlay-diff-modified: rgb(253 186 116);
+--atelier-overlay-diff-removed: rgb(252 165 165);
+--atelier-overlay-diff-moved: rgb(125 170 220);
+--atelier-overlay-diff-conflict: rgb(180 140 210);
 --atelier-scrim: rgb(20 16 10 / 0.55);
 --atelier-shadow-overlay: 0 14px 32px rgb(28 25 23 / 0.42);
 --atelier-syntax-keyword: light-dark(

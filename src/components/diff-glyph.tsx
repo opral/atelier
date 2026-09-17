@@ -32,10 +32,23 @@ export type DiffGlyphKind =
 
 const GLYPH_FILL: Record<DiffGlyphKind, string> = {
 	added: "var(--atelier-diff-added)",
-	modified: "var(--atelier-link)",
+	modified: "var(--atelier-diff-modified)",
 	removed: "var(--atelier-diff-removed)",
 	moved: "var(--atelier-diff-moved)",
 	conflict: "var(--atelier-diff-conflict)",
+};
+
+/**
+ * The same five on dark chrome. The review pill stays dark on a light page,
+ * so the page's scheme is the wrong question there: the glyph keeps the
+ * bright tone the overlay scale is written in.
+ */
+const OVERLAY_FILL: Record<DiffGlyphKind, string> = {
+	added: "var(--atelier-overlay-diff-added)",
+	modified: "var(--atelier-overlay-diff-modified)",
+	removed: "var(--atelier-overlay-diff-removed)",
+	moved: "var(--atelier-overlay-diff-moved)",
+	conflict: "var(--atelier-overlay-diff-conflict)",
 };
 
 const GLYPH_TITLE: Record<DiffGlyphKind, string> = {
@@ -50,17 +63,25 @@ export function DiffGlyph({
 	kind,
 	size = 12,
 	dimmed = false,
+	on = "panel",
 	className,
 }: {
 	readonly kind: DiffGlyphKind;
 	readonly size?: number;
 	/** Reviewed changes keep their shape and drop to sand. */
 	readonly dimmed?: boolean;
+	/** The ground the glyph sits on: a panel, or the dark review chrome. */
+	readonly on?: "panel" | "overlay";
 	readonly className?: string;
 }) {
-	const fill = dimmed ? "var(--atelier-fg-faint)" : GLYPH_FILL[kind];
-	// The knockout is the panel ground showing through the dot.
-	const knockout = "var(--atelier-panel)";
+	const overlay = on === "overlay";
+	const fill = dimmed
+		? overlay
+			? "var(--atelier-overlay-fg-subtle)"
+			: "var(--atelier-fg-faint)"
+		: (overlay ? OVERLAY_FILL : GLYPH_FILL)[kind];
+	// The knockout is the ground showing through the dot.
+	const knockout = overlay ? "var(--atelier-overlay)" : "var(--atelier-panel)";
 	return (
 		<span
 			title={GLYPH_TITLE[kind]}

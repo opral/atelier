@@ -853,7 +853,7 @@ export function ExternalWriteReviewControls({
 										className="external-write-review-moved"
 										title={`Moved from ${activeMovedFrom.from}`}
 									>
-										<DiffGlyph kind="moved" size={12} />
+										<DiffGlyph kind="moved" size={12} on="overlay" />
 										<small>{activeMovedFrom.hint}</small>
 									</span>
 								) : (
