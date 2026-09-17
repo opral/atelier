@@ -300,7 +300,7 @@ margin-top: 0;
 .atelier-document .markdown-footnote-def-body > :last-child {
 margin-bottom: 0;
 }
-.atelier-document img {
+.atelier-document img:not(.markdown-document-link-icon) {
 border: 0;
 border-radius: var(--atelier-doc-radius);
 box-shadow: none;

@@ -714,9 +714,11 @@ describe("diff review navigation", () => {
 				activeHistoryInstance = leftPanel?.activeInstance ?? null;
 			});
 			await openWorkingChangesFromHistory();
-			expect(
-				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(
+					screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+				).toBeVisible();
+			});
 			// A working review shows live documents, never a historical diff.
 			await waitFor(() => {
 				const main = sessionStateStore.getSnapshot()?.areas.main;
@@ -2424,10 +2426,19 @@ describe("a file the view cannot diff in place", () => {
 					</LixProvider>,
 				);
 			});
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
+				await showRepositoryHistory();
+			});
 			await openWorkingChangesFromHistory();
+			const workingFiles = await screen.findByRole("list", {
+				name: "Files in working changes",
+			});
 			await act(async () => {
 				fireEvent.click(
-					await screen.findByRole("button", { name: "Next changed file" }),
+					await within(workingFiles).findByRole("button", {
+						name: /^shot\.png/,
+					}),
 				);
 			});
 

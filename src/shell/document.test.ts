@@ -162,3 +162,30 @@ test("the render sets its density with one declaration, not a second scale", () 
 	expect(compact).toContain("--atelier-doc-font-size:14px;");
 	expect(compact).toContain("font-size:var(--atelier-doc-font-size,16px)");
 });
+
+test("document image spacing excludes inline file-link icons in editor and published CSS", () => {
+	const container = document.createElement("div");
+	container.className = "atelier-document";
+	const image = document.createElement("img");
+	const icon = document.createElement("img");
+	icon.className = "markdown-document-link-icon";
+	container.append(image, icon);
+	for (const css of [read("src/shell/document.css"), RENDER_CSS]) {
+		const spacingRules: string[] = [];
+		postcss.parse(css).walkRules((rule) => {
+			if (
+				rule.selector.includes(".atelier-document") &&
+				rule.some(
+					(node) =>
+						node.type === "decl" &&
+						node.prop === "margin" &&
+						node.value.includes("--atelier-doc-gap"),
+				)
+			) {
+				spacingRules.push(...rule.selectors);
+			}
+		});
+		expect(spacingRules.some((selector) => image.matches(selector))).toBe(true);
+		expect(spacingRules.some((selector) => icon.matches(selector))).toBe(false);
+	}
+});
