@@ -126,7 +126,11 @@ export type FileCheckpointChangeRow = {
 	path: string | null;
 };
 
-export function selectFileCheckpointChanges(lix: Lix, fileId: string) {
+export function selectFileCheckpointChanges(
+	lix: Lix,
+	fileId: string,
+	commitIds?: readonly string[],
+) {
 	return qb(lix)
 		.selectFrom(sql<any>`lix_history('lix_file')`.as("history"))
 		.select([
@@ -137,6 +141,11 @@ export function selectFileCheckpointChanges(lix: Lix, fileId: string) {
 			sql<string | null>`coalesce(to_path, from_path)`.as("path"),
 		])
 		.where("id", "=", fileId)
+		.$if(commitIds !== undefined, (query) =>
+			query.where(sql<string>`lixcol_to_commit_id`, "in", [
+				...(commitIds ?? []),
+			]),
+		)
 		.where(sql<boolean>`lixcol_commit_is_checkpoint`, "=", true)
 		.orderBy(sql`lixcol_position`, "asc")
 		.$castTo<FileCheckpointChangeRow>();

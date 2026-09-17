@@ -235,9 +235,14 @@ export function HistoryView({
 			className="min-h-0 flex-1 overflow-y-auto py-2 pr-1"
 		>
 			<ShowPathParentsContext.Provider value={showParents}>
-				<div className={wide ? "w-full max-w-[60rem] py-4 pr-5" : "w-full"}>
+				<div className={wide ? "w-full max-w-[60rem] pr-5" : "w-full"}>
 					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
-					<CheckpointList atelier={atelier} wide={wide} file={file} />
+					<CheckpointList
+						key={file?.id ?? "repository"}
+						atelier={atelier}
+						wide={wide}
+						file={file}
+					/>
 				</div>
 			</ShowPathParentsContext.Provider>
 		</section>
@@ -466,9 +471,22 @@ function CheckpointList({
 	readonly wide: boolean;
 	readonly file: ScopedFile | null;
 }) {
-	const allCheckpoints = useQuery((lix) => selectCheckpoints(lix));
+	const [visibleCount, setVisibleCount] = useState(
+		CHECKPOINT_PREVIEW_PAGE_SIZE,
+	);
+	// Keep one older endpoint for the last row and the next-page hint.
+	const allCheckpoints = useQuery((lix) =>
+		selectCheckpoints(lix).limit(visibleCount + 1),
+	);
+	const visibleCheckpoints = allCheckpoints.slice(0, visibleCount);
+	const hasMore = visibleCount < allCheckpoints.length;
 	const changes = useQueryResult(
-		(lix) => selectFileCheckpointChanges(lix, file?.id ?? ""),
+		(lix) =>
+			selectFileCheckpointChanges(
+				lix,
+				file?.id ?? "",
+				visibleCheckpoints.map((checkpoint) => checkpoint.commit_id),
+			),
 		{ enabled: file !== null },
 	);
 	const fileChanges = useMemo(
@@ -479,10 +497,10 @@ function CheckpointList({
 		[file, changes.rows],
 	);
 	const checkpoints = fileChanges
-		? allCheckpoints.filter((checkpoint) =>
+		? visibleCheckpoints.filter((checkpoint) =>
 				fileChanges.has(checkpoint.commit_id),
 			)
-		: allCheckpoints;
+		: visibleCheckpoints;
 
 	if (file && changes.status === "pending") {
 		return (
@@ -505,7 +523,12 @@ function CheckpointList({
 		);
 	}
 
-	if (file && changes.status === "success" && checkpoints.length === 0) {
+	if (
+		file &&
+		changes.status === "success" &&
+		checkpoints.length === 0 &&
+		!hasMore
+	) {
 		return (
 			<p
 				role="status"
@@ -527,19 +550,32 @@ function CheckpointList({
 		);
 	}
 	return (
-		<ol aria-label="Checkpoints" className="space-y-0">
-			{pages.map((page) => (
-				<CheckpointPage
-					key={page.map((checkpoint) => checkpoint.commit_id).join(":")}
-					atelier={atelier}
-					wide={wide}
-					checkpoints={page}
-					allCheckpoints={allCheckpoints}
-					fileChanges={fileChanges}
-					file={file}
-				/>
-			))}
-		</ol>
+		<>
+			<ol aria-label="Checkpoints" className="space-y-0">
+				{pages.map((page) => (
+					<CheckpointPage
+						key={page.map((checkpoint) => checkpoint.commit_id).join(":")}
+						atelier={atelier}
+						wide={wide}
+						checkpoints={page}
+						allCheckpoints={allCheckpoints}
+						fileChanges={fileChanges}
+						file={file}
+					/>
+				))}
+			</ol>
+			{hasMore && (
+				<button
+					type="button"
+					className="rounded-panel px-2 py-2 text-sm text-fg-muted hover:bg-bg-hover"
+					onClick={() =>
+						setVisibleCount((count) => count + CHECKPOINT_PREVIEW_PAGE_SIZE)
+					}
+				>
+					Load older checkpoints
+				</button>
+			)}
+		</>
 	);
 }
 

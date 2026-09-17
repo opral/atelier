@@ -109,6 +109,53 @@ function mockHistoryWidth() {
 describe("HistoryView", () => {
 	afterEach(() => vi.unstubAllGlobals());
 
+	test("loads older sparse file history only on request", async () => {
+		const lix = await openLix();
+		const id = fakeUuid("paged-history");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+			[id, "/old.txt", new TextEncoder().encode("old")],
+		);
+		await createCheckpoint(lix);
+		for (let index = 0; index < 22; index++) await createCheckpoint(lix);
+		const view = render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={<div>Loading</div>}>
+					<HistoryView
+						atelier={atelierStub({ activeFile: { id, path: "/old.txt" } })}
+					/>
+				</Suspense>
+			</LixProvider>,
+		);
+		try {
+			const more = await screen.findByRole("button", {
+				name: "Load older checkpoints",
+			});
+			expect(
+				within(
+					screen.getByRole("list", { name: "Checkpoints" }),
+				).queryAllByRole("listitem"),
+			).toHaveLength(0);
+			expect(
+				screen.queryByText("No checkpoint includes this file yet."),
+			).toBeNull();
+			fireEvent.click(more);
+			await waitFor(() =>
+				expect(
+					within(
+						screen.getByRole("list", { name: "Checkpoints" }),
+					).getAllByRole("listitem"),
+				).toHaveLength(1),
+			);
+			expect(
+				screen.queryByRole("button", { name: "Load older checkpoints" }),
+			).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
 	test.each([false, true])(
 		"shows pending file history and settles (failure=%s)",
 		async (fail) => {
@@ -260,10 +307,13 @@ describe("HistoryView", () => {
 				if (!row) throw new Error("checkpoint row not rendered yet");
 				return row;
 			});
-			const working = section.querySelector<HTMLElement>(
-				'[data-attr="history-working-changes"]',
-			);
-			if (!working) throw new Error("working row missing");
+			const working = await waitFor(() => {
+				const row = section.querySelector<HTMLElement>(
+					'[data-attr="history-working-changes"]',
+				);
+				if (!row) throw new Error("working row not rendered yet");
+				return row;
+			});
 			expect(leftInset(checkpoint, section)).toBe(HEADER_LABEL_INSET);
 			expect(leftInset(working, section)).toBe(HEADER_LABEL_INSET);
 		}
