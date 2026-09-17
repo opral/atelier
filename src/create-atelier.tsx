@@ -27,6 +27,7 @@ import type { AtelierExtensionState, AtelierJsonValue } from "./extension-api";
 import {
 	getAtelierConfiguration,
 	createAtelier,
+	disposeAtelierRuntime,
 	type AtelierOptions,
 	type AtelierInstance,
 	type AtelierArea,
@@ -105,7 +106,15 @@ export type {
 	AtelierErrorFallbackContext,
 } from "./atelier-error-boundary";
 
+/** Commands for a mounted workspace. Lix remains owned by the host. */
+export type AtelierHandle = Pick<
+	AtelierInstance,
+	"lix" | "documents" | "views"
+>;
+
 export type AtelierProps = AtelierOptions & {
+	/** Published on mount, independent of query readiness; null on unmount. */
+	readonly onReady?: (handle: AtelierHandle | null) => void;
 	readonly location?: AtelierLocation;
 	readonly navigation?: AtelierNavigation;
 	readonly slots?: AtelierSlots;
@@ -195,6 +204,29 @@ function LiveAtelier(props: AtelierProps) {
 			}),
 		[props.lix],
 	);
+	const lifetime = useRef({ generation: 0 });
+	useEffect(() => {
+		const state = lifetime.current;
+		const generation = ++state.generation;
+		return () => {
+			queueMicrotask(() => {
+				if (state.generation === generation) disposeAtelierRuntime(instance);
+			});
+		};
+	}, [instance]);
+	const handle = useMemo<AtelierHandle>(
+		() => ({
+			lix: instance.lix,
+			documents: instance.documents,
+			views: instance.views,
+		}),
+		[instance],
+	);
+	const onReady = props.onReady;
+	useEffect(() => {
+		onReady?.(handle);
+		return () => onReady?.(null);
+	}, [handle, onReady]);
 	const configuration = getAtelierConfiguration(instance);
 	Object.assign(configuration, {
 		debug: props.debug,

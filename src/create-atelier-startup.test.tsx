@@ -19,6 +19,7 @@ vi.mock("./shell/layout-shell", () => ({
 	V2LayoutShell: () => <main>Interactive workspace</main>,
 }));
 vi.mock("./atelier-instance", () => ({
+	disposeAtelierRuntime: vi.fn(),
 	createAtelier: (options: unknown) => ({
 		lix: (options as { lix: Lix }).lix,
 		configuration: options,
@@ -214,6 +215,44 @@ test("root home navigation does not read repository paths", async () => {
 			expect.objectContaining({ signal: expect.any(AbortSignal) }),
 		),
 	);
+	expect(hooks.execute).not.toHaveBeenCalled();
+	view.unmount();
+});
+
+test("publishes commands while a route is pending and releases the handle without closing Lix", () => {
+	hooks.execute.mockReset().mockImplementation(() => new Promise(() => {}));
+	const close = vi.fn();
+	const lix = { close } as unknown as Lix;
+	const onReady = vi.fn();
+	const view = render(
+		<Atelier
+			lix={lix}
+			branchSession={branchSession}
+			location={{ path: "/slow.md" }}
+			onReady={onReady}
+		/>,
+	);
+	expect(onReady).toHaveBeenCalledTimes(1);
+	expect(onReady).toHaveBeenCalledWith(
+		expect.objectContaining({
+			lix,
+			documents: expect.any(Object),
+			views: expect.any(Object),
+		}),
+	);
+	expect(screen.getByText("Interactive workspace")).toBeVisible();
+	view.unmount();
+	expect(onReady).toHaveBeenLastCalledWith(null);
+	expect(close).not.toHaveBeenCalled();
+});
+
+test("publishes a runtime handle without any repository query", () => {
+	hooks.execute.mockReset();
+	const onReady = vi.fn();
+	const view = render(
+		<Atelier lix={{} as Lix} branchSession={branchSession} onReady={onReady} />,
+	);
+	expect(onReady).toHaveBeenCalledTimes(1);
 	expect(hooks.execute).not.toHaveBeenCalled();
 	view.unmount();
 });

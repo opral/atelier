@@ -17,3 +17,12 @@ Host extensions are plain registrations with `id`, optional `load`, and `Compone
 The old `createAtelier`/`instance` host choreography, `Atelier.Shell`/`FileView` object API, and host extension `{ manifest, entry.mount }` registrations have been removed from the public API. Extension runtime commands remain available inside extension components. Private internal runtime construction is an implementation detail.
 
 `loadAtelier`, `AtelierInitialState`, and the `initialState` prop have been removed. Do not preload a workspace snapshot before mounting. The static renderer does not evaluate repository extensions.
+
+Hosts that need workspace commands can pass a stable `onReady` callback. It receives an `AtelierHandle` containing the borrowed `lix` connection plus `documents` and `views` commands as soon as the component mounts, independently of visible view queries. Commands queue until the shell binds them. The callback receives `null` when the runtime unmounts or is replaced; Atelier never closes the host's Lix connection.
+
+```tsx
+const [workspace, setWorkspace] = useState<AtelierHandle | null>(null);
+<Atelier lix={lix} onReady={setWorkspace} />;
+// For example, in a host navigation handler:
+await workspace?.views.open("home");
+```
