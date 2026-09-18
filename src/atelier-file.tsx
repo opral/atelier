@@ -33,7 +33,7 @@ import {
 import { DeclarativeExtension } from "./extension-runtime/declarative-extension";
 import type { ExtensionView } from "./extension-runtime/types";
 import { hostExtensionDefinition } from "./extension-runtime/host-extension";
-import { findFileHandlerExtension } from "./extension-runtime/file-handlers";
+import { fileViewExtension } from "./extension-runtime/file-handlers";
 import {
 	installedExtensionFilesQuery,
 	type InstalledExtensionFileRow,
@@ -153,7 +153,7 @@ function FileViewContent(props: AtelierFileProps) {
 			? (props.filePath ?? file.rows[0]?.path)
 			: file.rows[0]?.path;
 	const definition = path
-		? findFileHandlerExtension(extensionMap.values(), path)
+		? fileViewExtension(extensionMap.values(), path)
 		: undefined;
 	if (file.status === "error") throw file.error;
 	if (installed.status === "error") throw installed.error;
@@ -186,7 +186,7 @@ function MountedFile(
 	props: AtelierFileProps & {
 		path: string;
 		branchId: string;
-		definition: ReturnType<typeof findFileHandlerExtension> & {};
+		definition: ReturnType<typeof fileViewExtension> & {};
 	},
 ) {
 	const registry = useExtensionHostRegistry();
