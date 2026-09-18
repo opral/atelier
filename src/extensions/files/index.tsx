@@ -789,12 +789,17 @@ function FilesViewContent({
 						.insertInto("lix_file")
 						.values({
 							path,
+							// A new file is empty, whatever its type. The CSV view draws
+							// an empty file as the table it is about to be — three
+							// columns and three rows — and writes that table the moment
+							// something is typed into it (`isSeedableCsvText`); a header
+							// written here instead made "New CSV" a one-column table with
+							// no rows in it, and a file the workspace had to carry before
+							// anyone had said anything. A drawing is the exception: an
+							// Excalidraw file with no scene in it is not a file that
+							// format can read.
 							content: new TextEncoder().encode(
-								fileType === "csv"
-									? "Column 1\n"
-									: fileType === "excalidraw"
-										? NEW_EXCALIDRAW_FILE_CONTENT
-										: "",
+								fileType === "excalidraw" ? NEW_EXCALIDRAW_FILE_CONTENT : "",
 							),
 						})
 						.execute();
