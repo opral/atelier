@@ -1954,6 +1954,20 @@ const TabRenameField = forwardRef<
 	// The menu's focus restore lands after the field mounts; a blur before
 	// the field has had the focus at all is that, not the reader leaving.
 	const focused = useRef(false);
+	// What the field owes itself once the rename it is waiting on has
+	// settled: see `commit`.
+	const resume = useRef<"idle" | "select" | "focus">("idle");
+
+	useEffect(() => {
+		if (busy || resume.current === "idle") return;
+		const mode = resume.current;
+		resume.current = "idle";
+		const input = inputRef.current;
+		if (!input) return;
+		// Only now is the input enabled again and able to hold the keyboard.
+		if (mode === "focus") input.focus();
+		input.select();
+	}, [busy]);
 
 	useEffect(() => {
 		// The context menu hands focus back to the chip as it closes, and the
@@ -1987,11 +2001,13 @@ const TabRenameField = forwardRef<
 		setBusy(false);
 		if (renamed) return finish(keptFocus);
 		setRejected(true);
-		// The field stays open on the refused name, so it takes the keyboard
-		// back: `select()` alone marks the text in an input nothing is typing
-		// into, because the disabled spell above blurred it.
-		if (keptFocus) inputRef.current?.focus();
-		inputRef.current?.select();
+		// The field stays open on the refused name and takes the keyboard back
+		// — the reader was typing in it and has nowhere else to be — but not
+		// here: it is still disabled in this render, and a disabled input
+		// cannot be focused, so the mark and the focus wait for the next one.
+		// Without that the tab was left as a field that answered nothing:
+		// neither what was typed into it nor the Escape meant to leave it.
+		resume.current = keptFocus ? "focus" : "select";
 	};
 
 	return (
