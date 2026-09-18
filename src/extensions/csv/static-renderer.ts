@@ -6,7 +6,10 @@ import type {
 } from "../../render/types";
 import { fileText } from "../../lib/decode-file-data";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
-import { renderCsvReviewDiffHtml } from "./render-review-diff-html";
+import {
+	renderCsvReviewDiffHtml,
+	type CsvRowGap,
+} from "./render-review-diff-html";
 
 /**
  * The CSV view, rendered without a shell.
@@ -21,6 +24,9 @@ const MAX_SOURCE_BYTES = 200_000;
 
 /** Rows a card shows before the table stops being a card. */
 const MAX_ROWS = 200;
+
+/** Rows a card shows however tight the budget: the change, and its edges. */
+const MIN_ROWS = 3;
 
 export const csvStaticRenderer: StaticRenderer = {
 	fileExtensions: ["csv", "tsv"],
@@ -44,30 +50,61 @@ export const csvStaticRenderer: StaticRenderer = {
 		const afterParsed = parseCsv(afterText);
 		if (isBlank(beforeParsed) && isBlank(afterParsed))
 			return { skipped: "empty" };
-		// The table shows the union of both sides, so both sides are measured.
-		const rows = Math.max(beforeParsed.rows.length, afterParsed.rows.length);
-		if (rows > MAX_ROWS) return { skipped: "too-large" };
-
 		const counts = countRows(beforeParsed, afterParsed);
 		// A ledger is mostly rows nobody touched. Keep the ones that changed,
 		// with a neighbour on each side, when the whole table will not fit.
-		const trimmed = trimToChanges(
-			beforeParsed,
-			afterParsed,
-			rowBudget(options.maxBytes, beforeParsed.columns.length),
-		);
-		const html = renderCsvReviewDiffHtml({
-			beforeData: encode(trimmed.before),
-			afterData: encode(trimmed.after),
-		});
+		//
+		// The budget is an estimate — a removed row is drawn beside the row
+		// that replaced it, and a cell's markup is longer than its text — so
+		// a render that overshoots is halved and drawn again rather than
+		// refused. Three attempts take it from "most of the file" to "the
+		// change and its neighbours".
+		let budget = rowBudget(options.maxBytes, beforeParsed.columns.length);
+		let trimmed = trimToChanges(beforeParsed, afterParsed, budget);
+		let html = renderTable(trimmed);
+		for (
+			let attempt = 0;
+			attempt < 3 &&
+			options.maxBytes !== undefined &&
+			byteLength(html) > options.maxBytes &&
+			budget > MIN_ROWS;
+			attempt += 1
+		) {
+			budget = Math.max(MIN_ROWS, Math.floor(budget / 2));
+			trimmed = trimToChanges(beforeParsed, afterParsed, budget);
+			html = renderTable(trimmed);
+		}
 		return {
 			kind: content.kind,
-			html: `<div class="csv-diff">${html}</div>`,
+			html,
 			counts,
 			hidden: trimmed.hidden,
 		};
 	},
 };
+
+/** The table as the card draws it: both sides, and the gaps between. */
+function renderTable(trimmed: {
+	readonly before: string;
+	readonly after: string;
+	readonly gaps: readonly CsvRowGap[];
+}): string {
+	const html = renderCsvReviewDiffHtml(
+		{
+			beforeData: encode(trimmed.before),
+			afterData: encode(trimmed.after),
+		},
+		// The rows the trim left out are named where they were, the way a
+		// pruned run is in a document.
+		{ gaps: trimmed.gaps },
+	);
+	return `<div class="csv-diff">${html}</div>`;
+}
+
+/** The bytes a rendered table costs, which the budget only estimates. */
+function byteLength(value: string): number {
+	return new TextEncoder().encode(value).length;
+}
 
 /**
  * Rows added, removed and changed.
@@ -153,13 +190,19 @@ function trimToChanges(
 	beforeParsed: CsvParseResult,
 	afterParsed: CsvParseResult,
 	budget: number,
-): { before: string; after: string; hidden: number } {
+): {
+	before: string;
+	after: string;
+	hidden: number;
+	gaps: readonly CsvRowGap[];
+} {
 	const height = Math.max(beforeParsed.rows.length, afterParsed.rows.length);
 	if (height <= budget)
 		return {
 			before: toCsv(beforeParsed),
 			after: toCsv(afterParsed),
 			hidden: 0,
+			gaps: [],
 		};
 	const changed = new Set<number>();
 	for (let index = 0; index < height; index += 1) {
@@ -184,7 +227,28 @@ function trimToChanges(
 		before: toCsv(beforeParsed, kept),
 		after: toCsv(afterParsed, kept),
 		hidden: height - kept.length,
+		gaps: gapsBetween(kept, height),
 	};
+}
+
+/**
+ * Where the trim left rows out, in the kept table's own terms: `index` is how
+ * many kept rows come before the gap, so 0 is above the first row.
+ */
+function gapsBetween(
+	kept: readonly number[],
+	height: number,
+): readonly CsvRowGap[] {
+	const gaps: CsvRowGap[] = [];
+	let previous = -1;
+	kept.forEach((row, index) => {
+		const missing = row - previous - 1;
+		if (missing > 0) gaps.push({ index, rows: missing });
+		previous = row;
+	});
+	const trailing = height - 1 - previous;
+	if (trailing > 0) gaps.push({ index: kept.length, rows: trailing });
+	return gaps;
 }
 
 /** A parsed table back to text, optionally only some of its rows. */
