@@ -333,8 +333,9 @@ min-width: 0;
 }
 .atelier-document table > tbody {
 display: table;
-flex: 0 0 auto;
-width: max-content;
+flex: 0 1 auto;
+width: fit-content;
+max-width: 100%;
 border: 1px solid var(--atelier-border);
 border-collapse: separate;
 border-radius: var(--atelier-doc-radius);
@@ -357,12 +358,14 @@ background-color: var(--atelier-bg-hover);
 }
 .atelier-document table th,
 .atelier-document table td {
+min-width: calc(var(--atelier-doc-em) * 6);
 border-right: 1px solid var(--atelier-border);
 border-bottom: 1px solid var(--atelier-border);
 padding: calc(var(--atelier-doc-em) * 0.4375)
 calc(var(--atelier-doc-em) * 0.5625);
 text-align: left;
 vertical-align: top;
+overflow-wrap: break-word;
 }
 .atelier-document table th {
 color: var(--atelier-fg);
