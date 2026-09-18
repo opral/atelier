@@ -3180,3 +3180,29 @@ test("deleting the last row lands on the row that is the end of the table now", 
 		await fixture.close();
 	}
 });
+
+test("clearing a row selection leaves the keyboard on the first row that was picked", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\nDave,d\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		await act(async () => {
+			props().onGridSelectionChange?.({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.fromSingleSelection([2, 4]),
+			});
+		});
+		await act(async () => {
+			screen.getByRole("button", { name: /clear/i }).click();
+		});
+		// Clearing deletes nothing, so the rows that were picked are all still
+		// there; the anchor used to be clamped as if they had gone.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 2]),
+		);
+		expect(props().rows).toBe(4);
+	} finally {
+		await fixture.close();
+	}
+});

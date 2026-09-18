@@ -1944,6 +1944,13 @@ function CsvTable({
 		);
 	};
 	const deleteSelectedRows = () => deleteRows(selectedRows);
+	// Letting a row selection go is not an edit: every row is still there, so
+	// the keyboard lands on the first one that was picked.
+	const clearRowSelection = () => {
+		const first = selectedRows.length ? Math.min(...selectedRows) : 0;
+		clearSelection();
+		focusGrid([0, first]);
+	};
 
 	// Preserve view predicates on rename; reset when column identities/positions change.
 	const columnIdentities = parsed.columns.map(
@@ -2246,15 +2253,7 @@ function CsvTable({
 						(event.target as HTMLElement).closest(".csv-row-actions")
 					) {
 						event.preventDefault();
-						// The row that moves up into the first deleted one's place — or the
-						// last row left, when the deletion ran to the end of the table.
-						const remaining = parsed.rows.length - selectedRows.length;
-						const first = Math.min(
-							selectedRows.length ? Math.min(...selectedRows) : 0,
-							Math.max(0, remaining - 1),
-						);
-						clearSelection();
-						focusGrid([0, Math.max(0, first)]);
+						clearRowSelection();
 					}
 				}}
 			>
@@ -2287,17 +2286,7 @@ function CsvTable({
 						columns={parsed.columns}
 						columnInfo={columnInfo}
 						optionValues={(column) => optionValuesByColumn.get(column) ?? []}
-						onClear={() => {
-							// The row that moves up into the first deleted one's place — or the
-							// last row left, when the deletion ran to the end of the table.
-							const remaining = parsed.rows.length - selectedRows.length;
-							const first = Math.min(
-								selectedRows.length ? Math.min(...selectedRows) : 0,
-								Math.max(0, remaining - 1),
-							);
-							clearSelection();
-							focusGrid([0, Math.max(0, first)]);
-						}}
+						onClear={clearRowSelection}
 						onDelete={editing ? deleteSelectedRows : undefined}
 						onEdit={
 							editing
