@@ -278,7 +278,7 @@ describe("HistoryView", () => {
 		return total;
 	};
 
-	test("rows start on the column the section header's label starts on", async () => {
+	test("compact and wide rows share the header column and a single top inset", async () => {
 		const resize = mockHistoryWidth();
 		const lix = await openLix();
 		await createCheckpoint(lix);
@@ -311,9 +311,21 @@ describe("HistoryView", () => {
 				const row = section.querySelector<HTMLElement>(
 					'[data-attr="history-working-changes"]',
 				);
-				if (!row) throw new Error("working row not rendered yet");
+				if (!row) throw new Error("working row missing");
 				return row;
 			});
+			let topInset = 0;
+			for (
+				let parent = working.parentElement;
+				parent && section.contains(parent);
+				parent = parent.parentElement
+			) {
+				for (const token of parent.className.split(/\s+/)) {
+					const padding = /^p[yt]-(\d+(?:\.\d+)?)$/.exec(token);
+					if (padding) topInset += Number(padding[1]) * 4;
+				}
+			}
+			expect(topInset).toBe(8);
 			expect(leftInset(checkpoint, section)).toBe(HEADER_LABEL_INSET);
 			expect(leftInset(working, section)).toBe(HEADER_LABEL_INSET);
 		}

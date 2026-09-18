@@ -474,10 +474,13 @@ function CheckpointList({
 	const [visibleCount, setVisibleCount] = useState(
 		CHECKPOINT_PREVIEW_PAGE_SIZE,
 	);
+	const [retryKey, setRetryKey] = useState(0);
 	// Keep one older endpoint for the last row and the next-page hint.
-	const allCheckpoints = useQuery((lix) =>
-		selectCheckpoints(lix).limit(visibleCount + 1),
+	const checkpointResult = useQueryResult(
+		(lix) => selectCheckpoints(lix).limit(visibleCount + 1),
+		{ retryKey },
 	);
+	const allCheckpoints = checkpointResult.rows;
 	const visibleCheckpoints = allCheckpoints.slice(0, visibleCount);
 	const hasMore = visibleCount < allCheckpoints.length;
 	const changes = useQueryResult(
@@ -487,7 +490,7 @@ function CheckpointList({
 				file?.id ?? "",
 				visibleCheckpoints.map((checkpoint) => checkpoint.commit_id),
 			),
-		{ enabled: file !== null },
+		{ enabled: file !== null, retryKey },
 	);
 	const fileChanges = useMemo(
 		() =>
@@ -502,23 +505,32 @@ function CheckpointList({
 			)
 		: visibleCheckpoints;
 
-	if (file && changes.status === "pending") {
+	if (
+		checkpointResult.status === "pending" ||
+		(file && changes.status === "pending")
+	) {
 		return (
 			<p
 				role="status"
 				className="px-2 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
-				Loading file history…
+				{file ? "Loading file history…" : "Loading history…"}
 			</p>
 		);
 	}
-	if (file && changes.status === "error") {
+	if (
+		checkpointResult.status === "error" ||
+		(file && changes.status === "error")
+	) {
 		return (
 			<p
 				role="alert"
 				className="px-2 py-3 text-[11.5px] leading-4 text-fg-subtle"
 			>
-				Could not load file history.
+				{file ? "Could not load file history." : "Could not load history."}{" "}
+				<button type="button" onClick={() => setRetryKey((value) => value + 1)}>
+					Retry history
+				</button>
 			</p>
 		);
 	}

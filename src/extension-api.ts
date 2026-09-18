@@ -139,6 +139,8 @@ export type AtelierFilesViewOptions = {
 export type AtelierDocumentOrigin = "existing" | "new";
 
 export type AtelierDocumentOpenOptions = {
+	/** Cancels navigation before it changes the workspace. */
+	readonly signal?: AbortSignal;
 	readonly state?: AtelierExtensionState;
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;
@@ -150,6 +152,8 @@ export type AtelierDocumentOpenOptions = {
 };
 
 export type AtelierViewOpenOptions = {
+	/** Cancels navigation before it changes the workspace. */
+	readonly signal?: AbortSignal;
 	readonly state?: AtelierExtensionState;
 	/**
 	 * Stable identity for this view instance — the same value is reported back
@@ -229,6 +233,17 @@ export type AtelierEvent =
 			type: "extension_opened";
 			extensionId: string;
 			area: AtelierArea;
+	  }
+	| {
+			/** Explicit user tab selection, emitted before activation, including
+			 * selecting an already active tab. Hosts cancel pending route work here.
+			 * Restoring state and programmatic opens do not emit this event.
+			 */
+			type: "main_view_navigation_requested";
+			viewKind: string;
+			instanceId: string;
+			filePath: string | null;
+			state?: AtelierExtensionState;
 	  }
 	| {
 			/**

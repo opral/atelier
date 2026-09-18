@@ -155,6 +155,8 @@ export type AtelierDocumentsRuntimeBinding = {
 };
 
 type AtelierDocumentsRuntime = {
+	disposed: boolean;
+	active?: QueuedAtelierDocumentsCommand;
 	binding: AtelierDocumentsRuntimeBinding | null;
 	readonly queue: QueuedAtelierDocumentsCommand[];
 	draining: boolean;
@@ -311,6 +313,18 @@ export function bindAtelierDocumentsRuntime(
 	};
 }
 
+/** @internal Releases UI commands without closing the borrowed Lix session. */
+export function disposeAtelierRuntime(instance: AtelierInstance): void {
+	const runtime = getAtelierDocumentsRuntime(instance);
+	if (runtime.disposed) return;
+	runtime.disposed = true;
+	runtime.binding = null;
+	const error = new DOMException("Atelier workspace unmounted", "AbortError");
+	runtime.active?.reject(error);
+	for (const queued of runtime.queue.splice(0)) queued.reject(error);
+	notifyAtelierDocumentsRuntime(runtime);
+}
+
 /** @internal Publishes mounted shell state for command acknowledgements. */
 export function publishAtelierDocumentsState(
 	instance: AtelierInstance,
@@ -338,6 +352,7 @@ function isAtelierConfiguration(value: unknown): value is AtelierConfiguration {
 
 function createAtelierDocumentsRuntime(): AtelierDocumentsRuntime {
 	return {
+		disposed: false,
 		binding: null,
 		queue: [],
 		draining: false,
@@ -378,6 +393,10 @@ function enqueueAtelierDocumentsCommand(
 	command: AtelierDocumentsCommand,
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
+		if (runtime.disposed) {
+			reject(new DOMException("Atelier workspace unmounted", "AbortError"));
+			return;
+		}
 		runtime.queue.push({ command, resolve, reject });
 		void drainAtelierDocumentsCommands(runtime);
 	});
@@ -393,6 +412,7 @@ async function drainAtelierDocumentsCommands(
 			const binding = runtime.binding;
 			const queued = runtime.queue.shift();
 			if (!queued) continue;
+			runtime.active = queued;
 			try {
 				const completion = await runAtelierDocumentsCommand(
 					binding,
@@ -404,6 +424,8 @@ async function drainAtelierDocumentsCommands(
 				queued.resolve();
 			} catch (error) {
 				queued.reject(error);
+			} finally {
+				runtime.active = undefined;
 			}
 		}
 	} finally {
@@ -420,6 +442,7 @@ async function runAtelierDocumentsCommand(
 ): Promise<AtelierDocumentsRuntimeCommandResult> {
 	switch (command.kind) {
 		case "open":
+			command.options?.signal?.throwIfAborted();
 			return command.options
 				? binding.open(command.path, command.options)
 				: binding.open(command.path);
@@ -432,6 +455,7 @@ async function runAtelierDocumentsCommand(
 		case "close-all":
 			return binding.closeAll();
 		case "open-view":
+			command.options?.signal?.throwIfAborted();
 			return command.options
 				? binding.openView(command.extensionId, command.options)
 				: binding.openView(command.extensionId);

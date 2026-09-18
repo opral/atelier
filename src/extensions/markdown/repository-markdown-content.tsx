@@ -19,8 +19,8 @@ type Props = {
 };
 
 export function RepositoryMarkdownContent(props: Props) {
-	const { connected, navigation } = useAtelierRenderContext();
-	return connected && !navigation?.fileHref ? (
+	const { navigation } = useAtelierRenderContext();
+	return !navigation?.fileHref ? (
 		<ConnectedMarkdownContent {...props} />
 	) : (
 		<RepositoryMarkdownBody {...props} />
@@ -106,19 +106,7 @@ function RepositoryMarkdownBody({
 	className,
 	assetSources,
 }: Props & { assetSources?: Record<string, string> }) {
-	const { navigation, initialState } = useAtelierRenderContext();
-	// A prepared document may remain visible while another tab or revision
-	// loads. Only borrow the snapshot epoch if it contains this exact document.
-	const preparedCommitId =
-		initialState?.branchId === branchId &&
-		Object.values(initialState.views).some(({ data }) => {
-			if (!data || typeof data !== "object" || Array.isArray(data))
-				return false;
-			const file = data as Record<string, unknown>;
-			return file.path === path && file.content === content;
-		})
-			? (initialState.commitId ?? undefined)
-			: undefined;
+	const { navigation } = useAtelierRenderContext();
 	return (
 		<MarkdownContent
 			content={content}
@@ -138,9 +126,7 @@ function RepositoryMarkdownBody({
 				const destination = navigation.fileHref({
 					path: target,
 					branchId,
-					...((commitId ?? preparedCommitId)
-						? { commitId: commitId ?? preparedCommitId }
-						: {}),
+					...(commitId ? { commitId } : {}),
 				});
 				return destination ? withSourceSuffix(destination, src) : undefined;
 			}}

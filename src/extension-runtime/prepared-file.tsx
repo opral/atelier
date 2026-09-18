@@ -4,7 +4,6 @@ import type {
 	AtelierExtensionLoader,
 	AtelierJsonValue,
 } from "../extension-api";
-import { useAtelierRenderContext } from "../atelier-render-context";
 import { decodeFileDataToText } from "../lib/decode-file-data";
 import { qb, sql } from "../lib/lix-kysely";
 import { selectFilesStateAt } from "../queries";
@@ -109,15 +108,14 @@ export function PreparedFileSurface({
 	 */
 	readonly diff?: boolean;
 }) {
-	const { connected, hydrated } = useAtelierRenderContext();
 	const [readyFor, setReadyFor] = useState<string | null>(null);
 	const editor = useRef<HTMLDivElement>(null);
-	const interactive = readyFor === documentKey && connected && hydrated;
+	const interactive = readyFor === documentKey;
 	// A layout effect, so a surface that is populated in the same commit — a
 	// comparison's frame waiting for its sides — is shown before the browser
 	// paints, never the prepared picture for one frame first.
 	useLayoutEffect(() => {
-		if (!connected || !hydrated || !editor.current) {
+		if (!editor.current) {
 			setReadyFor(null);
 			return;
 		}
@@ -138,7 +136,7 @@ export function PreparedFileSurface({
 		});
 		check();
 		return () => observer.disconnect();
-	}, [connected, hydrated, documentKey, readySelector]);
+	}, [documentKey, readySelector]);
 	return (
 		<div
 			className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -153,7 +151,7 @@ export function PreparedFileSurface({
 					{diff ? <DocumentLoading /> : initial}
 				</div>
 			) : null}
-			{connected && hydrated ? (
+			{
 				<div
 					ref={editor}
 					aria-hidden={!interactive || undefined}
@@ -165,7 +163,7 @@ export function PreparedFileSurface({
 				>
 					{children}
 				</div>
-			) : null}
+			}
 		</div>
 	);
 }

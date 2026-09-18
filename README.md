@@ -42,7 +42,10 @@ UI, subscriptions, extension loading, and editor lifecycle.
 ```ts
 import { toHtml } from "@opral/atelier/render";
 
-const view = toHtml({ path: "/README.md", before, after }, { maxBytes: 24_000 });
+const view = toHtml(
+	{ path: "/README.md", before, after },
+	{ maxBytes: 24_000 },
+);
 if ("html" in view) send(view.html);
 else console.log(view.skipped); // why there is no view
 ```
@@ -51,11 +54,11 @@ Bytes in, HTML out. Markdown and CSV have static views today.
 
 Which side is missing says what happened:
 
-| input | `kind` |
-| --- | --- |
-| `after` only | `added` |
+| input                | `kind`     |
+| -------------------- | ---------- |
+| `after` only         | `added`    |
 | `before` and `after` | `modified` |
-| `before` only | `removed` |
+| `before` only        | `removed`  |
 
 `kind`, and the `counts` of entities added, modified and removed, use the same
 words as `lix_diff`. `hidden` is how many entities the size budget left out.
@@ -74,41 +77,29 @@ Colours are `--atelier-*` custom properties from `@opral/atelier/theme.css`, the
 
 ## Entries
 
-| entry | what it is | guarantees |
-| --- | --- | --- |
-| `@opral/atelier` | the shell, and the extension API | React |
-| `@opral/atelier/render` | views, without a shell | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
-| `@opral/atelier/render.css` | styles for static views | generated tokens, no colour literals in rules |
-| `@opral/atelier/style.css` | styles for the shell | |
-| `@opral/atelier/file-icons` | path → icon | no React, no DOM |
-| `@opral/atelier/state-adapters` | the shell's persistence ports | |
-| `@opral/atelier/dev-tools` | tools for working on Atelier | not for shipping |
+| entry                           | what it is                       | guarantees                                                                          |
+| ------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| `@opral/atelier`                | the shell, and the extension API | React                                                                               |
+| `@opral/atelier/render`         | views, without a shell           | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
+| `@opral/atelier/render.css`     | styles for static views          | generated tokens, no colour literals in rules                                       |
+| `@opral/atelier/style.css`      | styles for the shell             |                                                                                     |
+| `@opral/atelier/file-icons`     | path → icon                      | no React, no DOM                                                                    |
+| `@opral/atelier/state-adapters` | the shell's persistence ports    |                                                                                     |
+| `@opral/atelier/dev-tools`      | tools for working on Atelier     | not for shipping                                                                    |
 
-## Server rendering
+## Static rendering
 
-Load the initial view on the server, then pass the serializable result to the same component on the server and browser:
+Mount the interactive workspace directly with an open Lix handle. Each view loads the data it needs; workspace startup does not prepare a repository snapshot.
 
-```tsx
-import { Atelier, loadAtelier } from "@opral/atelier";
+For server-rendered documents, use the separate static renderer:
 
-// Server loader. Open a session with the viewer's permitted access first.
-const lix = await openRepositoryLix();
-let initialState;
-try {
-	initialState = await loadAtelier({
-		lix,
-		location: { path: "/README.md" },
-		readOnly: true,
-	});
-} finally {
-	await lix.close();
-}
+```ts
+import { toHtml } from "@opral/atelier/render";
 
-// Render on both server and browser. The browser handle may arrive later.
-<Atelier initialState={initialState} lix={browserLix} />;
+const result = toHtml({ path: "/README.md", after: content });
 ```
 
-`initialState` contains the shell layout, prepared query results, and extension data. It contains no live Lix handle. Use your framework's safe serialization for embedding it in HTML. Rendering and initial hydration need no database reads. A browser Lix can connect afterward to enable subscriptions and editing. Prepare the session on the requested branch; `loadAtelier` does not change a borrowed session's branch.
+The host supplies authorized file bytes. This renderer does not open a workspace or retain a Lix connection.
 
 ## Routing
 
@@ -171,21 +162,10 @@ const extensions = [
 	},
 ];
 
-const initialState = await loadAtelier({
-	lix,
-	extensions,
-	location: { view: "summary" },
-});
-<Atelier
-	initialState={initialState}
-	lix={browserLix}
-	extensions={extensions}
-/>;
+<Atelier lix={lix} extensions={extensions} location={{ view: "summary" }} />;
 ```
 
-Register the same trusted extensions on the server and browser. Loaders return plain JSON; components receive `{ data, atelier, view }`. Components must support server rendering and can initialize browser editors in effects while retaining their initial content. `fileExtensions` associates an extension with file types. Reusing a built-in extension ID replaces that built-in view.
-
-Inside an extension component, `useAtelierConnected()` reports when the borrowed live Lix session is connected. Gate imperative host commands such as `atelier.documents.open(path)` and queries not included in the prepared state on this value. It is false during prepared rendering and connection validation, then updates to true; rendering prepared content does not need to wait.
+Loaders return plain JSON; components receive `{ data, atelier, view }`. Each view owns its loading and error state. `fileExtensions` associates an extension with file types. Reusing a built-in extension ID replaces that built-in view. Clean up browser editors and listeners in component effects.
 
 Bundled Markdown, CSV, text, HTML, images, media, and drawings provide initial content. Markdown and CSV progressively initialize their interactive editors; drawings provide a basic SVG scene until Excalidraw is ready. Large media previews are deferred to avoid embedding unbounded binary data. Browser-installed repository extensions remain browser-only; the server does not execute arbitrary repository JavaScript.
 
@@ -224,3 +204,7 @@ Read-only hosts can inspect the span but cannot resolve it.
 Without `intent`, the existing working-change and historical comparison behavior
 is unchanged. The public diff session exposes `intent` so extensions can identify
 an applied review. No callbacks or action configuration are required.
+
+## Migration from prepared workspace startup
+
+`loadAtelier`, `AtelierInitialState`, and the `initialState` and `instance` props have been removed. Pass the borrowed live handle directly: `<Atelier lix={lix} location={location} />`. The host opens the intended branch and closes its own handle. Use `@opral/atelier/render` for static documents.

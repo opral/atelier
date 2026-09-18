@@ -3,7 +3,7 @@ import {
 	ATELIER_BUILTIN_EXTENSION_IDS,
 	type AtelierExtensionRuntime,
 	type AtelierJsonValue,
-} from "@/extension-api";
+} from "../../extension-api";
 import {
 	DEFAULT_FOLDERS_PREFERENCE_KEY,
 	defaultFoldersKey,

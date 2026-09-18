@@ -10,8 +10,29 @@ import { qb } from "@/lib/lix-kysely";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
-import { createAtelier } from "./atelier-instance";
+import {
+	createAtelier,
+	getAtelierConfiguration,
+	type AtelierInstance,
+} from "./atelier-instance";
 import { Atelier } from "./create-atelier";
+import { LixProvider } from "@/lib/lix-react";
+import { V2LayoutShell } from "./shell/layout-shell";
+
+function TestRuntime({ instance }: { instance: AtelierInstance }) {
+	const configuration = getAtelierConfiguration(instance);
+	return (
+		<LixProvider lix={instance.lix}>
+			<V2LayoutShell
+				instance={instance}
+				extensions={configuration.extensions}
+				defaultOpenPanels={configuration.defaultOpenPanels ?? []}
+				onEvent={configuration.onEvent}
+			/>
+		</LixProvider>
+	);
+}
+
 import type { AtelierExtensionRegistration } from "./extension-api";
 import {
 	fileExtensionInstanceForKind,
@@ -31,7 +52,13 @@ describe("Atelier instance file controller", () => {
 			await act(async () => {
 				rendered = render(
 					<Atelier
-						instance={{} as Parameters<typeof Atelier>[0]["instance"]}
+						lix={{} as Parameters<typeof Atelier>[0]["lix"]}
+						branchSession={{
+							getSnapshot: () => {
+								throw new TypeError("Broken shell dependency");
+							},
+							subscribe: () => () => {},
+						}}
 						onError={onError}
 					/>,
 				);
@@ -75,7 +102,7 @@ describe("Atelier instance file controller", () => {
 				.execute();
 
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
 				name: "1 file changed since checkpoint. Review working changes",
@@ -151,7 +178,7 @@ describe("Atelier instance file controller", () => {
 				.execute();
 
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			await screen.findByTestId("test-pill-home");
 			const pill = await screen.findByRole("button", {
@@ -217,7 +244,7 @@ describe("Atelier instance file controller", () => {
 				.execute();
 
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			const pill = await screen.findByRole("button", {
 				name: "1 file changed since checkpoint. Review working changes",
@@ -261,7 +288,7 @@ describe("Atelier instance file controller", () => {
 
 		try {
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			await waitFor(() => {
 				expect(
@@ -305,7 +332,7 @@ describe("Atelier instance file controller", () => {
 
 		try {
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			await waitFor(() => {
 				expect(
@@ -407,7 +434,7 @@ describe("Atelier instance file controller", () => {
 
 		try {
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			await waitFor(() => {
 				expect(screen.getByRole("heading", { name: "Active" })).toBeVisible();
@@ -451,7 +478,7 @@ describe("Atelier instance file controller", () => {
 
 		try {
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			await waitFor(() => {
 				expect(
@@ -498,7 +525,7 @@ describe("Atelier instance file controller", () => {
 
 		try {
 			await act(async () => {
-				rendered = render(<Atelier instance={atelier} />);
+				rendered = render(<TestRuntime instance={atelier} />);
 			});
 			await waitFor(() => {
 				expect(

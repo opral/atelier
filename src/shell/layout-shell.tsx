@@ -1,4 +1,3 @@
-import { useAtelierRenderContext } from "../atelier-render-context";
 import {
 	useCallback,
 	useEffect,
@@ -941,8 +940,6 @@ function LayoutShellStateLoader(
 		readonly atelierInstance: AtelierInstance;
 	},
 ) {
-	const { initialState: preparedState } = useAtelierRenderContext();
-	const hasPreparedState = Boolean(preparedState);
 	const configuration = getAtelierConfiguration(props.atelierInstance);
 	const sessionSnapshot = useAtelierStoreSnapshot(
 		configuration.sessionStateStore,
@@ -968,43 +965,39 @@ function LayoutShellStateLoader(
 		() => createInitialAtelierUiState(resolvedDefaultOpenAreas),
 		[resolvedDefaultOpenAreas],
 	);
-	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(
-		() =>
-			preparedState?.preferences ??
-			coerceAtelierUserPreferences(initialUiState),
+	const [preferences, setPreferences] = useState<AtelierUserPreferencesV1>(() =>
+		coerceAtelierUserPreferences(initialUiState),
 	);
 	const preferencesRef = useRef(preferences);
 	useLayoutEffect(() => {
 		preferencesRef.current = preferences;
 	}, [preferences]);
-	const [preferencesReady, setPreferencesReady] = useState(
-		Boolean(preparedState),
-	);
 	const [reviewStatusLoad, setReviewStatusLoad] = useState<{
 		readonly branchId: string | null;
 		readonly resolvedReviewIds: readonly string[];
-	}>({ branchId: preparedState?.branchId ?? null, resolvedReviewIds: [] });
+	}>({ branchId: null, resolvedReviewIds: [] });
 
 	useEffect(() => {
 		let cancelled = false;
-		if (!hasPreparedState) setPreferencesReady(false);
+		const preferencesAtLoad = preferencesRef.current;
 		void configuration.preferencesStore
 			.load()
 			.then((loaded) => {
-				if (!cancelled && loaded) {
+				if (
+					!cancelled &&
+					loaded &&
+					preferencesRef.current === preferencesAtLoad
+				) {
 					setPreferences(coerceAtelierUserPreferences(loaded));
 				}
 			})
 			.catch((error: unknown) => {
 				console.error("Failed to load private Atelier preferences", error);
-			})
-			.finally(() => {
-				if (!cancelled) setPreferencesReady(true);
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [configuration.preferencesStore, hasPreparedState]);
+	}, [configuration.preferencesStore]);
 
 	useEffect(() => {
 		if (sessionSnapshot) return;
@@ -1016,9 +1009,7 @@ function LayoutShellStateLoader(
 	useEffect(() => {
 		if (!activeBranchId) return;
 		let cancelled = false;
-		if (preparedState?.branchId !== activeBranchId) {
-			setReviewStatusLoad({ branchId: null, resolvedReviewIds: [] });
-		}
+		setReviewStatusLoad({ branchId: null, resolvedReviewIds: [] });
 		void configuration.reviewStatusStore
 			.loadResolvedReviewIds(activeBranchId)
 			.then((reviewIds) => {
@@ -1041,11 +1032,7 @@ function LayoutShellStateLoader(
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		activeBranchId,
-		configuration.reviewStatusStore,
-		preparedState?.branchId,
-	]);
+	}, [activeBranchId, configuration.reviewStatusStore]);
 
 	const uiStateKV = useMemo<AtelierUiState>(
 		() => ({
@@ -1138,11 +1125,7 @@ function LayoutShellStateLoader(
 		[configuration.preferencesStore],
 	);
 
-	if (
-		!activeBranchId ||
-		!preferencesReady ||
-		reviewStatusLoad.branchId !== activeBranchId
-	) {
+	if (!activeBranchId) {
 		return <AtelierShellLoadingPlaceholder />;
 	}
 	return (
@@ -1152,7 +1135,11 @@ function LayoutShellStateLoader(
 			uiStateKV={uiStateKV}
 			setUiStateKV={setUiStateKV}
 			activeBranchId={activeBranchId}
-			resolvedReviewIds={reviewStatusLoad.resolvedReviewIds}
+			resolvedReviewIds={
+				reviewStatusLoad.branchId === activeBranchId
+					? reviewStatusLoad.resolvedReviewIds
+					: []
+			}
 			autoAcceptAgentChanges={
 				preferences.review?.autoAcceptAgentChanges ?? false
 			}
@@ -1180,22 +1167,51 @@ function AtelierShellLoadingPlaceholder() {
 }
 
 function LayoutShellLoadedContent(props: LayoutShellLoadedContentProps) {
+	// Reconcile only open documents. Opening a workspace must not enumerate
+	// every repository file merely to keep tab titles and paths current.
+	const openFileIds = [
+		...new Set(
+			Object.values(props.uiStateKV.areas)
+				.flatMap((area) => area.views)
+				.map((entry) => entry.state?.fileId)
+				.filter((id): id is string => typeof id === "string"),
+		),
+	].sort();
+	const [retryKey, setRetryKey] = useState(0);
 	const currentFiles = useQueryResult<{ id: string; path: string }>(
-		(queryLix) => qb(queryLix).selectFrom("lix_file").select(["id", "path"]),
+		(queryLix) =>
+			qb(queryLix)
+				.selectFrom("lix_file")
+				.select(["id", "path"])
+				.where("id", "in", openFileIds),
+		{ enabled: openFileIds.length > 0, retryKey },
 	);
 	const installedExtensions = useQueryResult<InstalledExtensionFileRow>(
 		installedExtensionFilesQuery,
+		{ retryKey },
 	);
-	if (currentFiles.status === "error") throw currentFiles.error;
-	if (installedExtensions.status === "error") throw installedExtensions.error;
+
 	return (
-		<LayoutShellLoadedContentResolved
-			{...props}
-			currentFileRows={currentFiles.rows}
-			currentFilesReady={currentFiles.status === "success"}
-			installedExtensionRows={installedExtensions.rows}
-			installedExtensionsReady={installedExtensions.status === "success"}
-		/>
+		<>
+			{(currentFiles.status === "error" ||
+				installedExtensions.status === "error") && (
+				<div role="alert">
+					Some workspace data could not be loaded.{" "}
+					<button type="button" onClick={() => setRetryKey((key) => key + 1)}>
+						Retry workspace data
+					</button>
+				</div>
+			)}
+			<LayoutShellLoadedContentResolved
+				{...props}
+				currentFileRows={currentFiles.rows}
+				currentFilesReady={
+					openFileIds.length === 0 || currentFiles.status === "success"
+				}
+				installedExtensionRows={installedExtensions.rows}
+				installedExtensionsReady={installedExtensions.status === "success"}
+			/>
+		</>
 	);
 }
 
@@ -2467,6 +2483,18 @@ function LayoutShellLoadedContentResolved({
 	// The float's orange verb, scoped by its ▾ checklist: the viewed file by
 	// default, or the explicit multi-file selection the user made.
 
+	const openGeneration = useRef<Record<Area, number>>({
+		left: 0,
+		main: 0,
+		right: 0,
+	});
+	const openLifecycle = useRef(0);
+	useEffect(
+		() => () => {
+			openLifecycle.current += 1;
+		},
+		[],
+	);
 	const resolveAndOpenFile = useCallback(
 		async ({
 			area,
@@ -2476,6 +2504,7 @@ function LayoutShellLoadedContentResolved({
 			pending,
 			documentOrigin,
 			newTab,
+			signal,
 		}: {
 			area: Area;
 			filePath: string;
@@ -2484,8 +2513,26 @@ function LayoutShellLoadedContentResolved({
 			pending?: boolean;
 			documentOrigin?: "existing" | "new";
 			newTab?: boolean;
+			signal?: AbortSignal;
 		}) => {
+			signal?.throwIfAborted();
+			const generation = newTab
+				? openGeneration.current[area]
+				: ++openGeneration.current[area];
+			const lifecycle = openLifecycle.current;
+			const branch = configuration.branchSession.getSnapshot();
 			const resolvedFile = await resolveLixFileForOpen({ lix, filePath });
+			signal?.throwIfAborted();
+			if (
+				lifecycle !== openLifecycle.current ||
+				branch !== configuration.branchSession.getSnapshot() ||
+				(!newTab && generation !== openGeneration.current[area])
+			) {
+				throw new DOMException(
+					"Document navigation was superseded",
+					"AbortError",
+				);
+			}
 			if (!resolvedFile) {
 				throw new Error(`File not found in the opened repository: ${filePath}`);
 			}
@@ -2505,7 +2552,7 @@ function LayoutShellLoadedContentResolved({
 			});
 			return resolvedFile.path;
 		},
-		[currentFileIds, lix, openResolvedFileView],
+		[configuration.branchSession, currentFileIds, lix, openResolvedFileView],
 	);
 
 	const resolveAndOpenDocument = useCallback(
@@ -2513,6 +2560,7 @@ function LayoutShellLoadedContentResolved({
 			filePath: string,
 			options: AtelierDocumentOpenOptions = {},
 		): Promise<string> => {
+			options.signal?.throwIfAborted();
 			const normalizedPath = normalizeLixFileOpenPath(filePath);
 			if (!normalizedPath) {
 				throw new Error(`Invalid repository file path: ${filePath}`);
@@ -2545,6 +2593,7 @@ function LayoutShellLoadedContentResolved({
 					normalizedPath,
 					commitId,
 				);
+				options.signal?.throwIfAborted();
 				if (!historicalFile) continue;
 				openResolvedFileView({
 					area: "main",
@@ -2561,6 +2610,7 @@ function LayoutShellLoadedContentResolved({
 			return resolveAndOpenFile({
 				area: "main",
 				filePath: normalizedPath,
+				signal: options.signal,
 				state,
 				focus: options.focus ?? true,
 				documentOrigin: options.documentOrigin ?? "existing",
@@ -3730,6 +3780,7 @@ function LayoutShellLoadedContentResolved({
 			extensionId: string,
 			options: AtelierViewOpenOptions = {},
 		): string | undefined => {
+			options.signal?.throwIfAborted();
 			const definition = extensionMap.get(extensionId);
 			if (!definition) {
 				throw new Error(`Unknown Atelier extension: ${extensionId}`);
@@ -4068,11 +4119,26 @@ function LayoutShellLoadedContentResolved({
 	);
 
 	const handleSelectCentralView = useCallback(
-		(key: string) =>
+		(key: string) => {
+			const entry = panelStatesRef.current.main.views.find(
+				(view) => view.instance === key,
+			);
+			if (!entry) return;
+			// User intent supersedes a pending replacement before either the host's
+			// route lookup or this shell's file lookup can change the active tab.
+			openGeneration.current.main += 1;
+			emitEvent({
+				type: "main_view_navigation_requested",
+				viewKind: entry.kind,
+				instanceId: entry.instance,
+				filePath: documentPathFromView(entry) ?? null,
+				...(entry.state ? { state: entry.state } : {}),
+			});
 			setAreaState("main", (area) => activatePanelExtension(area, key), {
 				focus: true,
-			}),
-		[setAreaState],
+			});
+		},
+		[emitEvent, setAreaState],
 	);
 
 	const handleSelectRightView = useCallback(

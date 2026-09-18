@@ -1,4 +1,4 @@
-import { type JSX, type ReactNode } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import { Flag, RefreshCw } from "lucide-react";
 import { WorkingDot } from "@/components/diff-glyph";
 import { useQueryResult } from "@/lib/lix-react";
@@ -60,17 +60,18 @@ export function CheckpointStatusBar({
 	/** A checkpoint review is open; the same control now closes it. */
 	readonly reviewingLatestCheckpoint?: boolean;
 }): JSX.Element {
-	const workingChangeCount = useQueryResult((queryLix) =>
-		selectWorkingChangeCount(queryLix),
+	const [retryKey, setRetryKey] = useState(0);
+	const workingChangeCount = useQueryResult(
+		(queryLix) => selectWorkingChangeCount(queryLix),
+		{ retryKey },
 	);
-	if (workingChangeCount.status === "error") throw workingChangeCount.error;
 	const workingRow = workingChangeCount.rows[0];
 	const fileCount = workingRow?.file_count ?? 0;
 	const workingCountLabel = `${fileCount} ${fileCount === 1 ? "file" : "files"} changed`;
-	const liveEpoch = useQueryResult((queryLix) =>
-		selectWorkingReviewEpoch(queryLix),
+	const liveEpoch = useQueryResult(
+		(queryLix) => selectWorkingReviewEpoch(queryLix),
+		{ enabled: reviewingWorkingChanges, retryKey },
 	);
-	if (liveEpoch.status === "error") throw liveEpoch.error;
 	const liveEpochRow = liveEpoch.rows[0];
 	// The diff on screen is a past state of the file once somebody else has
 	// written, and every decision the review offers is refused against the
@@ -79,7 +80,7 @@ export function CheckpointStatusBar({
 	const reviewIsBehind =
 		reviewingWorkingChanges &&
 		reviewedEpoch !== null &&
-		liveEpoch.status !== "pending" &&
+		liveEpoch.status === "success" &&
 		liveEpochRow !== undefined &&
 		reviewIsBehindWorkspace(reviewedEpoch, {
 			beforeCommitId: liveEpochRow.before_commit_id,
@@ -87,7 +88,13 @@ export function CheckpointStatusBar({
 		});
 
 	const historyStatus =
-		workingChangeCount.status === "pending" ? null : fileCount === 0 ? (
+		workingChangeCount.status === "pending" ? (
+			<span role="status">Loading changes…</span>
+		) : workingChangeCount.status === "error" ? (
+			<button type="button" onClick={() => setRetryKey((key) => key + 1)}>
+				Changes unavailable · Retry
+			</button>
+		) : fileCount === 0 ? (
 			<CheckpointStatus
 				statusLabel={LATEST_CHECKPOINT_TITLE}
 				reviewing={reviewingLatestCheckpoint}
@@ -107,6 +114,11 @@ export function CheckpointStatusBar({
 			left={
 				<>
 					{historyStatus}
+					{liveEpoch.status === "error" && (
+						<button type="button" onClick={() => setRetryKey((key) => key + 1)}>
+							Review status unavailable · Retry
+						</button>
+					)}
 					{reviewIsBehind ? (
 						<ReviewBehindNotice onRefresh={onRefreshWorkingReview} />
 					) : null}

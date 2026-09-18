@@ -714,9 +714,11 @@ describe("diff review navigation", () => {
 				activeHistoryInstance = leftPanel?.activeInstance ?? null;
 			});
 			await openWorkingChangesFromHistory();
-			expect(
-				await screen.findByRole("button", { name: /^Checkpoint(ing…)?$/ }),
-			).toBeVisible();
+			await waitFor(() => {
+				expect(
+					screen.getByRole("button", { name: /^Checkpoint(ing…)?$/ }),
+				).toBeVisible();
+			});
 			// A working review shows live documents, never a historical diff.
 			await waitFor(() => {
 				const main = sessionStateStore.getSnapshot()?.areas.main;
@@ -2424,10 +2426,19 @@ describe("a file the view cannot diff in place", () => {
 					</LixProvider>,
 				);
 			});
+			await act(async () => {
+				await atelier.views.open(HISTORY_EXTENSION_KIND, { area: "left" });
+				await showRepositoryHistory();
+			});
 			await openWorkingChangesFromHistory();
+			const workingFiles = await screen.findByRole("list", {
+				name: "Files in working changes",
+			});
 			await act(async () => {
 				fireEvent.click(
-					await screen.findByRole("button", { name: "Next changed file" }),
+					await within(workingFiles).findByRole("button", {
+						name: /^shot\.png/,
+					}),
 				);
 			});
 
@@ -2457,4 +2468,192 @@ describe("a file the view cannot diff in place", () => {
 			await lix.close();
 		}
 	});
+});
+
+test("shell mounts while private preferences and review state are pending", async () => {
+	const lix = await openLix();
+	const preferencesStore = {
+		load: vi.fn(() => new Promise<null>(() => {})),
+		save: vi.fn(async () => {}),
+	};
+	const reviewStatusStore = {
+		loadResolvedReviewIds: vi.fn(
+			() => new Promise<readonly string[]>(() => {}),
+		),
+		resolve: vi.fn(async () => {}),
+	};
+	const atelier = createAtelier({ lix, preferencesStore, reviewStatusStore });
+	const view = render(
+		<LixProvider lix={lix}>
+			<V2LayoutShell instance={atelier} />
+		</LixProvider>,
+	);
+	try {
+		expect(
+			await screen.findByRole("switch", { name: "Auto-accept agent changes" }),
+		).toBeVisible();
+		expect(preferencesStore.load).toHaveBeenCalled();
+		expect(reviewStatusStore.loadResolvedReviewIds).toHaveBeenCalled();
+	} finally {
+		view.unmount();
+		await lix.close();
+	}
+});
+
+test("user selection of the active tab cancels a pending replacement before activation", async () => {
+	const lix = await openLix();
+	await lix.execute(
+		"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+		[
+			fakeUuid("cancel-open"),
+			"/cancel-open.md",
+			new TextEncoder().encode("# Cancel"),
+		],
+	);
+	const sessionStateStore = createMemorySessionStateStore();
+	const onEvent = vi.fn();
+	const atelier = createAtelier({ lix, sessionStateStore });
+	const view = render(
+		<LixProvider lix={lix}>
+			<V2LayoutShell
+				instance={atelier}
+				onEvent={onEvent}
+				slots={{
+					mainTabStrip: ({ tabs }) => (
+						<>
+							{tabs.map((tab) => (
+								<button key={tab.instanceId} onClick={tab.select}>
+									Select {tab.label}
+								</button>
+							))}
+						</>
+					),
+				}}
+			/>
+		</LixProvider>,
+	);
+	await screen.findByRole("switch", { name: "Auto-accept agent changes" });
+	await act(async () => {
+		await atelier.views.open(HISTORY_EXTENSION_KIND);
+	});
+	expect(
+		onEvent.mock.calls.some(
+			([event]) => event.type === "main_view_navigation_requested",
+		),
+	).toBe(false);
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started!: () => void;
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const spy = vi
+		.spyOn(lix, "execute")
+		.mockImplementation(async (...args: Parameters<typeof lix.execute>) => {
+			if (
+				String(args[0]).toLowerCase().startsWith("select") &&
+				args[1]?.includes("/cancel-open.md")
+			) {
+				started();
+				await held;
+			}
+			return execute(...args);
+		});
+	const opening = atelier.documents.open("/cancel-open.md");
+	const rejected = expect(opening).rejects.toMatchObject({
+		name: "AbortError",
+	});
+	try {
+		await waiting;
+		fireEvent.click(screen.getByRole("button", { name: /Select History/ }));
+		expect(onEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "main_view_navigation_requested",
+				viewKind: HISTORY_EXTENSION_KIND,
+			}),
+		);
+		release();
+		await rejected;
+		expect(
+			sessionStateStore
+				.getSnapshot()
+				?.areas.main.views.some(
+					(entry) => entry.state?.filePath === "/cancel-open.md",
+				),
+		).toBe(false);
+	} finally {
+		release();
+		spy.mockRestore();
+		view.unmount();
+		await lix.close();
+	}
+});
+
+test("aborting a pending document lookup cannot open its stale tab", async () => {
+	const lix = await openLix();
+	await lix.execute(
+		"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+		[
+			fakeUuid("cancel-open"),
+			"/cancel-open.md",
+			new TextEncoder().encode("# Cancel"),
+		],
+	);
+	const sessionStateStore = createMemorySessionStateStore();
+	const atelier = createAtelier({ lix, sessionStateStore });
+	const view = render(
+		<LixProvider lix={lix}>
+			<V2LayoutShell instance={atelier} />
+		</LixProvider>,
+	);
+	await screen.findByRole("switch", { name: "Auto-accept agent changes" });
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started!: () => void;
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const spy = vi
+		.spyOn(lix, "execute")
+		.mockImplementation(async (...args: Parameters<typeof lix.execute>) => {
+			if (
+				String(args[0]).toLowerCase().startsWith("select") &&
+				args[1]?.includes("/cancel-open.md")
+			) {
+				started();
+				await held;
+			}
+			return execute(...args);
+		});
+	const controller = new AbortController();
+	const opening = atelier.documents.open("/cancel-open.md", {
+		signal: controller.signal,
+	});
+	const rejected = expect(opening).rejects.toMatchObject({
+		name: "AbortError",
+	});
+	try {
+		await waiting;
+		controller.abort();
+		release();
+		await rejected;
+		expect(
+			sessionStateStore
+				.getSnapshot()
+				?.areas.main.views.some(
+					(entry) => entry.state?.filePath === "/cancel-open.md",
+				),
+		).toBe(false);
+	} finally {
+		release();
+		spy.mockRestore();
+		view.unmount();
+		await lix.close();
+	}
 });

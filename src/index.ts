@@ -1,13 +1,9 @@
+export { AtelierSkeleton } from "./create-atelier";
+export type { AtelierSkeletonProps, AtelierHandle } from "./create-atelier";
 export { Atelier } from "./atelier";
 export type { AtelierProps } from "./atelier";
-export { loadAtelier } from "./load-atelier";
-export type {
-	AtelierInitialState,
-	AtelierLocation,
-	LoadAtelierOptions,
-} from "./atelier-state";
+export type { AtelierLocation } from "./atelier-state";
 export type { AtelierNavigation } from "./atelier-render-context";
-export { useAtelierConnected } from "./atelier-render-context";
 export {
 	coerceAtelierSessionUiState,
 	coerceAtelierUserPreferences,
