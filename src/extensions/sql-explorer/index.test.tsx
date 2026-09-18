@@ -18,6 +18,7 @@ import {
 	refineJsonColumns,
 	SqlExplorerView,
 	surfaceTableName,
+	tablePreviewColumns,
 } from "./index";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 
@@ -26,6 +27,7 @@ describe("friendlyDataType", () => {
 		["Utf8", "text"],
 		["LargeUtf8", "text"],
 		["LargeBinary", "blob"],
+		["BYTEA", "blob"],
 		["Boolean", "bool"],
 		["Int64", "int"],
 		["UInt32", "int"],
@@ -143,8 +145,14 @@ describe("groupBaseTables", () => {
 
 describe("buildTableQuery", () => {
 	test("combines filters, sort, and pagination", () => {
-		const { sql, countSql, params } = buildTableQuery({
+		const { sql, params } = buildTableQuery({
 			table: "lix_file",
+			columns: [
+				{ name: "id", type: "text" },
+				{ name: "path", type: "text" },
+				{ name: "hidden", type: "bool" },
+				{ name: "content", type: "blob" },
+			],
 			filters: [
 				{ column: "path", operator: "LIKE", value: "%.md" },
 				{ column: "hidden", operator: "=", value: "0" },
@@ -154,10 +162,7 @@ describe("buildTableQuery", () => {
 			pageSize: 50,
 		});
 		expect(sql).toBe(
-			"SELECT * FROM lix_file WHERE path LIKE $1 AND hidden = $2 ORDER BY path DESC LIMIT 50 OFFSET 100",
-		);
-		expect(countSql).toBe(
-			"SELECT COUNT(*) AS row_count FROM lix_file WHERE path LIKE $1 AND hidden = $2",
+			'SELECT "id", "path", "hidden" FROM lix_file WHERE "path" LIKE $1 AND "hidden" = $2 ORDER BY "path" DESC LIMIT 51 OFFSET 100',
 		);
 		expect(params).toEqual(["%.md", "0"]);
 	});
@@ -165,12 +170,42 @@ describe("buildTableQuery", () => {
 	test("omits WHERE and ORDER BY when unused", () => {
 		const { sql } = buildTableQuery({
 			table: "lix_change",
+			columns: [{ name: "id", type: "text" }],
 			filters: [],
 			sort: null,
 			page: 0,
 			pageSize: 50,
 		});
-		expect(sql).toBe("SELECT * FROM lix_change LIMIT 50 OFFSET 0");
+		expect(sql).toBe('SELECT "id" FROM lix_change LIMIT 51 OFFSET 0');
+	});
+
+	test("removes blob columns from table previews", () => {
+		expect(
+			tablePreviewColumns([
+				{ name: "id", type: "text" },
+				{ name: "content", type: "blob" },
+				{ name: "metadata", type: "json" },
+			]),
+		).toEqual([
+			{ name: "id", type: "text" },
+			{ name: "metadata", type: "json" },
+		]);
+	});
+
+	test("rejects filters on omitted payload columns", () => {
+		expect(() =>
+			buildTableQuery({
+				table: "lix_file",
+				columns: [
+					{ name: "id", type: "text" },
+					{ name: "content", type: "blob" },
+				],
+				filters: [{ column: "content", operator: "=", value: "bytes" }],
+				sort: null,
+				page: 0,
+				pageSize: 50,
+			}),
+		).toThrow(/filtering on content/);
 	});
 });
 
@@ -259,6 +294,47 @@ describe("SqlExplorerView", () => {
 			"title",
 			"Absolute path from the repository root, ending in the file's name.",
 		);
+	});
+
+	test("loads lix_file content only after clicking its lazy cell", async () => {
+		const executeSpy = vi.spyOn(lix, "execute");
+		try {
+			render(
+				<SqlExplorerView
+					lix={lix}
+					readOnly={false}
+					instanceId="test-lazy-file-content"
+					initialQuery="SELECT 1;"
+				/>,
+			);
+			fireEvent.click(await screen.findByRole("button", { name: "lix_file" }));
+			await screen.findByText("/notes/hello.md");
+
+			const tableQuery = executeSpy.mock.calls
+				.map(([sql]) => String(sql))
+				.find(
+					(sql) => sql.includes("FROM lix_file") && sql.includes('SELECT "id"'),
+				);
+			expect(tableQuery).toBeDefined();
+			expect(tableQuery).not.toContain('"content"');
+			expect(screen.getByRole("button", { name: "Load" })).toBeInTheDocument();
+
+			fireEvent.click(screen.getByRole("button", { name: "Load" }));
+			await waitFor(() =>
+				expect(
+					executeSpy.mock.calls.some(
+						([sql, params]) =>
+							String(sql) ===
+								'SELECT "content" FROM lix_file WHERE "id" = $1 LIMIT 1' &&
+							Array.isArray(params) &&
+							params.length === 1,
+					),
+				).toBe(true),
+			);
+			expect(await screen.findByText("0.0 KB")).toBeInTheDocument();
+		} finally {
+			executeSpy.mockRestore();
+		}
 	});
 
 	test("surfaces engine errors without crashing", async () => {
