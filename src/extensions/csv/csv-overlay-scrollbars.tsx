@@ -3,14 +3,40 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 /**
  * Thin overlay scrollbars for the grid, drawn over its edges instead of the
  * platform's, which take a gutter and dress like a document window. They
- * show while the grid scrolls or the pointer is over it, fade otherwise,
- * and drag. The scroller stays Glide's own element; this only reflects it.
+ * show while the grid scrolls and while the pointer is at the edge one is
+ * on — reaching for it — and fade otherwise, so a table that barely
+ * overflows is not read past a grey bar down its side. They drag. The
+ * scroller stays Glide's own element; this only reflects it.
  */
 
 const THUMB_THICKNESS = 6;
 const THUMB_MIN_LENGTH = 28;
 const EDGE_INSET = 3;
 const FADE_AFTER_MS = 900;
+/** How near an edge a pointer is reaching for the thumb that lives on it. */
+const EDGE_ZONE = 22;
+
+/** Whether a pointer is at an edge the thumbs sit on, and so reaching. */
+export function nearScrollEdge(input: {
+	readonly pointer: { readonly x: number; readonly y: number };
+	readonly box: {
+		readonly left: number;
+		readonly top: number;
+		readonly right: number;
+		readonly bottom: number;
+	};
+	readonly zone?: number;
+}): boolean {
+	const { pointer, box } = input;
+	const zone = input.zone ?? EDGE_ZONE;
+	const within =
+		pointer.x >= box.left &&
+		pointer.x <= box.right &&
+		pointer.y >= box.top &&
+		pointer.y <= box.bottom;
+	if (!within) return false;
+	return box.right - pointer.x <= zone || box.bottom - pointer.y <= zone;
+}
 
 /** Where a thumb sits along its track for the scroller's current metrics. */
 export function thumbGeometry(input: {
@@ -125,6 +151,24 @@ export function CsvOverlayScrollbars({
 			};
 			measure();
 		};
+		const onPointerMove = (event: PointerEvent) => {
+			const scroller = scrollerRef.current;
+			if (!scroller) return;
+			const rect = scroller.getBoundingClientRect();
+			if (
+				nearScrollEdge({
+					pointer: { x: event.clientX, y: event.clientY },
+					box: {
+						left: rect.left,
+						top: rect.top,
+						right: rect.right,
+						bottom: rect.bottom,
+					},
+				})
+			)
+				wake();
+		};
+		container.addEventListener("pointermove", onPointerMove, { passive: true });
 		attach();
 		// Glide remounts its scroller when the grid does; follow it.
 		const observer =
@@ -136,6 +180,7 @@ export function CsvOverlayScrollbars({
 		observer?.observe(container, { childList: true, subtree: true });
 		return () => {
 			disposed = true;
+			container.removeEventListener("pointermove", onPointerMove);
 			observer?.disconnect();
 			detach?.();
 			if (fadeTimer.current) clearTimeout(fadeTimer.current);
