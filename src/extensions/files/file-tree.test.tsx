@@ -980,7 +980,7 @@ describe("FileTree", () => {
 			getTreeHost(container).style.getPropertyValue(
 				"--trees-git-modified-color-override",
 			),
-		).toBe("var(--atelier-link)");
+		).toBe("var(--atelier-diff-modified)");
 		const reviewRow = getTreeItem(container, "docs/review.md");
 		const reviewDot = reviewRow.querySelector("[data-item-section='git']");
 		const actionLane = reviewRow.querySelector("[data-item-section='action']");

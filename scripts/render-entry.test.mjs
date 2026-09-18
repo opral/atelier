@@ -74,7 +74,7 @@ test("every view renders in plain node", async () => {
 	const markdown = toHtml({ path: "/README.md", after: encode("# Acme\n") });
 	assert.ok(isRendered(markdown));
 	assert.equal(markdown.kind, "added");
-	assert.match(markdown.html, /<h1>Acme<\/h1>/);
+	assert.match(markdown.html, /<h1 data-review-status="added">Acme<\/h1>/);
 
 	// Each view separately: they are separate chunks, and a DOM dependency
 	// arriving in one of them is invisible if only the other is exercised.

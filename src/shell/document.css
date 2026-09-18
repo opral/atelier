@@ -440,11 +440,12 @@
    the room: a scroll box as wide as the column and both gutters. Its two
    pseudo-elements are the gutters, which give way before the table does, so
    the table proper sits on the column until it needs the gutters and spends
-   them evenly when it does. With no gutter (the default) the room is the
-   column, and a wide table scrolls inside it. Only a table the document
-   holds directly: a table inside a list or a quote stays in its block.
-   Hairlines, 14px cells on a 16px body, a tinted plain-case header row:
-   Notion's simple table. */
+   them evenly when it does. A table that wants more than the room has it
+   taken out of the cells, which wrap, down to a floor per column; past that
+   floor the room scrolls, which is the many-column table. Only a table the
+   document holds directly: a table inside a list or a quote stays in its
+   block. Hairlines, 14px cells on a 16px body, a tinted plain-case header
+   row, cells that wrap rather than run off: Notion's simple table. */
 .atelier-document > table {
 	display: flex;
 	align-items: flex-start;
@@ -465,12 +466,13 @@
 	min-width: 0;
 }
 
-/* The table proper: its own width, never squeezed below it — the room
-   around it scrolls instead — and the border. */
+/* The table proper: the width it wants, up to the room it is in, and the
+   border. Past that the cells wrap; past their floor the room scrolls. */
 .atelier-document table > tbody {
 	display: table;
-	flex: 0 0 auto;
-	width: max-content;
+	flex: 0 1 auto;
+	width: fit-content;
+	max-width: 100%;
 	border: 1px solid var(--atelier-border);
 	border-collapse: separate;
 	border-radius: var(--atelier-doc-radius);
@@ -499,15 +501,20 @@
 	background-color: var(--atelier-bg-hover);
 }
 
-/* 7px by 9px on a 16px body. */
+/* 7px by 9px on a 16px body. The floor a column wraps down to, and no
+   further, is six ems of the body: about the width of two or three words,
+   the point below which a column reads as a stack of syllables. A word
+   longer than its column breaks rather than pushing the table wider. */
 .atelier-document table th,
 .atelier-document table td {
+	min-width: calc(var(--atelier-doc-em) * 6);
 	border-right: 1px solid var(--atelier-border);
 	border-bottom: 1px solid var(--atelier-border);
 	padding: calc(var(--atelier-doc-em) * 0.4375)
 		calc(var(--atelier-doc-em) * 0.5625);
 	text-align: left;
 	vertical-align: top;
+	overflow-wrap: break-word;
 }
 
 .atelier-document table th {

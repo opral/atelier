@@ -5,7 +5,7 @@ import type {
 	StaticRenderer,
 } from "../../../render/types";
 import { fileText } from "../../../lib/decode-file-data";
-import { renderMarkdownDiff, renderMarkdownDocument } from "./index";
+import { renderMarkdownDiff } from "./index";
 
 /**
  * The Markdown view, rendered without a shell.
@@ -41,21 +41,13 @@ export const markdownStaticRenderer: StaticRenderer = {
 			return { skipped: "too-large" };
 		if (tooDeep(before) || tooDeep(after)) return { skipped: "too-large" };
 
-		// One side only: the document as it stands, or as it stood.
+		// A file that was created or deleted gets the review too, against the
+		// side that does not exist: the reader sees every line marked, the
+		// same view the app draws, rather than a plain document that happens
+		// to be new. The CSV view already reads a creation this way.
 		if (content.kind === "added" || content.kind === "removed") {
 			const source = content.kind === "added" ? after : before;
 			if (source.trim() === "") return { skipped: "empty" };
-			const html = scoped(renderMarkdownDocument(source, imageOption(options)));
-			const counts = lineCount(html);
-			return {
-				kind: content.kind,
-				html,
-				counts:
-					content.kind === "added"
-						? { added: counts, modified: 0, removed: 0 }
-						: { added: 0, modified: 0, removed: counts },
-				hidden: 0,
-			};
 		}
 
 		const diff = renderMarkdownDiff({
@@ -67,7 +59,7 @@ export const markdownStaticRenderer: StaticRenderer = {
 		});
 		if (diff.unchanged) return { skipped: "unchanged" };
 		return {
-			kind: "modified",
+			kind: content.kind,
 			html: scoped(diff.html),
 			counts: {
 				added: diff.stats.added,
@@ -102,10 +94,6 @@ function imageOption(options: RenderOptions): {
 function lineBudget(maxBytes: number | undefined): number {
 	if (maxBytes === undefined) return DEFAULT_MAX_LINES;
 	return Math.max(3, Math.min(DEFAULT_MAX_LINES, Math.floor(maxBytes / 900)));
-}
-
-function lineCount(html: string): number {
-	return (html.match(/<(?:li|p|h[1-6]|tr|pre)\b/g) ?? []).length;
 }
 
 function byteLength(value: string): number {

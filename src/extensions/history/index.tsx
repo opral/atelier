@@ -18,7 +18,7 @@ import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
 import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
-import { useQueryResult } from "@/lib/lix-react";
+import { useQuery, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviewPage,
@@ -237,7 +237,12 @@ export function HistoryView({
 			<ShowPathParentsContext.Provider value={showParents}>
 				<div className={wide ? "w-full max-w-[60rem] pr-5" : "w-full"}>
 					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
-					<CheckpointList atelier={atelier} wide={wide} file={file} />
+					<CheckpointList
+						key={file?.id ?? "repository"}
+						atelier={atelier}
+						wide={wide}
+						file={file}
+					/>
 				</div>
 			</ShowPathParentsContext.Provider>
 		</section>
@@ -466,13 +471,25 @@ function CheckpointList({
 	readonly wide: boolean;
 	readonly file: ScopedFile | null;
 }) {
+	const [visibleCount, setVisibleCount] = useState(
+		CHECKPOINT_PREVIEW_PAGE_SIZE,
+	);
 	const [retryKey, setRetryKey] = useState(0);
-	const checkpointResult = useQueryResult((lix) => selectCheckpoints(lix), {
-		retryKey,
-	});
+	// Keep one older endpoint for the last row and the next-page hint.
+	const checkpointResult = useQueryResult(
+		(lix) => selectCheckpoints(lix).limit(visibleCount + 1),
+		{ retryKey },
+	);
 	const allCheckpoints = checkpointResult.rows;
+	const visibleCheckpoints = allCheckpoints.slice(0, visibleCount);
+	const hasMore = visibleCount < allCheckpoints.length;
 	const changes = useQueryResult(
-		(lix) => selectFileCheckpointChanges(lix, file?.id ?? ""),
+		(lix) =>
+			selectFileCheckpointChanges(
+				lix,
+				file?.id ?? "",
+				visibleCheckpoints.map((checkpoint) => checkpoint.commit_id),
+			),
 		{ enabled: file !== null, retryKey },
 	);
 	const fileChanges = useMemo(
@@ -483,10 +500,10 @@ function CheckpointList({
 		[file, changes.rows],
 	);
 	const checkpoints = fileChanges
-		? allCheckpoints.filter((checkpoint) =>
+		? visibleCheckpoints.filter((checkpoint) =>
 				fileChanges.has(checkpoint.commit_id),
 			)
-		: allCheckpoints;
+		: visibleCheckpoints;
 
 	if (
 		checkpointResult.status === "pending" ||
@@ -518,7 +535,12 @@ function CheckpointList({
 		);
 	}
 
-	if (file && changes.status === "success" && checkpoints.length === 0) {
+	if (
+		file &&
+		changes.status === "success" &&
+		checkpoints.length === 0 &&
+		!hasMore
+	) {
 		return (
 			<p
 				role="status"
@@ -540,19 +562,32 @@ function CheckpointList({
 		);
 	}
 	return (
-		<ol aria-label="Checkpoints" className="space-y-0">
-			{pages.map((page) => (
-				<CheckpointPage
-					key={page.map((checkpoint) => checkpoint.commit_id).join(":")}
-					atelier={atelier}
-					wide={wide}
-					checkpoints={page}
-					allCheckpoints={allCheckpoints}
-					fileChanges={fileChanges}
-					file={file}
-				/>
-			))}
-		</ol>
+		<>
+			<ol aria-label="Checkpoints" className="space-y-0">
+				{pages.map((page) => (
+					<CheckpointPage
+						key={page.map((checkpoint) => checkpoint.commit_id).join(":")}
+						atelier={atelier}
+						wide={wide}
+						checkpoints={page}
+						allCheckpoints={allCheckpoints}
+						fileChanges={fileChanges}
+						file={file}
+					/>
+				))}
+			</ol>
+			{hasMore && (
+				<button
+					type="button"
+					className="rounded-panel px-2 py-2 text-sm text-fg-muted hover:bg-bg-hover"
+					onClick={() =>
+						setVisibleCount((count) => count + CHECKPOINT_PREVIEW_PAGE_SIZE)
+					}
+				>
+					Load older checkpoints
+				</button>
+			)}
+		</>
 	);
 }
 

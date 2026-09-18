@@ -40,6 +40,20 @@ test("which side is missing says what happened", () => {
 	const deleted = toHtml({ path: "/old.md", before: bytes("# Old\n") });
 	expect(isRendered(created) && created.kind).toBe("added");
 	expect(isRendered(deleted) && deleted.kind).toBe("removed");
+	// A file that was created is a change like any other, and gets the same
+	// view: every line of it marked, not a plain document that happens to be
+	// new.
+	expect(isRendered(created) && created.html).toContain(
+		'data-review-status="added"',
+	);
+	expect(isRendered(created) && created.counts).toEqual({
+		added: 1,
+		modified: 0,
+		removed: 0,
+	});
+	expect(isRendered(deleted) && deleted.html).toContain(
+		'data-review-status="removed"',
+	);
 	// An empty file that existed is not a file that did not.
 	const emptied = toHtml({
 		path: "/README.md",
@@ -165,7 +179,10 @@ test("a renamed column counts as a change, as the table shows it", () => {
 });
 
 test("the budget is measured against the view, document or not", () => {
-	const long = `${Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n")}\n`;
+	// One paragraph, with nothing the trim can leave out: the view is over
+	// the budget however it is asked for, and the document wrapper's
+	// stylesheet — which the caller asked for — is not what put it there.
+	const long = `${"paragraph ".repeat(200)}\n`;
 	for (const document of [false, true])
 		expect(
 			toHtml(
@@ -173,6 +190,15 @@ test("the budget is measured against the view, document or not", () => {
 				{ maxBytes: 1_000, document },
 			),
 		).toEqual({ skipped: "too-large" });
+	// A document the trim can shorten fits instead, and says how much it left.
+	const many = `${Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n")}\n`;
+	const trimmed = toHtml(
+		{ path: "/b.md", after: bytes(many) },
+		{
+			maxBytes: 1_000,
+		},
+	);
+	expect(isRendered(trimmed) && trimmed.hidden).toBeGreaterThan(0);
 });
 
 test("a path that names a directory has no view", () => {
