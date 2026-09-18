@@ -133,15 +133,21 @@
 			opacity: 0;
 			transition: opacity 240ms ease;
 		}
+		/* They wake when the grid scrolls and fade again, the way an overlay
+		   scrollbar does, and come back for the pointer that reaches for one.
+		   A pointer resting anywhere in the grid used to pin them on, which
+		   turned a table that barely overflows into a grey bar down its edge
+		   for as long as the reader was reading it. */
 		.csv-overlay-scrollbars[data-active],
-		.csv-view:hover .csv-overlay-scrollbars {
+		.csv-overlay-scrollbars:has(.csv-overlay-thumb:hover),
+		.csv-overlay-scrollbars:has(.csv-overlay-thumb:active) {
 			opacity: 1;
 		}
 		.csv-overlay-thumb {
 			position: absolute;
 			pointer-events: auto;
 			border-radius: 3px;
-			background: color-mix(in srgb, var(--atelier-fg) 32%, transparent);
+			background: color-mix(in srgb, var(--atelier-fg) 28%, transparent);
 			transition: background-color 160ms ease;
 		}
 		.csv-overlay-thumb:hover,

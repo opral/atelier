@@ -25,6 +25,11 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { useLix, useQueryResult } from "@/lib/lix-react";
+import {
+	renameWorkspaceEntry,
+	WorkspacePathTakenError,
+} from "@/lib/workspace-file-ops";
+import { tabRename } from "./tab-rename";
 import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { MainArea } from "./main-panel";
@@ -4207,6 +4212,39 @@ function LayoutShellLoadedContentResolved({
 		isHostReadOnly,
 		slots?.mainTabStrip,
 	]);
+	/**
+	 * Renaming a file from its tab. The path comes from the live file table
+	 * rather than the view's state, so a tab that has not caught up yet is
+	 * still renaming the file it shows. False keeps the field open: the name
+	 * is one a file cannot have, or one another file already has.
+	 */
+	const handleRenameTab = useCallback(
+		async (view: ExtensionInstance, nextName: string) => {
+			if (isHostReadOnly) return false;
+			const fileId = view.state?.fileId;
+			const path =
+				(typeof fileId === "string"
+					? currentFilePathsById.get(fileId)
+					: undefined) ??
+				(typeof view.state?.filePath === "string"
+					? view.state.filePath
+					: undefined);
+			if (!path) return false;
+			const rename = tabRename(path, nextName);
+			if (rename.kind === "unchanged") return true;
+			if (rename.kind === "invalid") return false;
+			try {
+				await renameWorkspaceEntry(lix, { kind: "file", path }, rename.path);
+				return true;
+			} catch (error) {
+				// A taken name is the field's business; anything else is a fault.
+				if (!(error instanceof WorkspacePathTakenError))
+					console.error("Failed to rename file from its tab", error);
+				return false;
+			}
+		},
+		[currentFilePathsById, isHostReadOnly, lix],
+	);
 	// Read off `slots` here: hosts pass an inline object literal, so depending on
 	// `slots` itself would rebuild the strip on every render.
 	const renderHostTabStrip = slots?.mainTabStrip;
@@ -4232,11 +4270,14 @@ function LayoutShellLoadedContentResolved({
 				onSelectView={handleSelectCentralView}
 				onRemoveView={(instance) => handleRemoveView("main", instance)}
 				onAddView={addViewOnCentral}
+				onRenameTab={isHostReadOnly ? undefined : handleRenameTab}
 				preferencesFor={preferencesFor}
 			/>
 		);
 	}, [
 		addViewOnCentral,
+		handleRenameTab,
+		isHostReadOnly,
 		mainArea,
 		mainTabStripContext,
 		extensionMap,

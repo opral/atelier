@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { thumbGeometry } from "./csv-overlay-scrollbars";
+import { nearScrollEdge, thumbGeometry } from "./csv-overlay-scrollbars";
 
 describe("thumbGeometry", () => {
 	test("is absent when the content fits", () => {
@@ -46,4 +46,21 @@ describe("thumbGeometry", () => {
 		});
 		expect(thumb).toEqual({ length: 28, offset: 452 });
 	});
+});
+
+test("the thumbs wake for a pointer at the edge they sit on, not for one in the grid", () => {
+	const box = { left: 100, top: 100, right: 500, bottom: 400 };
+	const at = (x: number, y: number) =>
+		nearScrollEdge({ pointer: { x, y }, box });
+	// Reaching for the vertical thumb, and for the horizontal one.
+	expect(at(492, 250)).toBe(true);
+	expect(at(300, 392)).toBe(true);
+	// Reading the table, a long way from either.
+	expect(at(300, 250)).toBe(false);
+	// The left and top edges carry no thumb.
+	expect(at(104, 250)).toBe(false);
+	expect(at(300, 104)).toBe(false);
+	// Outside the scroller entirely: the grid's own edge, the page beyond it.
+	expect(at(520, 250)).toBe(false);
+	expect(at(300, 420)).toBe(false);
 });
