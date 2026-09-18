@@ -97,6 +97,36 @@ describe("MainArea", () => {
 		expect(
 			screen.queryByRole("button", { name: /ask your agent/i }),
 		).toBeNull();
+		expect(
+			screen.getByRole("heading", { name: "Start writing" }),
+		).toBeVisible();
+	});
+
+	test("a host that takes no writing does not promise a new document", async () => {
+		const panelState: AreaState = {
+			views: [],
+			activeInstance: null,
+		};
+
+		await renderWithProviders(
+			<DndContext>
+				<MainArea
+					area={panelState}
+					onSelectView={() => {}}
+					onRemoveView={() => {}}
+					viewContext={createViewContext()}
+					isFocused={true}
+					onFocusArea={vi.fn()}
+				/>
+			</DndContext>,
+		);
+
+		expect(screen.getByRole("heading", { name: "Nothing open" })).toBeVisible();
+		expect(
+			screen.getByText("Open a file from the left to read it."),
+		).toBeVisible();
+		expect(screen.queryByText(/create a new document/i)).toBeNull();
+		expect(screen.queryByRole("button", { name: /new document/i })).toBeNull();
 	});
 
 	test("renders the shared add-view action in the tab strip", async () => {
