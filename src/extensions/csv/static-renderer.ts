@@ -8,6 +8,7 @@ import { fileText } from "../../lib/decode-file-data";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
 import {
 	renderCsvReviewDiffHtml,
+	type CsvColumnGap,
 	type CsvRowGap,
 } from "./render-review-diff-html";
 
@@ -25,8 +26,20 @@ const MAX_SOURCE_BYTES = 200_000;
 /** Rows a card shows before the table stops being a card. */
 const MAX_ROWS = 200;
 
+/**
+ * Columns a card shows before the table stops being a card.
+ *
+ * A card does not scroll sideways — a wide column wraps instead, so that the
+ * change is never pushed off it — and forty columns of an export share the
+ * card's width until each one is a letter tall. Twelve is what stays legible.
+ */
+const MAX_COLUMNS = 12;
+
 /** Rows a card shows however tight the budget: the change, and its edges. */
 const MIN_ROWS = 3;
+
+/** Columns a card shows however tight the budget: the same, sideways. */
+const MIN_COLUMNS = 3;
 
 export const csvStaticRenderer: StaticRenderer = {
 	fileExtensions: ["csv", "tsv"],
@@ -51,27 +64,34 @@ export const csvStaticRenderer: StaticRenderer = {
 		if (isBlank(beforeParsed) && isBlank(afterParsed))
 			return { skipped: "empty" };
 		const counts = countRows(beforeParsed, afterParsed);
+		// An export has a column per field, and one row of a hundred of them is
+		// wider than the card on its own: the width is trimmed the way the
+		// height is, to the columns that changed and their neighbours.
+		let width = columnBudget(options.maxBytes);
+		let columns = trimColumns(beforeParsed, afterParsed, width);
 		// A ledger is mostly rows nobody touched. Keep the ones that changed,
 		// with a neighbour on each side, when the whole table will not fit.
 		//
-		// The budget is an estimate — a removed row is drawn beside the row
+		// Both budgets are estimates — a removed row is drawn beside the row
 		// that replaced it, and a cell's markup is longer than its text — so
 		// a render that overshoots is halved and drawn again rather than
 		// refused. Three attempts take it from "most of the file" to "the
 		// change and its neighbours".
-		let budget = rowBudget(options.maxBytes, beforeParsed.columns.length);
-		let trimmed = trimToChanges(beforeParsed, afterParsed, budget);
+		let rows = rowBudget(options.maxBytes, columns.kept.length);
+		let trimmed = trimToChanges(beforeParsed, afterParsed, rows, columns);
 		let html = renderTable(trimmed);
 		for (
 			let attempt = 0;
 			attempt < 3 &&
 			options.maxBytes !== undefined &&
 			byteLength(html) > options.maxBytes &&
-			budget > MIN_ROWS;
+			(rows > MIN_ROWS || width > MIN_COLUMNS);
 			attempt += 1
 		) {
-			budget = Math.max(MIN_ROWS, Math.floor(budget / 2));
-			trimmed = trimToChanges(beforeParsed, afterParsed, budget);
+			rows = Math.max(MIN_ROWS, Math.floor(rows / 2));
+			width = Math.max(MIN_COLUMNS, Math.floor(width / 2));
+			columns = trimColumns(beforeParsed, afterParsed, width);
+			trimmed = trimToChanges(beforeParsed, afterParsed, rows, columns);
 			html = renderTable(trimmed);
 		}
 		return {
@@ -83,20 +103,31 @@ export const csvStaticRenderer: StaticRenderer = {
 	},
 };
 
-/** The table as the card draws it: both sides, and the gaps between. */
-function renderTable(trimmed: {
+/** Both sides of the table as the trim left them, and what it left out. */
+type TrimmedTable = {
 	readonly before: string;
 	readonly after: string;
+	readonly hidden: number;
 	readonly gaps: readonly CsvRowGap[];
-}): string {
+	readonly columnGaps: readonly CsvColumnGap[];
+};
+
+/** The columns a card keeps, and the runs it left between them. */
+type TrimmedColumns = {
+	readonly kept: readonly number[];
+	readonly gaps: readonly CsvColumnGap[];
+};
+
+/** The table as the card draws it: both sides, and the gaps between. */
+function renderTable(trimmed: TrimmedTable): string {
 	const html = renderCsvReviewDiffHtml(
 		{
 			beforeData: encode(trimmed.before),
 			afterData: encode(trimmed.after),
 		},
-		// The rows the trim left out are named where they were, the way a
-		// pruned run is in a document.
-		{ gaps: trimmed.gaps },
+		// The rows and columns the trim left out are named where they were, the
+		// way a pruned run is in a document.
+		{ gaps: trimmed.gaps, columnGaps: trimmed.columnGaps },
 	);
 	return `<div class="csv-diff">${html}</div>`;
 }
@@ -180,6 +211,24 @@ function rowBudget(maxBytes: number | undefined, columnCount: number): number {
 }
 
 /**
+ * Columns a card can hold: what stays legible, and what the budget allows.
+ *
+ * A cell costs the same hundred and twenty bytes whichever way it is counted,
+ * so the byte half of this is how many fit across a card showing the header
+ * and the fewest rows it ever shows.
+ */
+function columnBudget(maxBytes: number | undefined): number {
+	if (maxBytes === undefined) return MAX_COLUMNS;
+	return Math.max(
+		MIN_COLUMNS,
+		Math.min(
+			MAX_COLUMNS,
+			Math.floor((maxBytes - 600) / (120 * (MIN_ROWS + 1))),
+		),
+	);
+}
+
+/**
  * Both sides, cut to the rows that changed and their neighbours.
  *
  * Dropping a row from one side only would read as a deletion, so a row is
@@ -190,25 +239,25 @@ function trimToChanges(
 	beforeParsed: CsvParseResult,
 	afterParsed: CsvParseResult,
 	budget: number,
-): {
-	before: string;
-	after: string;
-	hidden: number;
-	gaps: readonly CsvRowGap[];
-} {
+	columns: TrimmedColumns,
+): TrimmedTable {
 	const height = Math.max(beforeParsed.rows.length, afterParsed.rows.length);
 	if (height <= budget)
 		return {
-			before: toCsv(beforeParsed),
-			after: toCsv(afterParsed),
+			before: toCsv(beforeParsed, undefined, columns.kept),
+			after: toCsv(afterParsed, undefined, columns.kept),
 			hidden: 0,
 			gaps: [],
+			columnGaps: columns.gaps,
 		};
 	const changed = new Set<number>();
 	for (let index = 0; index < height; index += 1) {
 		const before = beforeParsed.rows[index];
 		const after = afterParsed.rows[index];
-		if (!before || !after || !sameCells(before, after)) changed.add(index);
+		// A row whose only change is in a column the card is not showing reads
+		// as unchanged here, because that is how it reads on the card.
+		if (!before || !after || !sameCells(before, after, columns.kept))
+			changed.add(index);
 	}
 	const keep = new Set<number>();
 	for (const index of changed)
@@ -224,11 +273,94 @@ function trimToChanges(
 			keep.delete(index);
 	const kept = [...keep].sort((left, right) => left - right);
 	return {
-		before: toCsv(beforeParsed, kept),
-		after: toCsv(afterParsed, kept),
+		before: toCsv(beforeParsed, kept, columns.kept),
+		after: toCsv(afterParsed, kept, columns.kept),
 		hidden: height - kept.length,
 		gaps: gapsBetween(kept, height),
+		columnGaps: columns.gaps,
 	};
+}
+
+/**
+ * The columns a card keeps: the ones that changed, and their neighbours.
+ *
+ * An export has a column per field, and one row of a hundred of them is wider
+ * than the card on its own — no ceiling on rows makes a row narrower. Where
+ * nothing changed sideways the leading columns are kept, because the first
+ * column is what names a row.
+ */
+function trimColumns(
+	beforeParsed: CsvParseResult,
+	afterParsed: CsvParseResult,
+	budget: number,
+): TrimmedColumns {
+	const width = Math.max(
+		beforeParsed.columns.length,
+		afterParsed.columns.length,
+	);
+	if (width <= budget)
+		return {
+			kept: Array.from({ length: width }, (_, index) => index),
+			gaps: [],
+		};
+	const changed = new Set<number>();
+	for (let index = 0; index < width; index += 1)
+		if (columnChanged(beforeParsed, afterParsed, index)) changed.add(index);
+	const keep = new Set<number>();
+	for (const index of changed)
+		for (
+			let near = Math.max(0, index - 1);
+			near <= Math.min(width - 1, index + 1);
+			near += 1
+		)
+			keep.add(near);
+	// Over budget even so: the change is wider than the card.
+	if (keep.size > budget)
+		for (const index of [...keep].sort((a, b) => a - b).slice(budget))
+			keep.delete(index);
+	// Room left over goes to the front of the table, where the column that
+	// names the row is.
+	for (let index = 0; index < width && keep.size < budget; index += 1)
+		keep.add(index);
+	const kept = [...keep].sort((left, right) => left - right);
+	return { kept, gaps: columnGapsBetween(kept, width) };
+}
+
+/** True when a column's name, or any of its cells, differs between sides. */
+function columnChanged(
+	beforeParsed: CsvParseResult,
+	afterParsed: CsvParseResult,
+	index: number,
+): boolean {
+	if (
+		(beforeParsed.columns[index] ?? "") !== (afterParsed.columns[index] ?? "")
+	)
+		return true;
+	const height = Math.max(beforeParsed.rows.length, afterParsed.rows.length);
+	for (let row = 0; row < height; row += 1)
+		if (
+			(beforeParsed.rows[row]?.cells[index] ?? "") !==
+			(afterParsed.rows[row]?.cells[index] ?? "")
+		)
+			return true;
+	return false;
+}
+
+/** Where the trim left columns out, counted the way a row gap counts rows. */
+function columnGapsBetween(
+	kept: readonly number[],
+	width: number,
+): readonly CsvColumnGap[] {
+	const gaps: CsvColumnGap[] = [];
+	let previous = -1;
+	kept.forEach((column, index) => {
+		const missing = column - previous - 1;
+		if (missing > 0) gaps.push({ index, columns: missing });
+		previous = column;
+	});
+	const trailing = width - 1 - previous;
+	if (trailing > 0) gaps.push({ index: kept.length, columns: trailing });
+	return gaps;
 }
 
 /**
@@ -251,13 +383,21 @@ function gapsBetween(
 	return gaps;
 }
 
-/** A parsed table back to text, optionally only some of its rows. */
-function toCsv(parsed: CsvParseResult, rows?: readonly number[]): string {
-	const lines = [parsed.columns.map(quoteCell).join(",")];
+/** A parsed table back to text, optionally only some of its rows and columns. */
+function toCsv(
+	parsed: CsvParseResult,
+	rows?: readonly number[],
+	columns?: readonly number[],
+): string {
+	const pick = (cells: readonly string[]): string[] =>
+		columns === undefined
+			? [...cells]
+			: columns.map((column) => cells[column] ?? "");
+	const lines = [pick(parsed.columns).map(quoteCell).join(",")];
 	const indexes = rows ?? parsed.rows.map((_, index) => index);
 	for (const index of indexes) {
 		const row = parsed.rows[index];
-		if (row) lines.push(row.cells.map(quoteCell).join(","));
+		if (row) lines.push(pick(row.cells).map(quoteCell).join(","));
 	}
 	return `${lines.join("\n")}\n`;
 }
@@ -275,7 +415,15 @@ function identity(row: CsvRow): string {
 	return first ? `first:${first}` : `row:${row.cells.join("")}`;
 }
 
-function sameCells(left: CsvRow, right: CsvRow): boolean {
+function sameCells(
+	left: CsvRow,
+	right: CsvRow,
+	columns?: readonly number[],
+): boolean {
+	if (columns !== undefined)
+		return columns.every(
+			(column) => (left.cells[column] ?? "") === (right.cells[column] ?? ""),
+		);
 	if (left.cells.length !== right.cells.length) return false;
 	return left.cells.every((cell, index) => cell === right.cells[index]);
 }

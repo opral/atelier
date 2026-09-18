@@ -372,6 +372,47 @@ test("a long table is trimmed, not refused, and says what it left out", () => {
 	).toEqual({ skipped: "too-large" });
 });
 
+test("a wide table is trimmed to the columns that changed", () => {
+	// An export has a column per field, and a card is narrower than an export.
+	// The row trim cannot help: one row of a hundred columns is wider than the
+	// whole card on its own.
+	const columns = Array.from({ length: 120 }, (_, index) => `field_${index}`);
+	const row = (index: number) =>
+		columns.map((_, column) => `r${index}c${column}`).join(",");
+	const before = `${columns.join(",")}\n${Array.from({ length: 30 }, (_, index) => row(index)).join("\n")}\n`;
+	const after = before.replace("r5c60", "CHANGED");
+
+	const result = toHtml(
+		{ path: "/export.csv", before: bytes(before), after: bytes(after) },
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	// The changed column survives, with its name; the untouched width does not,
+	// and is named where it was rather than silently missing.
+	expect(result.html).toContain("CHANGED");
+	expect(result.html).toContain("field_60");
+	expect(result.html).toContain("csv-diff-gap-column");
+	expect(result.html).toMatch(/⋯ \d+ columns/);
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+
+	// A table that fits keeps every column it has.
+	const narrow = toHtml(
+		{
+			path: "/leads.csv",
+			before: bytes("id,name,stage\n1,Acme,lead\n"),
+			after: bytes("id,name,stage\n1,Acme,qualified\n"),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(narrow) && narrow.html).not.toContain(
+		"csv-diff-gap-column",
+	);
+});
+
 test("a ledger is trimmed to the rows that changed", () => {
 	const rows = Array.from({ length: 120 }, (_, index) => `${index},acme,open`);
 	const before = `id,account,state\n${rows.join("\n")}\n`;
