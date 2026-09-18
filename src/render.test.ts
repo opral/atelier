@@ -465,6 +465,51 @@ test("a ledger is trimmed to the rows that changed", () => {
 	expect(removed.length).toBeLessThan(3);
 });
 
+test("a cell wider than the card is cut around what changed", () => {
+	// A JSON blob, a pasted document, a base64 thumbnail: one cell can be
+	// wider than the whole card, and no ceiling on rows or columns makes a
+	// cell narrower.
+	const blob = (mark: string) =>
+		`${"x".repeat(30_000)}${mark}${"y".repeat(30_000)}`;
+	const result = toHtml(
+		{
+			path: "/records.csv",
+			before: bytes(`id,payload\n1,${blob("BEFORE")}\n2,ok\n`),
+			after: bytes(`id,payload\n1,${blob("AFTER")}\n2,ok\n`),
+		},
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	// The cut opens where the two sides first differ, so what changed is still
+	// on the card rather than cut away with the thirty thousand characters
+	// before it, and the cell is marked as the change it is.
+	expect(result.html).toContain("AFTER");
+	expect(result.html).toContain('data-diff-status="modified"');
+	expect(result.html).toMatch(/⋯ \d+ more characters/);
+	expect(result.html).toMatch(/⋯ \d+ characters ⋯/);
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+
+	// A cell that fits is never cut: most cells are a word.
+	const ordinary = toHtml(
+		{
+			path: "/leads.csv",
+			before: bytes("id,note\n1,A short note about the account.\n"),
+			after: bytes("id,note\n1,A shorter note about the account.\n"),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(ordinary) && ordinary.html).toContain(
+		"note about the account.",
+	);
+	expect(isRendered(ordinary) && ordinary.html).not.toContain(
+		"more characters",
+	);
+});
+
 test("a host retints by redefining a token on an ancestor", () => {
 	// The tokens are declared on the root, so the nearest ancestor that
 	// redefines one wins. Declared on the render itself they would beat the
