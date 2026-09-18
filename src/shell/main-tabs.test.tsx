@@ -251,6 +251,71 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("a tab renames its file, and refuses a name another file has", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			const tab = mainTabButtons().at(-1)!;
+			// The menu carries it; F2 on the chip is the same act.
+			fireEvent.contextMenu(tab);
+			const item = await screen.findByText("Rename");
+			await act(async () => {
+				fireEvent.click(item);
+			});
+
+			const field = () =>
+				document.querySelector<HTMLInputElement>(
+					"[data-attr='panel-tab-rename-input']",
+				);
+			await waitFor(() => expect(field()).toBeTruthy());
+			expect(field()!.value).toBe("one.md");
+
+			// A name typed without an extension keeps the file's.
+			await act(async () => {
+				fireEvent.change(field()!, { target: { value: "plan" } });
+				fireEvent.keyDown(field()!, { key: "Enter" });
+			});
+			await waitFor(() => {
+				expect(mainTabLabels()).toEqual(["«home»", "plan.md"]);
+			});
+			const renamed = await qb(shell.lix)
+				.selectFrom("lix_file")
+				.select(["path"])
+				.where("id", "=", fakeUuid("one"))
+				.executeTakeFirst();
+			expect(renamed?.path).toBe("/plan.md");
+
+			// A name another file already has keeps the field open on it.
+			const tabAgain = mainTabButtons().at(-1)!;
+			fireEvent.keyDown(tabAgain, { key: "F2" });
+			await waitFor(() => expect(field()).toBeTruthy());
+			await act(async () => {
+				fireEvent.change(field()!, { target: { value: "two.md" } });
+				fireEvent.keyDown(field()!, { key: "Enter" });
+			});
+			await waitFor(() => {
+				expect(field()?.getAttribute("aria-invalid")).toBe("true");
+			});
+			const kept = await qb(shell.lix)
+				.selectFrom("lix_file")
+				.select(["path"])
+				.where("id", "=", fakeUuid("one"))
+				.executeTakeFirst();
+			expect(kept?.path).toBe("/plan.md");
+
+			// Escape gives up, and the chip comes back.
+			await act(async () => {
+				fireEvent.keyDown(field()!, { key: "Escape" });
+			});
+			await waitFor(() => expect(field()).toBeNull());
+			expect(mainTabLabels()).toEqual(["«home»", "plan.md"]);
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("animates the pinned home label between expanded and compact states", async () => {
 		const shell = await renderTabbedShell();
 		try {

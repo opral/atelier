@@ -29,6 +29,7 @@ import {
 	Check,
 	ChevronDown,
 	CopyMinus,
+	Pencil,
 	Plus,
 	X,
 } from "lucide-react";
@@ -55,6 +56,7 @@ import {
 	resolveExtensionMenuItems,
 } from "../extension-runtime/extension-menu-items";
 import { panelShortcutHint } from "@/lib/platform";
+import { tabRenameTarget } from "./tab-rename";
 import type {
 	Area,
 	AreaState,
@@ -205,6 +207,7 @@ export function PanelV2({
 	viewContext,
 	tabLabel,
 	tabTooltip,
+	onRenameTab,
 	emptyStatePlaceholder,
 	onActiveViewInteraction,
 	dropId,
@@ -549,6 +552,11 @@ export function PanelV2({
 											? undefined
 											: () => handleRemoveView(entry.instance)
 									}
+									onRename={
+										onRenameTab && typeof entry.state?.filePath === "string"
+											? (nextName) => onRenameTab(entry, nextName)
+											: undefined
+									}
 								/>
 							);
 						})}
@@ -664,6 +672,16 @@ export type PanelV2Props = {
 		view: ExtensionDefinition,
 		instance: ExtensionInstance,
 	) => string | undefined;
+	/**
+	 * Renames the file a document tab is on, from the tab. Resolves false
+	 * when the workspace refuses the name and the field stays open on it.
+	 * Absent means tabs do not rename — a read-only workspace, or a host that
+	 * owns naming itself.
+	 */
+	readonly onRenameTab?: (
+		instance: ExtensionInstance,
+		nextName: string,
+	) => Promise<boolean>;
 	readonly emptyStatePlaceholder?: ReactNode;
 	readonly onActiveViewInteraction?: (instance: string) => void;
 	readonly dropId?: string;
@@ -894,6 +912,7 @@ export function PanelTabStrip({
 	onAddView,
 	tabLabel,
 	tabTooltip,
+	onRenameTab,
 	preferencesFor,
 }: {
 	readonly side: Area;
@@ -907,6 +926,7 @@ export function PanelTabStrip({
 	readonly onAddView?: (kind: ExtensionKind, state?: ExtensionState) => void;
 	readonly tabLabel?: PanelV2Props["tabLabel"];
 	readonly tabTooltip?: PanelV2Props["tabTooltip"];
+	readonly onRenameTab?: PanelV2Props["onRenameTab"];
 	readonly preferencesFor?: (
 		extensionId: ExtensionKind,
 	) => AtelierExtensionPreferences;
@@ -1039,6 +1059,11 @@ export function PanelTabStrip({
 												handleRemoveView(sibling.instance);
 											}
 										}
+									: undefined
+							}
+							onRename={
+								onRenameTab && typeof entry.state?.filePath === "string"
+									? (nextName) => onRenameTab(entry, nextName)
 									: undefined
 							}
 							extensionMenuItems={extensionMenuItems}
@@ -1635,6 +1660,12 @@ interface SortableTabProps extends PanelTabPreviewProps {
 	readonly onCloseRight?: () => void;
 	readonly extensionMenuItems?: readonly AtelierExtensionMenuItem[];
 	readonly isPending?: boolean;
+	/**
+	 * Renames the file this tab is on. Resolves false when the name is taken
+	 * or refused, and the field stays open on it. Absent for a tab that is not
+	 * a file, and for a read-only workspace.
+	 */
+	readonly onRename?: (nextName: string) => Promise<boolean>;
 }
 
 const tabMenuItemClasses =
@@ -1647,22 +1678,33 @@ const tabMenuItemClasses =
 function TabContextMenu({
 	children,
 	extensionMenuItems = [],
+	onRename,
 	onClose,
 	onCloseOthers,
 	onCloseRight,
 }: {
 	readonly children: ReactNode;
 	readonly extensionMenuItems?: readonly AtelierExtensionMenuItem[];
+	readonly onRename?: () => void;
 	readonly onClose?: () => void;
 	readonly onCloseOthers?: () => void;
 	readonly onCloseRight?: () => void;
 }) {
+	// Closing the menu hands focus back to the chip it was opened on. After
+	// Rename that chip is a field, and the restore would take the focus off
+	// it the moment it arrived.
+	const renameSelected = useRef(false);
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
 			<ContextMenuContent
 				className="w-[182px] min-w-[182px] rounded-[9px] p-1 shadow-lg"
 				data-attr="panel-tab-context-menu"
+				onCloseAutoFocus={(event) => {
+					if (!renameSelected.current) return;
+					renameSelected.current = false;
+					event.preventDefault();
+				}}
 			>
 				{extensionMenuItems.length > 0 ? (
 					<>
@@ -1671,6 +1713,22 @@ function TabContextMenu({
 							itemClassName={tabMenuItemClasses}
 							separatorClassName="mx-1.5 my-1"
 						/>
+						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
+					</>
+				) : null}
+				{onRename ? (
+					<>
+						<ContextMenuItem
+							className={tabMenuItemClasses}
+							onSelect={() => {
+								renameSelected.current = true;
+								onRename();
+							}}
+							data-attr="panel-tab-context-rename"
+						>
+							<Pencil aria-hidden="true" />
+							Rename
+						</ContextMenuItem>
 						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
 					</>
 				) : null}
@@ -1726,7 +1784,9 @@ function SortableTab({
 	onCloseOthers,
 	onCloseRight,
 	extensionMenuItems,
+	onRename,
 }: SortableTabProps) {
+	const [renaming, setRenaming] = useState(false);
 	const {
 		attributes,
 		listeners,
@@ -1751,9 +1811,24 @@ function SortableTab({
 		transition,
 	};
 
+	// The field replaces the chip rather than sitting inside it: a tab is a
+	// button, and a button is no place to type.
+	if (renaming && onRename)
+		return (
+			<TabRenameField
+				ref={setNodeRef}
+				icon={icon}
+				name={label}
+				style={style}
+				onRename={onRename}
+				onDone={() => setRenaming(false)}
+			/>
+		);
+
 	return (
 		<TabContextMenu
 			extensionMenuItems={extensionMenuItems}
+			onRename={onRename ? () => setRenaming(true) : undefined}
 			onClose={onClose}
 			onCloseOthers={onCloseOthers}
 			onCloseRight={onCloseRight}
@@ -1762,6 +1837,7 @@ function SortableTab({
 				ref={setNodeRef}
 				icon={icon}
 				label={label}
+				onRenameRequest={onRename ? () => setRenaming(true) : undefined}
 				tooltip={tooltip}
 				isActive={isActive}
 				isFocused={isFocused}
@@ -1798,6 +1874,124 @@ const fileGlyphForLabel = (label: string): TabIcon | null => {
 	return FileGlyph;
 };
 
+/**
+ * The tab, as a field.
+ *
+ * It opens with the name selected up to the extension — the part anyone
+ * means to change — commits on Enter or when it loses focus, gives up on
+ * Escape, and stays open and marked when the name is taken, where the next
+ * click away abandons the rename rather than asking again.
+ */
+const TabRenameField = forwardRef<
+	HTMLSpanElement,
+	{
+		readonly icon: TabIcon;
+		readonly name: string;
+		readonly style?: CSSProperties;
+		readonly onRename: (nextName: string) => Promise<boolean>;
+		readonly onDone: () => void;
+	}
+>(({ icon: Icon, name, style, onRename, onDone }, ref) => {
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	const [value, setValue] = useState(name);
+	const [busy, setBusy] = useState(false);
+	const [rejected, setRejected] = useState(false);
+	const settled = useRef(false);
+	// The menu's focus restore lands after the field mounts; a blur before
+	// the field has had the focus at all is that, not the reader leaving.
+	const focused = useRef(false);
+
+	useEffect(() => {
+		// The context menu hands focus back to the chip as it closes, and the
+		// chip is gone: take the focus on the next frame, once it has.
+		const frame = requestAnimationFrame(() => {
+			const input = inputRef.current;
+			if (!input) return;
+			input.focus();
+			const target = tabRenameTarget(name);
+			input.setSelectionRange(0, target ? target.stem.length : name.length);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [name]);
+
+	const finish = () => {
+		if (settled.current) return;
+		settled.current = true;
+		onDone();
+	};
+
+	const commit = async () => {
+		if (settled.current || busy) return;
+		const next = value.trim();
+		if (next.length === 0 || next === name) return finish();
+		setBusy(true);
+		const renamed = await onRename(next);
+		setBusy(false);
+		if (renamed) return finish();
+		setRejected(true);
+		inputRef.current?.select();
+	};
+
+	return (
+		<span
+			ref={ref}
+			style={style}
+			data-attr="panel-tab-rename"
+			className={clsx(
+				tabBaseClasses,
+				tabStateClasses.focused,
+				"gap-1.5 px-2.5",
+				rejected && "border-danger",
+			)}
+		>
+			<span
+				data-tab-icon
+				className="relative flex size-3.25 items-center justify-center"
+			>
+				<Icon className="size-3.25" />
+			</span>
+			<input
+				ref={inputRef}
+				value={value}
+				aria-label="File name"
+				aria-invalid={rejected || undefined}
+				disabled={busy}
+				spellCheck={false}
+				autoComplete="off"
+				data-attr="panel-tab-rename-input"
+				style={{ width: `${Math.max(value.length, 6)}ch` }}
+				className="max-w-40 min-w-0 bg-transparent text-[12.5px] font-semibold text-fg outline-none"
+				onChange={(event) => {
+					setRejected(false);
+					setValue(event.target.value);
+				}}
+				onFocus={() => {
+					focused.current = true;
+				}}
+				onBlur={() => {
+					// A name the workspace refused is abandoned by clicking away;
+					// asking again on every blur would be a trap.
+					if (busy || !focused.current) return;
+					if (rejected) finish();
+					else void commit();
+				}}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") {
+						event.preventDefault();
+						void commit();
+						return;
+					}
+					if (event.key === "Escape") {
+						event.preventDefault();
+						finish();
+					}
+				}}
+			/>
+		</span>
+	);
+});
+TabRenameField.displayName = "TabRenameField";
+
 const tabBaseClasses =
 	"group relative flex h-7 flex-none max-w-80 items-center rounded-control border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg";
 
@@ -1814,6 +2008,8 @@ const tabStateClasses = {
 interface TabBaseProps extends PanelTabPreviewProps {
 	readonly onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
 	readonly onClose?: () => void;
+	/** F2 on the focused chip, the shortcut a file tree renames with. */
+	readonly onRenameRequest?: () => void;
 	/**
 	 * Side-panel chips reveal close as a corner badge on hover; main
 	 * document tabs use an inline X when active and reveal it on hover otherwise.
@@ -1843,6 +2039,7 @@ const TabButtonBase = forwardRef<
 			closeOnHoverOnly,
 			onClick,
 			onClose,
+			onRenameRequest,
 			isDragging,
 			dataFocused,
 			dataViewInstance,
@@ -1850,6 +2047,7 @@ const TabButtonBase = forwardRef<
 			buttonProps = null,
 			style,
 			className,
+			onKeyDown: outerOnKeyDown,
 			// Wrappers like the context-menu trigger slot extra DOM props onto
 			// this button; they must reach the element for those to work.
 			...rest
@@ -1857,7 +2055,11 @@ const TabButtonBase = forwardRef<
 		ref,
 	) => {
 		const state = isActive ? (isFocused ? "focused" : "active") : "idle";
-		const { onClick: dragOnClick, ...restButtonProps } = buttonProps ?? {};
+		const {
+			onClick: dragOnClick,
+			onKeyDown: dragOnKeyDown,
+			...restButtonProps
+		} = buttonProps ?? {};
 		// An inactive pinned tab compacts to its icon, like a browser home button.
 		// Keep the label mounted so the native tab can animate between its full
 		// and compact forms instead of popping in and out of the layout.
@@ -1875,6 +2077,15 @@ const TabButtonBase = forwardRef<
 				onClick={(event) => {
 					dragOnClick?.(event);
 					onClick?.(event);
+				}}
+				onKeyDown={(event) => {
+					outerOnKeyDown?.(event);
+					if (event.key === "F2" && onRenameRequest) {
+						event.preventDefault();
+						onRenameRequest();
+						return;
+					}
+					dragOnKeyDown?.(event);
 				}}
 				ref={ref}
 				data-focused={dataFocused}
