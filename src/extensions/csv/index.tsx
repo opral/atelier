@@ -135,6 +135,7 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
+import { columnAnchorAfterDelete } from "./csv-grid-anchor";
 import {
 	appendDocumentRow,
 	CSV_SEED_TEXT,
@@ -1985,6 +1986,18 @@ function CsvTable({
 		if (!pendingColumnReveal.current) return;
 		pendingColumnReveal.current = false;
 		const column = columnCount - 1;
+		// The new column is where the reader is now, the same way an appended
+		// row takes the selection: landing back on the first cell of the table
+		// makes a column added on the right feel like it happened elsewhere.
+		setGridSelection({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.empty(),
+			current: {
+				cell: [column, 0],
+				range: { x: column, y: 0, width: 1, height: 1 },
+				rangeStack: [],
+			},
+		});
 		requestAnimationFrame(() => {
 			gridRef.current?.scrollTo(column, 0, "horizontal");
 			gridRef.current?.focus();
@@ -2876,17 +2889,25 @@ function CsvTable({
 									: null;
 							}}
 							onInsertLeft={() =>
-								runStructuralEdit(() => editing.onInsertColumn(menu.column))
+								runStructuralEdit(
+									() => editing.onInsertColumn(menu.column),
+									// The column that was just made, not the table's corner.
+									[menu.column, 0],
+								)
 							}
 							onInsertRight={() =>
 								runStructuralEdit(() => {
 									if (menu.column === columnCount - 1)
 										pendingColumnReveal.current = true;
 									editing.onInsertColumn(menu.column + 1);
-								})
+								}, [menu.column + 1, 0])
 							}
 							onDelete={() =>
-								runStructuralEdit(() => editing.onDeleteColumns(menuColumns))
+								runStructuralEdit(
+									() => editing.onDeleteColumns(menuColumns),
+									// The column that takes the first deleted one's place.
+									[columnAnchorAfterDelete(menuColumns, columnCount), 0],
+								)
 							}
 						/>
 					) : (
