@@ -33,7 +33,18 @@ export type CsvCellEdit = {
 	readonly value: string;
 };
 
-export const CSV_SEED_TEXT = "Column 1,Column 2,Column 3\n";
+/**
+ * The table a file that has none yet is drawn as: three columns and three
+ * empty rows, the way a new table reads in Notion. Nothing is written for
+ * opening such a file — the seed becomes the file the moment anything is
+ * typed into it.
+ */
+export const CSV_SEED_TEXT = "Column 1,Column 2,Column 3\n,,\n,,\n,,\n";
+
+/** Whether a file holds a table at all, or is waiting to be given one. */
+export function isSeedableCsvText(text: string): boolean {
+	return text.trim() === "";
+}
 
 export function parseCsvDocument(rawText: string): CsvDocument {
 	const bom = rawText.startsWith("\uFEFF") ? "\uFEFF" : "";

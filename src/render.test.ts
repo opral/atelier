@@ -214,14 +214,27 @@ test("a path that names a directory has no view", () => {
 	);
 });
 
-test("a table is measured by the side that has the rows", () => {
+test("a long table is trimmed, not refused, and says what it left out", () => {
 	const many = `id,v\n${Array.from({ length: 3_000 }, (_, i) => `${i},a`).join("\n")}\n`;
+	const result = toHtml(
+		{ path: "/big.csv", before: bytes(many), after: bytes("id,v\n0,a\n") },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	// The count is the whole change; the table is only what fits, and the
+	// rows it leaves out are named where they were.
+	expect(result.counts?.removed).toBe(2_999);
+	expect(result.hidden).toBeGreaterThan(2_900);
+	expect(result.html).toContain("csv-diff-gap");
+	expect(result.html).toMatch(/⋯ [\d,]+ unchanged rows/);
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+	// A table nobody can parse in a card is still refused, by its bytes.
+	const huge = `id,v\n${Array.from({ length: 30_000 }, (_, i) => `${i},${"x".repeat(8)}`).join("\n")}\n`;
 	expect(
-		toHtml({
-			path: "/big.csv",
-			before: bytes(many),
-			after: bytes("id,v\n0,a\n"),
-		}),
+		toHtml({ path: "/huge.csv", before: bytes(huge), after: bytes("id,v\n") }),
 	).toEqual({ skipped: "too-large" });
 });
 

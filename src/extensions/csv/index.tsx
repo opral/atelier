@@ -138,6 +138,7 @@ import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
 import {
 	appendDocumentRow,
 	CSV_SEED_TEXT,
+	isSeedableCsvText,
 	csvDocumentView,
 	deleteDocumentColumns,
 	deleteDocumentRows,
@@ -600,9 +601,14 @@ function EditableCsvView({
 	const [documentText, setDocumentText] = useState(syncedText);
 	useEffect(() => setDocumentText(syncedText), [syncedText]);
 
+	// A file with no table in it yet is drawn as the table it is about to
+	// be — headers and a few empty rows — rather than as a message about
+	// what it lacks. The seed is only on screen: an edit writes it along with
+	// whatever was typed, and opening the file writes nothing.
+	const seeded = !isReadOnly && !isReviewing && isSeedableCsvText(documentText);
 	const csvDocument = useMemo(
-		() => parseCsvDocument(documentText),
-		[documentText],
+		() => parseCsvDocument(seeded ? CSV_SEED_TEXT : documentText),
+		[documentText, seeded],
 	);
 	const view = useMemo(() => csvDocumentView(csvDocument), [csvDocument]);
 	const documentRef = useRef(csvDocument);
@@ -873,10 +879,6 @@ function EditableCsvView({
 		[applyDocumentEdit, materializeColumns],
 	);
 
-	const handleCreateTable = useCallback(() => {
-		applyDocumentEdit(() => parseCsvDocument(CSV_SEED_TEXT));
-	}, [applyDocumentEdit]);
-
 	const editing = useMemo<CsvTableEditing | undefined>(
 		() =>
 			isReadOnly
@@ -929,7 +931,6 @@ function EditableCsvView({
 			}
 			parsedOverride={isReviewing ? parseCsv(fileText) : view}
 			editing={editing}
-			onCreateTable={isReadOnly ? undefined : handleCreateTable}
 			saveError={saveError}
 			reviewData={reviewData}
 			reviewPending={reviewPending}
@@ -1111,7 +1112,6 @@ function CsvDocument({
 	fileRow,
 	parsedOverride,
 	editing,
-	onCreateTable,
 	saveError = null,
 	reviewData = null,
 	reviewPending = false,
@@ -1120,7 +1120,6 @@ function CsvDocument({
 	readonly fileRow: CsvFileRow;
 	readonly parsedOverride?: CsvParseResult;
 	readonly editing?: CsvTableEditing;
-	readonly onCreateTable?: () => void;
 	readonly saveError?: string | null;
 	readonly reviewData?: CsvReviewData | null;
 	/** The review's sides are still being read: paint nothing live meanwhile. */
@@ -1151,7 +1150,6 @@ function CsvDocument({
 				{parsed.columns.length === 0 && !reviewData ? (
 					<CsvEmptyState
 						filePath={fileRow.path}
-						onCreateTable={onCreateTable}
 						reviewPending={reviewPending}
 					/>
 				) : (
@@ -3096,13 +3094,16 @@ function editedCellText(value: EditableGridCell): string | null {
 	return null;
 }
 
+/**
+ * What is left of the empty state: a file nobody can type into — a review's
+ * side, a read-only host — that holds no table. An editable one is drawn as
+ * the table it is about to be instead (see `isSeedableCsvText`).
+ */
 function CsvEmptyState({
 	filePath,
-	onCreateTable,
 	reviewPending = false,
 }: {
 	readonly filePath: string;
-	readonly onCreateTable?: () => void;
 	/** The review's sides are still being read: the empty file is not the picture. */
 	readonly reviewPending?: boolean;
 }) {
@@ -3128,16 +3129,6 @@ function CsvEmptyState({
 					</span>{" "}
 					is empty or does not contain a header row.
 				</p>
-				{onCreateTable ? (
-					<button
-						type="button"
-						className="csv-create-table-button"
-						onClick={onCreateTable}
-					>
-						<Plus aria-hidden="true" size={14} />
-						<span>Create table</span>
-					</button>
-				) : null}
 			</div>
 		</div>
 	);

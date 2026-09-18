@@ -687,7 +687,7 @@ test("does not edit cells when the view is read only", async () => {
 	}
 });
 
-test("creates a seeded table in an empty CSV file", async () => {
+test("an empty CSV file is drawn as the table it is about to be", async () => {
 	const lix = await openLix();
 	let utils: ReturnType<typeof render> | undefined;
 	try {
@@ -712,24 +712,30 @@ test("creates a seeded table in an empty CSV file", async () => {
 			);
 		});
 
-		const createButton = await screen.findByRole("button", {
-			name: /create table/i,
-		});
-		await act(async () => {
-			createButton.click();
-		});
-
-		await waitFor(async () => {
+		// The table is on screen without anyone asking for it.
+		expect(await screen.findByText("Column 1")).toBeInTheDocument();
+		expect(screen.queryByText(/No CSV rows to display/)).toBeNull();
+		const content = async () => {
 			const row = await qb(lix)
 				.selectFrom("lix_file")
 				.select("content")
 				.where("id", "=", fileId)
 				.executeTakeFirst();
-			expect(new TextDecoder().decode(row?.content as Uint8Array)).toBe(
-				"Column 1,Column 2,Column 3\n",
+			return new TextDecoder().decode(row?.content as Uint8Array);
+		};
+		// Opening it wrote nothing: the seed is on screen, not on disk.
+		expect(await content()).toBe("");
+
+		// Typing into it does — the seed, and the row that was added to it.
+		const addRow = await screen.findByRole("button", { name: /add row/i });
+		await act(async () => {
+			addRow.click();
+		});
+		await waitFor(async () => {
+			expect(await content()).toBe(
+				"Column 1,Column 2,Column 3\n,,\n,,\n,,\n,,\n",
 			);
 		});
-		expect(await screen.findByText("Column 1")).toBeInTheDocument();
 	} finally {
 		if (utils) {
 			const rendered = utils;

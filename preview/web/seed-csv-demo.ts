@@ -88,6 +88,9 @@ export async function seedCsvDemo(lix: Lix) {
 		["/csv-extension/pipeline.csv", content, metadata],
 		["/csv-extension/plain-pipeline.csv", content, null],
 		["/csv-extension/leads-blank.csv", leadsContent, null],
+		// A file with no table in it yet: the view draws the table it is about
+		// to be, and writes nothing until something is typed into it.
+		["/csv-extension/untitled.csv", new TextEncoder().encode(""), null],
 	] as const) {
 		const existing = await lix.execute(
 			"SELECT id FROM lix_file WHERE path = $1",
