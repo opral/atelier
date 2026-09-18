@@ -21,6 +21,15 @@ export type GridSort = {
 	readonly direction: "asc" | "desc";
 };
 
+export function gridLazyCellKey(
+	row: Record<string, unknown>,
+	column: GridColumnSpec,
+): string | null {
+	const rowId = row.id;
+	if (typeof rowId !== "string" && typeof rowId !== "number") return null;
+	return `${column.name}:${rowId}`;
+}
+
 export const GRID_PAGE_SIZES = [10, 25, 50, 100] as const;
 export const GRID_DEFAULT_PAGE_SIZE = 50;
 
@@ -170,11 +179,20 @@ export function DataGrid({
 	rows,
 	sort,
 	onSortChange,
+	onLazyBlobRequest,
+	loadingBlobKeys,
+	isColumnSortable,
 }: {
 	readonly columns: readonly GridColumnSpec[];
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
 	readonly sort?: GridSort | null;
 	readonly onSortChange?: (sort: GridSort) => void;
+	readonly onLazyBlobRequest?: (
+		row: Record<string, unknown>,
+		column: GridColumnSpec,
+	) => void;
+	readonly loadingBlobKeys?: ReadonlySet<string>;
+	readonly isColumnSortable?: (column: GridColumnSpec) => boolean;
 }) {
 	const columns = useMemo(
 		() => refineJsonColumns(rawColumns, rows),
@@ -186,6 +204,9 @@ export function DataGrid({
 				<tr>
 					{columns.map((column) => {
 						const isSorted = sort?.column === column.name;
+						const isSortable =
+							onSortChange !== undefined &&
+							(isColumnSortable?.(column) ?? true);
 						const header = (
 							<>
 								<span className="text-[10.5px] font-bold tracking-[0.05em] text-fg-muted uppercase">
@@ -224,7 +245,7 @@ export function DataGrid({
 										: "text-left"
 								}`}
 							>
-								{onSortChange === undefined ? (
+								{!isSortable ? (
 									header
 								) : (
 									<button
@@ -252,6 +273,29 @@ export function DataGrid({
 					<tr key={rowIndex} className="hover:bg-bg-hover-strong">
 						{columns.map((column) => {
 							const rawValue = row[column.name];
+							const lazyCellKey =
+								rawValue === undefined && column.type === "blob"
+									? gridLazyCellKey(row, column)
+									: null;
+							if (lazyCellKey !== null && onLazyBlobRequest !== undefined) {
+								const isLoading = loadingBlobKeys?.has(lazyCellKey) ?? false;
+								return (
+									<td
+										key={column.name}
+										className="h-8 border-b border-[var(--color-border-subtle)] px-3.5 text-right whitespace-nowrap"
+									>
+										<button
+											type="button"
+											onClick={() => onLazyBlobRequest(row, column)}
+											disabled={isLoading}
+											data-attr="sql-lazy-blob"
+											className="font-mono text-[11.5px] text-[var(--color-text-tertiary)] underline decoration-[var(--color-border-panel)] underline-offset-2 hover:text-[var(--color-text-primary)] disabled:cursor-wait disabled:opacity-60"
+										>
+											{isLoading ? "Loading…" : "Load"}
+										</button>
+									</td>
+								);
+							}
 							const isRowRef =
 								column.type === "row_ref" && typeof rawValue === "string";
 							const jsonValue = isRowRef ? rawValue : parseJsonValue(rawValue);
@@ -526,18 +570,30 @@ export function GridFooter({
 	page,
 	pageSize,
 	totalRows,
+	rowCount,
+	hasNext,
 	onPageChange,
 	onPageSizeChange,
 }: {
 	readonly page: number;
 	readonly pageSize: number;
-	readonly totalRows: number;
+	readonly totalRows?: number;
+	readonly rowCount?: number;
+	readonly hasNext?: boolean;
 	readonly onPageChange: (page: number) => void;
 	readonly onPageSizeChange: (pageSize: number) => void;
 }) {
-	const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
-	const start = totalRows === 0 ? 0 : page * pageSize + 1;
-	const end = Math.min(totalRows, (page + 1) * pageSize);
+	const hasKnownTotal = totalRows !== undefined;
+	const visibleRows =
+		rowCount ??
+		(hasKnownTotal
+			? Math.max(0, Math.min(pageSize, totalRows - page * pageSize))
+			: 0);
+	const pageCount = hasKnownTotal
+		? Math.max(1, Math.ceil(totalRows / pageSize))
+		: page + (hasNext ? 2 : 1);
+	const start = visibleRows === 0 ? 0 : page * pageSize + 1;
+	const end = visibleRows === 0 ? 0 : start + visibleRows - 1;
 	const format = (n: number) => n.toLocaleString("en-US");
 
 	return (
@@ -546,10 +602,19 @@ export function GridFooter({
 				data-attr="sql-grid-row-range"
 				className="font-mono text-ui-sm text-fg-subtle"
 			>
-				{format(start)}–{format(end)} <span className="text-fg-faint">of</span>{" "}
-				{format(totalRows)}{" "}
+				{format(start)}–{format(end)}{" "}
 				<span className="text-fg-faint">
-					{totalRows === 1 ? "row" : "rows"}
+					{hasKnownTotal || !hasNext ? "of" : "of more"}
+				</span>{" "}
+				{hasKnownTotal ? format(totalRows) : !hasNext ? format(end) : null}{" "}
+				<span className="text-fg-faint">
+					{hasKnownTotal
+						? totalRows === 1
+							? "row"
+							: "rows"
+						: end === 1
+							? "row"
+							: "rows"}
 				</span>
 			</span>
 			<span className="flex-1" />

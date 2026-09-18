@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Table, X } from "lucide-react";
 import type { Lix } from "@lix-js/sdk";
 import {
 	DataGrid,
 	GridFooter,
 	GRID_DEFAULT_PAGE_SIZE,
+	gridLazyCellKey,
 	type GridColumnSpec,
 	type GridSort,
 } from "./data-grid";
@@ -19,6 +20,7 @@ import {
 /** Variant surfaces of a base table, switched in the toolbar. */
 export const TABLE_SURFACES = ["current", "history"] as const;
 export type TableSurface = (typeof TABLE_SURFACES)[number];
+const EMPTY_COLUMNS: GridColumnSpec[] = [];
 
 export type TableFilter = {
 	readonly column: string;
@@ -72,46 +74,84 @@ export function surfaceTableName(
 }
 
 /**
- * Builds the paginated data query and the matching count query. Identifiers
- * are validated against the schema by the caller; values ride as parameters.
+ * Table browsing is a metadata preview. Large binary values are deliberately
+ * left out of the page query and can be requested one cell at a time by the
+ * grid. The query editor remains the escape hatch for explicitly selecting
+ * raw payloads.
+ */
+export function tablePreviewColumns(
+	columns: readonly GridColumnSpec[],
+): GridColumnSpec[] {
+	return columns.filter(
+		(column) => column.name !== "content" && column.type !== "blob",
+	);
+}
+
+function quoteIdentifier(identifier: string): string {
+	return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+/**
+ * Builds a bounded, schema-driven page query. The extra row is used to derive
+ * hasNext without requiring an exact COUNT(*) before the page can render.
  */
 export function buildTableQuery({
 	table,
+	columns,
 	filters,
 	sort,
 	page,
 	pageSize,
 }: {
 	readonly table: string;
+	readonly columns: readonly GridColumnSpec[];
 	readonly filters: readonly TableFilter[];
 	readonly sort: GridSort | null;
 	readonly page: number;
 	readonly pageSize: number;
-}): { sql: string; countSql: string; params: string[] } {
+}): { sql: string; params: string[] } {
+	const previewColumns = tablePreviewColumns(columns);
+	const previewColumnNames = new Set(
+		previewColumns.map((column) => column.name),
+	);
+	const unsupportedFilter = filters.find(
+		(filter) => !previewColumnNames.has(filter.column),
+	);
+	if (unsupportedFilter !== undefined) {
+		throw new Error(
+			`Table previews do not support filtering on ${unsupportedFilter.column}.`,
+		);
+	}
+	if (sort !== null && !previewColumnNames.has(sort.column)) {
+		throw new Error(`Table previews do not support sorting on ${sort.column}.`);
+	}
+	const projection =
+		previewColumns.length === 0
+			? '1 AS "__row__"'
+			: previewColumns.map((column) => quoteIdentifier(column.name)).join(", ");
 	const where =
 		filters.length === 0
 			? ""
 			: ` WHERE ${filters
 					.map(
 						(filter, index) =>
-							`${filter.column} ${filter.operator} $${index + 1}`,
+							`${quoteIdentifier(filter.column)} ${filter.operator} $${index + 1}`,
 					)
 					.join(" AND ")}`;
 	const orderBy =
 		sort === null
 			? ""
-			: ` ORDER BY ${sort.column} ${sort.direction === "asc" ? "ASC" : "DESC"}`;
+			: ` ORDER BY ${quoteIdentifier(sort.column)} ${sort.direction === "asc" ? "ASC" : "DESC"}`;
 	const params = filters.map((filter) => filter.value);
 	return {
-		sql: `SELECT * FROM ${table}${where}${orderBy} LIMIT ${pageSize} OFFSET ${page * pageSize}`,
-		countSql: `SELECT COUNT(*) AS row_count FROM ${table}${where}`,
+		sql: `SELECT ${projection} FROM ${table}${where}${orderBy} LIMIT ${pageSize + 1} OFFSET ${page * pageSize}`,
 		params,
 	};
 }
 
 type TableData = {
 	readonly rows: ReadonlyArray<Record<string, unknown>>;
-	readonly totalRows: number;
+	readonly hasNext: boolean;
 	readonly clientDurationMs: number;
 	readonly serverTimings: LixrayServerTimings | null;
 };
@@ -137,15 +177,73 @@ export function TableView({
 	const [pageSize, setPageSize] = useState(GRID_DEFAULT_PAGE_SIZE);
 	const [data, setData] = useState<TableData | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [loadedFileContent, setLoadedFileContent] = useState(
+		() => new Map<string, unknown>(),
+	);
+	const [loadingBlobKeys, setLoadingBlobKeys] = useState(
+		() => new Set<string>(),
+	);
 
-	const columns = columnsBySurface.get(surface) ?? [];
+	const schemaColumns = columnsBySurface.get(surface) ?? EMPTY_COLUMNS;
+	const previewColumns = useMemo(
+		() => tablePreviewColumns(schemaColumns),
+		[schemaColumns],
+	);
+	const columns =
+		baseTable === "lix_file" && surface === "current"
+			? schemaColumns
+			: previewColumns;
 	const tableName = surfaceTableName(baseTable, surface);
+	const canLazyLoadFileContent =
+		baseTable === "lix_file" && surface === "current";
+	const rows = useMemo(() => {
+		if (data === null || loadedFileContent.size === 0) return data?.rows ?? [];
+		return data.rows.map((row) => {
+			const fileId = typeof row.id === "string" ? row.id : null;
+			if (fileId === null || !loadedFileContent.has(fileId)) return row;
+			return { ...row, content: loadedFileContent.get(fileId) };
+		});
+	}, [data, loadedFileContent]);
+
+	const loadFileContent = async (
+		row: Record<string, unknown>,
+		column: GridColumnSpec,
+	) => {
+		if (!canLazyLoadFileContent || column.name !== "content") return;
+		const fileId = typeof row.id === "string" ? row.id : null;
+		const key = gridLazyCellKey(row, column);
+		if (fileId === null || key === null || loadingBlobKeys.has(key)) return;
+		setLoadingBlobKeys((current) => new Set(current).add(key));
+		try {
+			const result = await lix.execute(
+				'SELECT "content" FROM lix_file WHERE "id" = $1 LIMIT 1',
+				[fileId],
+			);
+			setLoadedFileContent((current) => {
+				const next = new Map(current);
+				next.set(fileId, result.rows[0]?.content ?? null);
+				return next;
+			});
+		} catch (queryError) {
+			setError(
+				queryError instanceof Error ? queryError.message : String(queryError),
+			);
+		} finally {
+			setLoadingBlobKeys((current) => {
+				const next = new Set(current);
+				next.delete(key);
+				return next;
+			});
+		}
+	};
 
 	useEffect(() => {
 		let isCancelled = false;
 		setData(null);
-		const { sql, countSql, params } = buildTableQuery({
+		setError(null);
+		const { sql, params } = buildTableQuery({
 			table: tableName,
+			columns: schemaColumns,
 			filters,
 			sort,
 			page,
@@ -153,16 +251,16 @@ export function TableView({
 		});
 		const executeCount = executeServerTimingCount();
 		const clientStartedAt = performance.now();
-		Promise.all([lix.execute(sql, params), lix.execute(countSql, params)])
-			.then(([result, countResult]) => {
+		lix
+			.execute(sql, params)
+			.then((result) => {
 				if (isCancelled) return;
 				const clientDurationMs = performance.now() - clientStartedAt;
 				setError(null);
+				const hasNext = result.rows.length > pageSize;
 				setData({
-					rows: result.rows,
-					totalRows: Number(
-						countResult.rows[0]?.row_count ?? result.rows.length,
-					),
+					rows: hasNext ? result.rows.slice(0, pageSize) : result.rows,
+					hasNext,
 					clientDurationMs,
 					serverTimings: serverTimingsSince(executeCount),
 				});
@@ -177,7 +275,7 @@ export function TableView({
 		return () => {
 			isCancelled = true;
 		};
-	}, [lix, tableName, filters, sort, page, pageSize]);
+	}, [lix, tableName, schemaColumns, filters, sort, page, pageSize]);
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -229,7 +327,7 @@ export function TableView({
 					</span>
 				) : null}
 				<FilterBar
-					columns={columns}
+					columns={previewColumns}
 					filters={filters}
 					onFiltersChange={(next) => {
 						setFilters(next);
@@ -263,8 +361,13 @@ export function TableView({
 				{data === null ? null : (
 					<DataGrid
 						columns={columns}
-						rows={data.rows}
+						rows={rows}
 						sort={sort}
+						onLazyBlobRequest={
+							canLazyLoadFileContent ? loadFileContent : undefined
+						}
+						loadingBlobKeys={loadingBlobKeys}
+						isColumnSortable={(column) => column.type !== "blob"}
 						onSortChange={(next) => {
 							setSort(next);
 							setPage(0);
@@ -276,7 +379,8 @@ export function TableView({
 				<GridFooter
 					page={page}
 					pageSize={pageSize}
-					totalRows={data.totalRows}
+					rowCount={rows.length}
+					hasNext={data.hasNext}
 					onPageChange={setPage}
 					onPageSizeChange={(next) => {
 						setPageSize(next);

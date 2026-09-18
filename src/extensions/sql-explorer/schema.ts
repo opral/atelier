@@ -9,7 +9,12 @@ import {
 export function friendlyDataType(dataType: string): string {
 	const normalized = dataType.replace(/\(.*\)$/, "");
 	if (/^(Large)?Utf8(View)?$/.test(normalized)) return "text";
-	if (/^(Large)?Binary(View)?$/.test(normalized)) return "blob";
+	if (
+		/^(Large)?Binary(View)?$/i.test(normalized) ||
+		/^bytea$/i.test(normalized)
+	) {
+		return "blob";
+	}
 	if (normalized === "Boolean") return "bool";
 	if (/^U?Int\d+$/.test(normalized)) return "int";
 	if (/^Float\d+$/.test(normalized) || /^Decimal/.test(normalized)) {

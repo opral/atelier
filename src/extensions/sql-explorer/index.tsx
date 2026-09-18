@@ -59,6 +59,7 @@ export {
 	buildTableQuery,
 	FILTER_OPERATORS,
 	surfaceTableName,
+	tablePreviewColumns,
 	TABLE_SURFACES,
 } from "./table-view";
 export {
@@ -66,6 +67,7 @@ export {
 	formatByteSize,
 	formatGridCell,
 	inferResultColumns,
+	gridLazyCellKey,
 	parseJsonValue,
 	refineJsonColumns,
 } from "./data-grid";
