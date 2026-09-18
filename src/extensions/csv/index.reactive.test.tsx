@@ -40,6 +40,8 @@ type MockedDataEditorProps = {
 	onDelete?: (selection: {
 		rows: { length: number; toArray: () => number[] };
 	}) => boolean;
+	gridSelection: GridSelection;
+	onGridSelectionChange?: (next: GridSelection) => void;
 	columns: readonly { title: string; width?: number }[];
 	onColumnResizeEnd?: (
 		column: { title: string },
@@ -3119,5 +3121,32 @@ test("a removed row keeps the height its wrapped value needs", async () => {
 	} finally {
 		utils?.unmount();
 		await lix.close();
+	}
+});
+
+test("the Delete key on selected rows leaves the keyboard on the row that moved up", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\nDave,d\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		await act(async () => {
+			props().onGridSelectionChange?.({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.fromSingleSelection(1),
+			});
+		});
+		await act(async () => {
+			props().onDelete?.(props().gridSelection);
+		});
+		await waitFor(() => expect(props().rows).toBe(3));
+		// Backspace already landed here; Delete deleted and selected nothing,
+		// and Glide answers no key at all in that state.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 1]),
+		);
+		expect(props().getCellContent([0, 1]).displayData).toBe("Carol");
+	} finally {
+		await fixture.close();
 	}
 });

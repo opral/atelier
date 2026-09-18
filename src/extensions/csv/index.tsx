@@ -1933,15 +1933,15 @@ function CsvTable({
 	const selectedRows = gridSelection.rows
 		.toArray()
 		.filter((row) => row < rowMap.length);
-	const deleteSelectedRows = () => {
+	const deleteRows = (rows: readonly number[]) => {
 		// The row that moves up into the first deleted one's place — or the
 		// last row left, when the deletion ran to the end of the table.
-		const remaining = parsed.rows.length - selectedRows.length;
+		const remaining = parsed.rows.length - rows.length;
 		const first = Math.min(
-			selectedRows.length ? Math.min(...selectedRows) : 0,
+			rows.length ? Math.min(...rows) : 0,
 			Math.max(0, remaining - 1),
 		);
-		editing?.onDeleteRows(selectedRows.map(sourceRowIndex));
+		editing?.onDeleteRows(rows.map(sourceRowIndex));
 		clearSelection();
 		// Glide answers no key without a selection, so the table takes the row
 		// that moved up into the first deleted one's place.
@@ -1949,6 +1949,7 @@ function CsvTable({
 			requestAnimationFrame(() => focusGrid([0, Math.max(0, first)])),
 		);
 	};
+	const deleteSelectedRows = () => deleteRows(selectedRows);
 
 	// Preserve view predicates on rename; reset when column identities/positions change.
 	const columnIdentities = parsed.columns.map(
@@ -2738,16 +2739,18 @@ function CsvTable({
 							gridSelection={gridSelection}
 							onGridSelectionChange={setGridSelection}
 							onDelete={(selection) => {
+								// Delete arrives here and Backspace in onKeyDown; both go
+								// through the one path, which hands the keyboard back to
+								// the row that moved up. Deleting from here alone left the
+								// table focused with nothing selected, and Glide answers no
+								// key in that state.
 								if (selection.rows.length > 0) {
-									if (editing) {
-										editing.onDeleteRows(
+									if (editing)
+										deleteRows(
 											selection.rows
 												.toArray()
-												.filter((row) => row < rowMap.length)
-												.map(sourceRowIndex),
+												.filter((row) => row < rowMap.length),
 										);
-										clearSelection();
-									}
 									return false;
 								}
 								return editable;
