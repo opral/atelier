@@ -58,7 +58,13 @@ const sideToolExtension: AtelierExtensionRegistration = {
 	description: "A removable side-panel view.",
 	placement: ["left", "right"],
 	icon: TabIcon,
-	Component: () => <div data-testid="test-side-tool">side tool</div>,
+	Component: () => (
+		<div data-testid="test-side-tool">
+			<button type="button" data-testid="test-side-tool-control">
+				side tool
+			</button>
+		</div>
+	),
 };
 
 const extensions = [homeRegistration, dirRegistration, sideToolExtension];
@@ -675,6 +681,40 @@ describe("main tabs with a pinned home", () => {
 					`aside button[data-view-key="${SIDE_EXTENSION_ID}"]`,
 				),
 			).toBeNull();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("collapsing a sidebar leaves the keyboard on its top-bar toggle", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.views.open(SIDE_EXTENSION_ID, { area: "right" });
+			});
+			await screen.findByTestId("test-side-tool");
+			const picker = document.querySelector<HTMLButtonElement>(
+				'aside button[aria-label="Side Tool panel view menu"]',
+			)!;
+			picker.focus();
+
+			await act(async () => {
+				fireEvent.keyDown(window, { key: "2", code: "Digit2", ctrlKey: true });
+			});
+
+			// The picker left with the panel. Not <body>: the toggle is what
+			// brings the panel back, so that is where the keyboard waits.
+			await waitFor(() =>
+				expect(
+					screen.getByRole("button", { name: "Toggle right panel" }),
+				).toHaveFocus(),
+			);
+			// The view stays mounted — it keeps its state for when the panel
+			// comes back — but a zero-wide panel is no place for the keyboard to
+			// walk into on the next Tab.
+			const control = screen.getByTestId("test-side-tool-control");
+			control.focus();
+			expect(control).not.toHaveFocus();
 		} finally {
 			await shell.cleanup();
 		}

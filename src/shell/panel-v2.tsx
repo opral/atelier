@@ -494,6 +494,7 @@ export function PanelV2({
 		<ContainerElement
 			ref={setPanelElementRef}
 			aria-label={ariaLabel}
+			data-area-side={side}
 			onClickCapture={() => onFocusArea(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
@@ -570,6 +571,13 @@ export function PanelV2({
 			    the canvas shows through and their views style themselves for
 			    that surface. */}
 			<div
+				// The views stay mounted while their panel is collapsed — they
+				// keep their state and their measurements for when it comes back —
+				// and a zero-wide panel still answered Tab, so the keyboard walked
+				// into a sidebar nobody could see, the same way the collapsed
+				// panel's gutter and its section picker once did.
+				inert={contentVisible ? undefined : true}
+				aria-hidden={contentVisible ? undefined : true}
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
 					side === "main" ? "border border-border bg-panel" : "bg-transparent",
