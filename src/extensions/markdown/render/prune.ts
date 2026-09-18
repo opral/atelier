@@ -44,7 +44,13 @@ export function pruneToChanges(
 
 	const prune = (node: JSONContent): JSONContent => {
 		const children = node.content ?? [];
-		if (!PRUNABLE.has(node.type ?? "") || children.length === 0) return node;
+		if (children.length === 0) return node;
+		// A list item is not a container the trim can shorten, but the list
+		// nested under it is: the walk goes through the one to reach the other.
+		// Stopping here left a release note's six hundred sub-items whole, and
+		// the card refused a document the trim could have cut in half.
+		if (!PRUNABLE.has(node.type ?? ""))
+			return { ...node, content: children.map(prune) };
 
 		// Trimming is a budget, not a habit: a container that already fits is
 		// shown whole, context and all.

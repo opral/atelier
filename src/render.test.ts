@@ -207,6 +207,32 @@ test("a line longer than the card is cut, not refused", () => {
 	expect(isRendered(ordinary) && ordinary.html).not.toContain("md-diff-gap");
 });
 
+test("a list nested under an item is trimmed like any other", () => {
+	// Release notes: one heading item, six hundred changes under it. A list
+	// item is not a container the trim can shorten, but what it holds is, and
+	// the trim has to walk through the one to reach the other.
+	const items = Array.from(
+		{ length: 600 },
+		(_, index) => `  - change ${index}`,
+	);
+	const before = `- Release notes\n${items.join("\n")}\n`;
+	const after = before.replace("change 300", "change three hundred");
+
+	const result = toHtml(
+		{ path: "/notes.md", before: bytes(before), after: bytes(after) },
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	expect(result.html).toContain("three hundred");
+	expect(result.hidden).toBeGreaterThan(500);
+	expect(result.html).toContain("md-diff-gap");
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+});
+
 test("a document carries its own styles and nothing else", () => {
 	const result = toHtml(
 		{ path: "/README.md", after: bytes("# Acme\n\nOne repository.\n") },
