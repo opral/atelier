@@ -1843,20 +1843,39 @@ function CsvTable({
 		selection.current !== undefined ||
 		selection.rows.length > 0 ||
 		selection.columns.length > 0;
+	// Glide reads its selection as the canvas takes focus and, finding none,
+	// chooses the top-left cell itself. A selection set and then focused a
+	// frame later is not yet the one Glide holds, and the table answered with
+	// its corner — so the keyboard is handed over on the render that carries
+	// the selection, and never before it.
+	const pendingFocus = useRef(false);
+	useEffect(() => {
+		if (!pendingFocus.current || !hasSelection(gridSelection)) return;
+		pendingFocus.current = false;
+		gridRef.current?.focus();
+	}, [gridSelection]);
 	// Hands the keyboard back to the table. Focusing the bare canvas leaves
 	// the table choosing nothing, but Glide answers no key at all without a
 	// selection — the arrows, Enter and Escape all did nothing, which is worse
 	// than a cell the user did not pick. So it takes a cell: the one the edit
 	// left where the old selection was, clamped to what is still there.
 	const focusGrid = useCallback((anchor?: readonly [number, number]) => {
-		// An anchor names the cell to land on outright. The callers that clear
-		// a selection and hand the keyboard back in the same tick cannot ask
-		// whether a selection remains — the ref they would read is assigned on
-		// render and still holds the one they just cleared, which left Glide
-		// focused with nothing selected and every key dead.
-		if (anchor || !hasSelection(gridSelectionRef.current)) {
+		// A table that is already showing a selection only wants its keyboard
+		// back.
+		if (!anchor && hasSelection(gridSelectionRef.current)) {
+			gridRef.current?.focus();
+			return;
+		}
+		// An anchor names the cell to land on outright; without one the table
+		// keeps whatever it has. The question is put to the selection as it
+		// stands when the update runs: the callers that clear a selection, or
+		// set one from an effect, and hand the keyboard back in the same breath
+		// would read a render-old answer.
+		pendingFocus.current = true;
+		setGridSelection((current) => {
+			if (!anchor && hasSelection(current)) return current;
 			const cell = anchor ?? [0, 0];
-			setGridSelection({
+			return {
 				columns: CompactSelection.empty(),
 				rows: CompactSelection.empty(),
 				current: {
@@ -1864,14 +1883,8 @@ function CsvTable({
 					range: { x: cell[0], y: cell[1], width: 1, height: 1 },
 					rangeStack: [],
 				},
-			});
-			// Glide reads the selection as it focuses, and this one has not
-			// been committed yet: focusing now would take the keyboard to a
-			// table that still believes nothing is selected.
-			requestAnimationFrame(() => gridRef.current?.focus());
-			return;
-		}
-		gridRef.current?.focus();
+			};
+		});
 	}, []);
 	const [menu, setMenu] = useState<CsvGridMenuState | null>(null);
 	const closeMenu = useCallback(() => {
@@ -1972,15 +1985,24 @@ function CsvTable({
 	// that re-sorts, an appended row) the selection follows the rows that
 	// stay visible and drops the ones that vanish, so Enter/Tab/arrows keep
 	// working on the row the user just edited. Ranges collapse to their
-	// anchor cell. A pending append selects the new row's first cell so
-	// typing continues there.
+	// anchor cell. A pending new row selects its first cell so typing
+	// continues there.
 	const rowMapKey = rowMap.join(",");
 	// The map array is rebuilt on every metadata or content change; only a
 	// change in the visible mapping itself matters here.
 	const rowMapRef = useRef(rowMap);
 	rowMapRef.current = rowMap;
+	const sourceRowCount = useRef(sourceParsed.rows.length);
+	sourceRowCount.current = sourceParsed.rows.length;
 	const previousRowMap = useRef({ key: rowMapKey, map: rowMap });
-	const pendingAppend = useRef(false);
+	// A row the reader just made, named by its line in the file. Which row of
+	// the table that is belongs to the sort, not to the caller: an empty row
+	// under "Name ascending" sorts to the top however it was made.
+	const pendingRowReveal = useRef<{
+		readonly source: number;
+		/** Rows in the file before it; the edit has landed once there are more. */
+		readonly before: number;
+	} | null>(null);
 	// A column appended past the right edge is otherwise invisible: the grid
 	// is sized to the panel and nothing hints at the new column. Reveal it.
 	const pendingColumnReveal = useRef(false);
@@ -2000,10 +2022,10 @@ function CsvTable({
 				rangeStack: [],
 			},
 		});
-		requestAnimationFrame(() => {
-			gridRef.current?.scrollTo(column, 0, "horizontal");
-			gridRef.current?.focus();
-		});
+		pendingFocus.current = true;
+		requestAnimationFrame(() =>
+			gridRef.current?.scrollTo(column, 0, "horizontal"),
+		);
 	}, [columnCount]);
 	useEffect(() => {
 		const previous = previousRowMap.current;
@@ -2011,23 +2033,27 @@ function CsvTable({
 		previousRowMap.current = { key: rowMapKey, map: rowMap };
 		if (previous.key === rowMapKey) return;
 		setMenu(null);
-		if (pendingAppend.current && rowMap.length > previous.map.length) {
-			pendingAppend.current = false;
-			const row = rowMap.length - 1;
-			setGridSelection({
-				columns: CompactSelection.empty(),
-				rows: CompactSelection.empty(),
-				current: {
-					cell: [0, row],
-					range: { x: 0, y: row, width: 1, height: 1 },
-					rangeStack: [],
-				},
-			});
-			requestAnimationFrame(() => {
-				gridRef.current?.scrollTo(0, row);
-				gridRef.current?.focus();
-			});
-			return;
+		const pending = pendingRowReveal.current;
+		// Writing the row is a file edit, and lifting a search for it moves the
+		// rows a render earlier; wait for the row itself rather than take the
+		// keyboard to whatever sits where it was asked for.
+		if (pending && sourceRowCount.current > pending.before) {
+			pendingRowReveal.current = null;
+			const row = rowMap.indexOf(pending.source);
+			if (row >= 0) {
+				setGridSelection({
+					columns: CompactSelection.empty(),
+					rows: CompactSelection.empty(),
+					current: {
+						cell: [0, row],
+						range: { x: 0, y: row, width: 1, height: 1 },
+						rangeStack: [],
+					},
+				});
+				pendingFocus.current = true;
+				requestAnimationFrame(() => gridRef.current?.scrollTo(0, row));
+				return;
+			}
 		}
 		setGridSelection((current) => {
 			const remapRow = (row: number) => {
@@ -2792,7 +2818,11 @@ function CsvTable({
 							aria-label="Add row"
 							onClick={() => {
 								revealNewRow();
-								pendingAppend.current = true;
+								// The appended row is the file's new last line.
+								pendingRowReveal.current = {
+									source: sourceParsed.rows.length,
+									before: sourceParsed.rows.length,
+								};
 								editing.onRowAppended();
 							}}
 						>
@@ -2910,10 +2940,11 @@ function CsvTable({
 										? sourceRowIndex(menu.row) + 1
 										: sourceRowIndex(atRow);
 								revealNewRow();
-								runStructuralEdit(
-									() => editing.onInsertRow(source),
-									[0, atRow],
-								);
+								pendingRowReveal.current = {
+									source,
+									before: sourceParsed.rows.length,
+								};
+								runStructuralEdit(() => editing.onInsertRow(source));
 							}}
 							onDeleteRows={(rows) =>
 								runStructuralEdit(

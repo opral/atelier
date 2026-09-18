@@ -3206,3 +3206,44 @@ test("clearing a row selection leaves the keyboard on the first row that was pic
 		await fixture.close();
 	}
 });
+
+test("a row inserted under a search takes the keyboard where the row actually landed", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,keep\nCarol,c\nDave,keep\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "keep" },
+		});
+		await waitFor(() =>
+			expect(screen.getByText("2 of 4 rows")).toBeInTheDocument(),
+		);
+		// Below Bob, the first of the two hits: line 3 of the file.
+		await act(async () => {
+			props().onCellContextMenu?.([0, 0], {
+				preventDefault: () => {},
+				bounds: { x: 10, y: 10, width: 100, height: 40 },
+				localEventX: 5,
+				localEventY: 5,
+			});
+		});
+		const insert = await screen.findByRole("menuitem", {
+			name: /insert row below/i,
+		});
+		await act(async () => {
+			insert.click();
+		});
+		await waitFor(() => expect(props().rows).toBe(5));
+		// The search is lifted to show the new row, so the row the reader was
+		// pointing at is no longer the row that number names: the anchor used
+		// to name Bob, one line above what had just been made.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 2]),
+		);
+		expect(props().getCellContent([0, 2]).displayData).toBe("");
+		expect(props().getCellContent([0, 1]).displayData).toBe("Bob");
+	} finally {
+		await fixture.close();
+	}
+});
