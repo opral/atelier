@@ -166,6 +166,47 @@ test("a render that overshoots the budget is drawn again, not refused", () => {
 	);
 });
 
+test("a line longer than the card is cut, not refused", () => {
+	// A pasted log, a generated file, a paragraph somebody wrote without a
+	// break in it: one line can be longer than the whole card, and no ceiling
+	// on lines makes it shorter.
+	const paragraph = toHtml(
+		{ path: "/notes.md", after: bytes(`${"word ".repeat(10_000)}\n`) },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(paragraph)).toBe(true);
+	if (!isRendered(paragraph)) return;
+	expect(paragraph.html).toContain("word word");
+	expect(paragraph.html).toMatch(/⋯ \d+ more characters/);
+	expect(new TextEncoder().encode(paragraph.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+
+	// A code block is one line however many lines of code are in it.
+	const code = Array.from(
+		{ length: 2_000 },
+		(_, index) => `const value${index} = compute(${index});`,
+	).join("\n");
+	const snippet = toHtml(
+		{ path: "/snippet.md", after: bytes(`\`\`\`ts\n${code}\n\`\`\`\n`) },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(snippet)).toBe(true);
+	if (!isRendered(snippet)) return;
+	expect(snippet.html).toContain("const value0");
+	expect(snippet.html).toMatch(/⋯ \d+ more characters/);
+
+	// The cut is a last resort: an ordinary paragraph is shown whole.
+	const ordinary = toHtml(
+		{ path: "/notes.md", after: bytes("A short paragraph, entire.\n") },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(ordinary) && ordinary.html).toContain(
+		"A short paragraph, entire.",
+	);
+	expect(isRendered(ordinary) && ordinary.html).not.toContain("md-diff-gap");
+});
+
 test("a document carries its own styles and nothing else", () => {
 	const result = toHtml(
 		{ path: "/README.md", after: bytes("# Acme\n\nOne repository.\n") },
@@ -235,17 +276,28 @@ test("a renamed column counts as a change, as the table shows it", () => {
 });
 
 test("the budget is measured against the view, document or not", () => {
-	// One paragraph, with nothing the trim can leave out: the view is over
-	// the budget however it is asked for, and the document wrapper's
-	// stylesheet — which the caller asked for — is not what put it there.
+	// The document wrapper's stylesheet is what the caller asked for, and is
+	// not what the budget is about: the same file is drawn the same way either
+	// way, and only the view is measured.
 	const long = `${"paragraph ".repeat(200)}\n`;
-	for (const document of [false, true])
-		expect(
-			toHtml(
-				{ path: "/b.md", after: bytes(long) },
-				{ maxBytes: 1_000, document },
-			),
-		).toEqual({ skipped: "too-large" });
+	const plain = toHtml(
+		{ path: "/b.md", after: bytes(long) },
+		{ maxBytes: 1_000 },
+	);
+	const whole = toHtml(
+		{ path: "/b.md", after: bytes(long) },
+		{ maxBytes: 1_000, document: true },
+	);
+	expect(isRendered(plain) && isRendered(whole)).toBe(true);
+	if (!isRendered(plain) || !isRendered(whole)) return;
+	expect(new TextEncoder().encode(plain.html).length).toBeLessThanOrEqual(
+		1_000,
+	);
+	expect(whole.html).toContain(plain.html);
+	// A card with no room for a line and its frame is still refused.
+	expect(
+		toHtml({ path: "/b.md", after: bytes(long) }, { maxBytes: 200 }),
+	).toEqual({ skipped: "too-large" });
 	// A document the trim can shorten fits instead, and says how much it left.
 	const many = `${Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n")}\n`;
 	const trimmed = toHtml(

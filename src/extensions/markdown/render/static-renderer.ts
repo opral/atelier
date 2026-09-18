@@ -31,6 +31,9 @@ const DEFAULT_MAX_LINES = 14;
 /** Lines a card shows however tight the budget: the change, and its edges. */
 const MIN_LINES = 3;
 
+/** Characters a line keeps however tight the budget: a sentence of it. */
+const MIN_CHARS = 200;
+
 export const markdownStaticRenderer: StaticRenderer = {
 	fileExtensions: ["md", "markdown", "mdx"],
 	render(content, options): Rendered | NotRendered {
@@ -53,22 +56,24 @@ export const markdownStaticRenderer: StaticRenderer = {
 			if (source.trim() === "") return { skipped: "empty" };
 		}
 
-		const review = (maxLines: number): MarkdownDiff =>
+		const review = (maxLines: number, maxChars: number): MarkdownDiff =>
 			renderMarkdownDiff({
 				beforeMarkdown: before,
 				afterMarkdown: after,
 				context: 1,
 				maxLines,
+				maxChars,
 				...imageOption(options),
 			});
 
-		// The line budget is an estimate — a line of prose runs to a couple of
+		// Both budgets are estimates — a line of prose runs to a couple of
 		// hundred bytes once it carries tags, and a table row to a cell's worth
 		// each — so a render that overshoots the caller's budget is halved and
 		// drawn again rather than refused. Three attempts take it from most of
 		// the document to the change and its neighbours.
 		let lines = lineBudget(options.maxBytes);
-		let diff = review(lines);
+		let chars = charBudget(options.maxBytes);
+		let diff = review(lines, chars);
 		if (diff.unchanged) return { skipped: "unchanged" };
 		let html = scoped(diff.html);
 		for (
@@ -76,11 +81,12 @@ export const markdownStaticRenderer: StaticRenderer = {
 			attempt < 3 &&
 			options.maxBytes !== undefined &&
 			byteLength(html) > options.maxBytes &&
-			lines > MIN_LINES;
+			(lines > MIN_LINES || chars > MIN_CHARS);
 			attempt += 1
 		) {
 			lines = Math.max(MIN_LINES, Math.floor(lines / 2));
-			diff = review(lines);
+			chars = Math.max(MIN_CHARS, Math.floor(chars / 2));
+			diff = review(lines, chars);
 			html = scoped(diff.html);
 		}
 		return {
@@ -119,6 +125,18 @@ function imageOption(options: RenderOptions): {
 function lineBudget(maxBytes: number | undefined): number {
 	if (maxBytes === undefined) return DEFAULT_MAX_LINES;
 	return Math.max(3, Math.min(DEFAULT_MAX_LINES, Math.floor(maxBytes / 900)));
+}
+
+/**
+ * Characters one line may keep, from the caller's byte budget.
+ *
+ * Half the card: a line long enough to need cutting is most of what is on the
+ * card anyway, and what is kept still has to carry its tags. Without a budget
+ * there is no cut — a caller that asked for the whole document gets it.
+ */
+function charBudget(maxBytes: number | undefined): number {
+	if (maxBytes === undefined) return Number.POSITIVE_INFINITY;
+	return Math.max(MIN_CHARS, Math.floor(maxBytes / 2));
 }
 
 function byteLength(value: string): number {
