@@ -135,19 +135,57 @@ function useTabRemovalFocus({
 		},
 		[area.activeInstance, area.views, onRemoveView],
 	);
+	// The keyboard is not always on the tab when its view closes: it is in the
+	// document, where reading and typing happen, and the tab may be closed
+	// from anywhere — a host's shortcut, the Files view, the end of a review.
+	// The view then leaves with the focus inside it and the keyboard falls to
+	// `<body>`. The tab that takes over is where it belongs then too, so the
+	// view that last had it is remembered here.
+	const viewsRef = useRef(area.views);
+	viewsRef.current = area.views;
+	const focusedViewRef = useRef<string | null>(null);
+	useEffect(() => {
+		const remember = (event: FocusEvent) => {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			const instance = target
+				.closest("[data-view-instance]")
+				?.getAttribute("data-view-instance");
+			// Only this area's views: another area's keyboard is its business.
+			if (!instance) return;
+			if (!viewsRef.current.some((entry) => entry.instance === instance))
+				return;
+			focusedViewRef.current = instance;
+		};
+		document.addEventListener("focusin", remember);
+		return () => document.removeEventListener("focusin", remember);
+	}, []);
+
 	const fallbacks = fallbackSelectors.join(",");
 	useLayoutEffect(() => {
 		const container = containerRef.current;
 		const pending = pendingRef.current;
-		if (!container || !pending) return;
-		if (area.views.some((entry) => entry.instance === pending.instance)) {
+		const strandedView = focusedViewRef.current;
+		const stranded =
+			strandedView !== null &&
+			!area.views.some((entry) => entry.instance === strandedView) &&
+			// Only a keyboard the removal dropped. One that has moved on — to
+			// the menu that closed the tab, to another area — is left alone.
+			(document.activeElement === null ||
+				document.activeElement === document.body);
+		if (stranded) focusedViewRef.current = null;
+		if (!container || !(pending || stranded)) return;
+		if (
+			pending &&
+			area.views.some((entry) => entry.instance === pending.instance)
+		) {
 			if (
 				area.views !== pending.previousViews ||
 				area.activeInstance !== pending.previousActiveInstance
 			) {
 				pendingRef.current = null;
 			}
-			return;
+			if (!stranded) return;
 		}
 		pendingRef.current = null;
 		const nextTab = activeInstance

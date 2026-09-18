@@ -545,6 +545,38 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("closing the document the keyboard is in lands on the tab that takes over", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+			await waitFor(() =>
+				expect(screen.getByRole("heading", { name: "Two" })).toBeVisible(),
+			);
+			const survivor = screen.getByRole("button", { name: "one.md" });
+			// The keyboard is in the document, where reading and typing happen —
+			// not on the tab — and the close comes from elsewhere: a host's
+			// shortcut, the Files view, the end of a review.
+			const openDocument = document.querySelector<HTMLElement>(
+				'[data-view-instance][data-active="true"] .ProseMirror',
+			);
+			expect(openDocument).not.toBeNull();
+			openDocument!.focus();
+
+			await act(async () => {
+				await shell.atelier.documents.closeActive();
+			});
+
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
+			// Not <body>: the view left with the keyboard inside it.
+			expect(survivor).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("newTab appends at the end of the strip; open activates an existing tab", async () => {
 		const shell = await renderTabbedShell();
 		try {
