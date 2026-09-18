@@ -759,11 +759,13 @@ function SidebarSectionPicker({
 				preferencesFor(activeEntry.kind),
 			)
 		: [];
+	const triggerRef = useRef<HTMLButtonElement>(null);
 
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
 				<button
+					ref={triggerRef}
 					type="button"
 					aria-label={`${activeLabel} panel view menu`}
 					data-attr="panel-section-picker"
@@ -789,10 +791,28 @@ function SidebarSectionPicker({
 				// the sidebar's content ambiguity in place.
 				align="start"
 				sideOffset={2}
-				// Closing does not hand focus back to the trigger: the restore is
-				// programmatic and would paint the keyboard focus ring after any
-				// pointer-driven open/close. Tabbing to the trigger still rings.
-				onCloseAutoFocus={(event) => event.preventDefault()}
+				// Radix hands focus back to whoever held it when the menu opened,
+				// which is <body> for a pointer-driven open — the trigger declines
+				// the click's focus — so the keyboard landed on nothing and the
+				// next Tab restarted at the top of the page. The trigger is where
+				// the picker was opened from, so it takes the keyboard back, without
+				// painting a ring: closing the picker is not a keyboard navigation
+				// moment. Tabbing to the trigger still rings.
+				onCloseAutoFocus={(event) => {
+					event.preventDefault();
+					const trigger = triggerRef.current;
+					// The item chosen may have taken the trigger with it — Hide
+					// sidebar collapses the panel, header and all — or put the
+					// keyboard somewhere of its own. Either way the restore has
+					// nothing to say.
+					if (!trigger?.isConnected) return;
+					const active = document.activeElement;
+					if (active !== null && active !== document.body) return;
+					trigger.focus({
+						preventScroll: true,
+						focusVisible: false,
+					} as FocusOptions);
+				}}
 				className="w-[212px] rounded-[10px] border border-border bg-panel p-1.5 shadow-lg"
 			>
 				{/* Open views and openable views read as one list: the picker answers
