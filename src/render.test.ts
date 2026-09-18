@@ -196,6 +196,34 @@ test("a line longer than the card is cut, not refused", () => {
 	expect(snippet.html).toContain("const value0");
 	expect(snippet.html).toMatch(/⋯ \d+ more characters/);
 
+	// Frontmatter and embedded HTML are shown as source, and a card measured
+	// them as nothing because they keep that source in an attribute.
+	const raw = toHtml(
+		{
+			path: "/page.md",
+			after: bytes(`# Page\n\n<div>${"<span>x</span>".repeat(4_000)}</div>\n`),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(raw)).toBe(true);
+	if (!isRendered(raw)) return;
+	expect(raw.html).toMatch(/⋯ \d+ more characters/);
+	expect(new TextEncoder().encode(raw.html).length).toBeLessThanOrEqual(24_000);
+
+	const frontmatter = toHtml(
+		{
+			path: "/page.md",
+			after: bytes(
+				`---\n${Array.from({ length: 2_000 }, (_, index) => `key${index}: value${index}`).join("\n")}\n---\n\n# Page\n`,
+			),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(frontmatter)).toBe(true);
+	if (!isRendered(frontmatter)) return;
+	expect(frontmatter.html).toContain("key0: value0");
+	expect(frontmatter.html).toMatch(/⋯ \d+ more characters/);
+
 	// The cut is a last resort: an ordinary paragraph is shown whole.
 	const ordinary = toHtml(
 		{ path: "/notes.md", after: bytes("A short paragraph, entire.\n") },

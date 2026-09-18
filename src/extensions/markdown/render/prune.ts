@@ -167,6 +167,19 @@ const CAPPABLE = new Set([
 ]);
 
 /**
+ * Nodes that keep their source in an attribute instead of in a text node.
+ *
+ * Frontmatter, a block of embedded HTML, a tag inside a sentence: the card
+ * shows them as source, and a cut that only looked at text nodes measured
+ * them as nothing and left a page of raw HTML whole.
+ */
+const RAW_SOURCE = new Set([
+	"markdownUnsupported",
+	"markdownFrontmatter",
+	"markdownInlineHtml",
+]);
+
+/**
  * Cuts any single line longer than the card, where it stops fitting.
  *
  * A pasted log, a generated file, a paragraph written without a break in it:
@@ -215,6 +228,29 @@ function capLine(node: JSONContent, budget: number): JSONContent {
 			remaining = -1;
 			return kept ? [{ ...candidate, text: kept }, ...marker] : marker;
 		}
+		if (RAW_SOURCE.has(candidate.type ?? "")) {
+			const text = String(candidate.attrs?.value ?? "");
+			if (remaining >= 0 && text.length <= remaining) {
+				remaining -= text.length;
+				return [candidate];
+			}
+			const kept = remaining > 0 ? text.slice(0, remaining) : "";
+			// Raw source has no children to hold a marker, so the note is the
+			// last of the source it shortened.
+			const note =
+				remaining >= 0 ? `⋯ ${dropped} more ${characters(dropped)}` : null;
+			remaining = -1;
+			if (note === null) return [];
+			return [
+				{
+					...candidate,
+					attrs: {
+						...candidate.attrs,
+						value: kept ? `${kept}\n${note}` : note,
+					},
+				},
+			];
+		}
 		// Past the cut nothing is kept: an image or a break the reader will not
 		// reach is not worth the bytes.
 		if (remaining < 0) return [];
@@ -225,9 +261,15 @@ function capLine(node: JSONContent, budget: number): JSONContent {
 	return cut(node)[0] ?? node;
 }
 
+function characters(count: number): string {
+	return count === 1 ? "character" : "characters";
+}
+
 /** The characters a block holds, which is what a cut is measured in. */
 function countCharacters(node: JSONContent): number {
 	if (node.type === "text") return (node.text ?? "").length;
+	if (RAW_SOURCE.has(node.type ?? ""))
+		return String(node.attrs?.value ?? "").length;
 	return (node.content ?? []).reduce(
 		(total, child) => total + countCharacters(child),
 		0,
