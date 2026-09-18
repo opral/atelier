@@ -296,6 +296,12 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 		case "markdownDiffGap": {
 			const count = Number(node.attrs?.count ?? 0);
 			const of = String(node.attrs?.of ?? "doc");
+			// A cut inside a line counts characters, and stands where they were:
+			// inline, so it reads as the end of the sentence it shortened.
+			if (of === "line")
+				return `<span class="md-diff-gap">⋯ ${escapeHtml(
+					`${count} more ${count === 1 ? "character" : "characters"}`,
+				)}</span>`;
 			const inList =
 				of === "bulletList" || of === "orderedList" || of === "taskList";
 			const lines = count === 1 ? "line" : "lines";

@@ -14,18 +14,39 @@ export type CsvRowGap = {
 	readonly rows: number;
 };
 
+/**
+ * A run of columns a caller left out, named where it was.
+ *
+ * `index` counts the columns that come before it, the way a row gap counts
+ * rows, and the marker stands in the header with a cell of its own per row so
+ * the table keeps its shape.
+ */
+export type CsvColumnGap = {
+	readonly index: number;
+	readonly columns: number;
+};
+
 export function renderCsvReviewDiffHtml(
 	data: ExternalWriteReviewData,
-	options: { readonly gaps?: readonly CsvRowGap[] } = {},
+	options: {
+		readonly gaps?: readonly CsvRowGap[];
+		readonly columnGaps?: readonly CsvColumnGap[];
+	} = {},
 ): string {
 	const beforeParsed = parseCsv(decodeFileDataToText(data.beforeData));
 	const afterParsed = parseCsv(decodeFileDataToText(data.afterData));
 	const beforeRows = assignCsvRowKeys(beforeParsed.rows);
 	const afterRows = assignCsvRowKeys(afterParsed.rows, beforeRows, "after");
 	const gaps = options.gaps ?? [];
+	const columnGaps = options.columnGaps ?? [];
 	return renderHtmlDiff({
-		beforeHtml: renderStaticCsvTable(beforeParsed, beforeRows, gaps),
-		afterHtml: renderStaticCsvTable(afterParsed, afterRows, gaps),
+		beforeHtml: renderStaticCsvTable(
+			beforeParsed,
+			beforeRows,
+			gaps,
+			columnGaps,
+		),
+		afterHtml: renderStaticCsvTable(afterParsed, afterRows, gaps, columnGaps),
 		diffAttribute: "data-diff-key",
 	});
 }
@@ -82,25 +103,41 @@ function renderStaticCsvTable(
 	parsed: CsvParseResult,
 	rows: readonly KeyedCsvRow[],
 	gaps: readonly CsvRowGap[] = [],
+	columnGaps: readonly CsvColumnGap[] = [],
 ): string {
 	const columnCount = parsed.columns.length;
-	const header = parsed.columns
-		.map(
+	// A row is as wide as the header, markers included: the colspan a row gap
+	// takes has to count them too.
+	const width = columnCount + columnGaps.length;
+	const header = spliceGaps(
+		parsed.columns.map(
 			(column, index) =>
 				`<th data-diff-key="header:${index}"${diffMode(column)} data-diff-show-when-removed="true">${escapeHtml(
 					column,
 				)}</th>`,
-		)
-		.join("");
+		),
+		columnGaps,
+		(gap) =>
+			`<th class="csv-diff-gap-column" data-diff-key="gapcolumn:${gap.index}" data-diff-show-when-removed="true">⋯ ${escapeHtml(
+				`${gap.columns} ${gap.columns === 1 ? "column" : "columns"}`,
+			)}</th>`,
+	).join("");
 	const body: string[] = rows.map((row) => {
-		const cells = Array.from({ length: columnCount }, (_, index) => {
-			const value = row.cells[index] ?? "";
-			return `<td data-diff-key="${escapeAttribute(
-				row.diffKey,
-			)}:cell:${index}"${diffMode(value)} data-diff-show-when-removed="true">${escapeHtml(
-				value,
-			)}</td>`;
-		}).join("");
+		const cells = spliceGaps(
+			Array.from({ length: columnCount }, (_, index) => {
+				const value = row.cells[index] ?? "";
+				return `<td data-diff-key="${escapeAttribute(
+					row.diffKey,
+				)}:cell:${index}"${diffMode(value)} data-diff-show-when-removed="true">${escapeHtml(
+					value,
+				)}</td>`;
+			}),
+			columnGaps,
+			(gap) =>
+				`<td class="csv-diff-gap-column" data-diff-key="${escapeAttribute(
+					row.diffKey,
+				)}:gapcolumn:${gap.index}" data-diff-show-when-removed="true">⋯</td>`,
+		).join("");
 		return `<tr data-diff-key="${escapeAttribute(
 			row.diffKey,
 		)}" data-diff-show-when-removed="true">${cells}</tr>`;
@@ -108,7 +145,7 @@ function renderStaticCsvTable(
 	// The markers go in last, so a gap's position is the row count around it
 	// rather than an index into markup that already has markers in it.
 	for (const gap of [...gaps].sort((left, right) => right.index - left.index))
-		body.splice(gap.index, 0, gapRow(gap, columnCount));
+		body.splice(gap.index, 0, gapRow(gap, width));
 	const bodyHtml = body.join("");
 	// The tbody carries a diff key so html-diff can anchor removed rows back
 	// inside it; without one they fall to the document root, and the browser
@@ -117,10 +154,22 @@ function renderStaticCsvTable(
 }
 
 /** "⋯ 176 unchanged rows": a row that says what is not there. */
-function gapRow(gap: CsvRowGap, columnCount: number): string {
+function gapRow(gap: CsvRowGap, width: number): string {
 	const label = `${gap.rows} unchanged ${gap.rows === 1 ? "row" : "rows"}`;
 	const key = `gap:${gap.index}`;
-	return `<tr class="csv-diff-gap" data-diff-key="${key}" data-diff-show-when-removed="true"><td data-diff-key="${key}:cell" colspan="${Math.max(1, columnCount)}">⋯ ${escapeHtml(label)}</td></tr>`;
+	return `<tr class="csv-diff-gap" data-diff-key="${key}" data-diff-show-when-removed="true"><td data-diff-key="${key}:cell" colspan="${Math.max(1, width)}">⋯ ${escapeHtml(label)}</td></tr>`;
+}
+
+/** One line of cells with the column markers put back where they belong. */
+function spliceGaps(
+	cells: readonly string[],
+	gaps: readonly CsvColumnGap[],
+	marker: (gap: CsvColumnGap) => string,
+): string[] {
+	const line = [...cells];
+	for (const gap of [...gaps].sort((left, right) => right.index - left.index))
+		line.splice(gap.index, 0, marker(gap));
+	return line;
 }
 
 /**

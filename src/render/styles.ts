@@ -146,6 +146,17 @@ const CSV_CSS = `
 	font-size: 12px;
 	text-align: center;
 }
+/* The columns the trim left out, named once in the header and held open by a
+   cell of its own in every row, so the table keeps its shape. */
+.csv-diff .csv-diff-gap-column {
+	background: var(--atelier-bg-subtle);
+	color: var(--atelier-fg-subtle);
+	font-size: 12px;
+	font-weight: 400;
+	white-space: nowrap;
+	text-align: center;
+	max-width: none;
+}
 `;
 
 export const RENDER_CSS = [

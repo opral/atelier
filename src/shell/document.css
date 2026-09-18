@@ -630,3 +630,11 @@
 	color: var(--atelier-fg-subtle);
 	font-size: calc(var(--atelier-doc-em) * 0.75);
 }
+
+/* A cut inside a line ends the sentence it shortened: it sits in the text,
+   not on a line of its own. */
+.atelier-document span.md-diff-gap {
+	display: inline;
+	margin: 0 0 0 0.25em;
+	padding: 0;
+}

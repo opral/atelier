@@ -5,7 +5,7 @@ import type {
 	StaticRenderer,
 } from "../../../render/types";
 import { fileText } from "../../../lib/decode-file-data";
-import { renderMarkdownDiff } from "./index";
+import { type MarkdownDiff, renderMarkdownDiff } from "./index";
 
 /**
  * The Markdown view, rendered without a shell.
@@ -27,6 +27,12 @@ const MAX_NESTING = 24;
 
 /** Lines kept per list, table or document before the budget trims. */
 const DEFAULT_MAX_LINES = 14;
+
+/** Lines a card shows however tight the budget: the change, and its edges. */
+const MIN_LINES = 3;
+
+/** Characters a line keeps however tight the budget: a sentence of it. */
+const MIN_CHARS = 200;
 
 export const markdownStaticRenderer: StaticRenderer = {
 	fileExtensions: ["md", "markdown", "mdx"],
@@ -50,17 +56,42 @@ export const markdownStaticRenderer: StaticRenderer = {
 			if (source.trim() === "") return { skipped: "empty" };
 		}
 
-		const diff = renderMarkdownDiff({
-			beforeMarkdown: before,
-			afterMarkdown: after,
-			context: 1,
-			maxLines: lineBudget(options.maxBytes),
-			...imageOption(options),
-		});
+		const review = (maxLines: number, maxChars: number): MarkdownDiff =>
+			renderMarkdownDiff({
+				beforeMarkdown: before,
+				afterMarkdown: after,
+				context: 1,
+				maxLines,
+				maxChars,
+				...imageOption(options),
+			});
+
+		// Both budgets are estimates — a line of prose runs to a couple of
+		// hundred bytes once it carries tags, and a table row to a cell's worth
+		// each — so a render that overshoots the caller's budget is halved and
+		// drawn again rather than refused. Three attempts take it from most of
+		// the document to the change and its neighbours.
+		let lines = lineBudget(options.maxBytes);
+		let chars = charBudget(options.maxBytes);
+		let diff = review(lines, chars);
 		if (diff.unchanged) return { skipped: "unchanged" };
+		let html = scoped(diff.html);
+		for (
+			let attempt = 0;
+			attempt < 3 &&
+			options.maxBytes !== undefined &&
+			byteLength(html) > options.maxBytes &&
+			(lines > MIN_LINES || chars > MIN_CHARS);
+			attempt += 1
+		) {
+			lines = Math.max(MIN_LINES, Math.floor(lines / 2));
+			chars = Math.max(MIN_CHARS, Math.floor(chars / 2));
+			diff = review(lines, chars);
+			html = scoped(diff.html);
+		}
 		return {
 			kind: content.kind,
-			html: scoped(diff.html),
+			html,
 			counts: {
 				added: diff.stats.added,
 				modified: diff.stats.modified,
@@ -96,15 +127,48 @@ function lineBudget(maxBytes: number | undefined): number {
 	return Math.max(3, Math.min(DEFAULT_MAX_LINES, Math.floor(maxBytes / 900)));
 }
 
+/**
+ * Characters one line may keep, from the caller's byte budget.
+ *
+ * Half the card: a line long enough to need cutting is most of what is on the
+ * card anyway, and what is kept still has to carry its tags. Without a budget
+ * there is no cut — a caller that asked for the whole document gets it.
+ */
+function charBudget(maxBytes: number | undefined): number {
+	if (maxBytes === undefined) return Number.POSITIVE_INFINITY;
+	return Math.max(MIN_CHARS, Math.floor(maxBytes / 2));
+}
+
 function byteLength(value: string): number {
 	return new TextEncoder().encode(value).length;
 }
 
+/**
+ * Only what the parser recurses into counts.
+ *
+ * A fence holds source, not structure, and a formatter indents source: a card
+ * refused any document with wrapped YAML or JSX in it. Outside a fence,
+ * indentation is nesting only where it indents a list marker — elsewhere it is
+ * a continuation line or an indented code block, and neither recurses.
+ */
 function tooDeep(markdown: string): boolean {
+	let fence: string | null = null;
 	for (const line of markdown.split("\n")) {
+		const mark = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+		if (fence !== null) {
+			// A fence closes on its own character, and never on a shorter run.
+			if (mark && mark[0] === fence[0] && mark.length >= fence.length)
+				fence = null;
+			continue;
+		}
+		if (mark) {
+			fence = mark;
+			continue;
+		}
 		const quotes = (/^[\s>]*/.exec(line)?.[0] ?? "").split(">").length - 1;
-		const indent = (/^[ \t]*/.exec(line)?.[0] ?? "").length;
-		if (quotes > MAX_NESTING || indent / 2 > MAX_NESTING) return true;
+		if (quotes > MAX_NESTING) return true;
+		const indent = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]/.exec(line)?.[1];
+		if (indent !== undefined && indent.length / 2 > MAX_NESTING) return true;
 	}
 	return false;
 }

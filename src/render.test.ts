@@ -91,6 +91,35 @@ test("a view that cannot draw a file says so instead of failing", () => {
 	).toEqual({ skipped: "unsupported" });
 });
 
+test("a code sample is source, not nesting", () => {
+	// A fence holds whatever was pasted into it, and a formatter indents. The
+	// nesting guard is about what a parser recurses into, so a document with
+	// indented YAML, JSX or ASCII art in it is an ordinary document.
+	for (const sample of [
+		`\`\`\`yaml\n${" ".repeat(60)}key: value\n\`\`\``,
+		`\`\`\`jsx\n${"    ".repeat(14)}<div />\n\`\`\``,
+		`\`\`\`\n${" ".repeat(60)}+---+\n\`\`\``,
+		// An indented code block is source too, and its indentation nests
+		// nothing either.
+		`    ${" ".repeat(60)}deep()`,
+	]) {
+		const result = toHtml({
+			path: "/guide.md",
+			after: bytes(`# Guide\n\n${sample}\n`),
+		});
+		expect(isRendered(result)).toBe(true);
+	}
+	// A document that really is a stack is still refused: the guard is about
+	// the recursion, and a list nested thirty deep is that recursion.
+	const nested = Array.from(
+		{ length: 30 },
+		(_, level) => `${"  ".repeat(level)}- level ${level}`,
+	).join("\n");
+	expect(toHtml({ path: "/deep.md", after: bytes(`${nested}\n`) })).toEqual({
+		skipped: "too-large",
+	});
+});
+
 test("a budget trims the render and says what it left out", () => {
 	const rows = Array.from({ length: 60 }, (_, index) => `- Item ${index + 1}`);
 	const result = toHtml(
@@ -107,6 +136,128 @@ test("a budget trims the render and says what it left out", () => {
 	expect(result.html).toContain("The new one");
 	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
 		8_000,
+	);
+});
+
+test("a render that overshoots the budget is drawn again, not refused", () => {
+	// A page of a spec, newly written: every paragraph is a change, so there is
+	// no unchanged bulk for the trim to take first. Fourteen lines of prose fit
+	// the line budget and not the byte budget, because the budget only
+	// estimates what a line costs once it carries tags.
+	const spec = `${Array.from(
+		{ length: 30 },
+		(_, index) =>
+			`Section ${index + 1}. ${"The service records every write and replays it on demand. ".repeat(20)}`,
+	).join("\n\n")}\n`;
+
+	const result = toHtml(
+		{ path: "/spec.md", after: bytes(spec) },
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	expect(result.html).toContain("Section 1.");
+	// Shorter, and it says how much of the document is not on the card.
+	expect(result.hidden).toBeGreaterThan(0);
+	expect(result.html).toContain("md-diff-gap");
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+});
+
+test("a line longer than the card is cut, not refused", () => {
+	// A pasted log, a generated file, a paragraph somebody wrote without a
+	// break in it: one line can be longer than the whole card, and no ceiling
+	// on lines makes it shorter.
+	const paragraph = toHtml(
+		{ path: "/notes.md", after: bytes(`${"word ".repeat(10_000)}\n`) },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(paragraph)).toBe(true);
+	if (!isRendered(paragraph)) return;
+	expect(paragraph.html).toContain("word word");
+	expect(paragraph.html).toMatch(/⋯ \d+ more characters/);
+	expect(new TextEncoder().encode(paragraph.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+
+	// A code block is one line however many lines of code are in it.
+	const code = Array.from(
+		{ length: 2_000 },
+		(_, index) => `const value${index} = compute(${index});`,
+	).join("\n");
+	const snippet = toHtml(
+		{ path: "/snippet.md", after: bytes(`\`\`\`ts\n${code}\n\`\`\`\n`) },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(snippet)).toBe(true);
+	if (!isRendered(snippet)) return;
+	expect(snippet.html).toContain("const value0");
+	expect(snippet.html).toMatch(/⋯ \d+ more characters/);
+
+	// Frontmatter and embedded HTML are shown as source, and a card measured
+	// them as nothing because they keep that source in an attribute.
+	const raw = toHtml(
+		{
+			path: "/page.md",
+			after: bytes(`# Page\n\n<div>${"<span>x</span>".repeat(4_000)}</div>\n`),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(raw)).toBe(true);
+	if (!isRendered(raw)) return;
+	expect(raw.html).toMatch(/⋯ \d+ more characters/);
+	expect(new TextEncoder().encode(raw.html).length).toBeLessThanOrEqual(24_000);
+
+	const frontmatter = toHtml(
+		{
+			path: "/page.md",
+			after: bytes(
+				`---\n${Array.from({ length: 2_000 }, (_, index) => `key${index}: value${index}`).join("\n")}\n---\n\n# Page\n`,
+			),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(frontmatter)).toBe(true);
+	if (!isRendered(frontmatter)) return;
+	expect(frontmatter.html).toContain("key0: value0");
+	expect(frontmatter.html).toMatch(/⋯ \d+ more characters/);
+
+	// The cut is a last resort: an ordinary paragraph is shown whole.
+	const ordinary = toHtml(
+		{ path: "/notes.md", after: bytes("A short paragraph, entire.\n") },
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(ordinary) && ordinary.html).toContain(
+		"A short paragraph, entire.",
+	);
+	expect(isRendered(ordinary) && ordinary.html).not.toContain("md-diff-gap");
+});
+
+test("a list nested under an item is trimmed like any other", () => {
+	// Release notes: one heading item, six hundred changes under it. A list
+	// item is not a container the trim can shorten, but what it holds is, and
+	// the trim has to walk through the one to reach the other.
+	const items = Array.from(
+		{ length: 600 },
+		(_, index) => `  - change ${index}`,
+	);
+	const before = `- Release notes\n${items.join("\n")}\n`;
+	const after = before.replace("change 300", "change three hundred");
+
+	const result = toHtml(
+		{ path: "/notes.md", before: bytes(before), after: bytes(after) },
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	expect(result.html).toContain("three hundred");
+	expect(result.hidden).toBeGreaterThan(500);
+	expect(result.html).toContain("md-diff-gap");
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
 	);
 });
 
@@ -179,17 +330,28 @@ test("a renamed column counts as a change, as the table shows it", () => {
 });
 
 test("the budget is measured against the view, document or not", () => {
-	// One paragraph, with nothing the trim can leave out: the view is over
-	// the budget however it is asked for, and the document wrapper's
-	// stylesheet — which the caller asked for — is not what put it there.
+	// The document wrapper's stylesheet is what the caller asked for, and is
+	// not what the budget is about: the same file is drawn the same way either
+	// way, and only the view is measured.
 	const long = `${"paragraph ".repeat(200)}\n`;
-	for (const document of [false, true])
-		expect(
-			toHtml(
-				{ path: "/b.md", after: bytes(long) },
-				{ maxBytes: 1_000, document },
-			),
-		).toEqual({ skipped: "too-large" });
+	const plain = toHtml(
+		{ path: "/b.md", after: bytes(long) },
+		{ maxBytes: 1_000 },
+	);
+	const whole = toHtml(
+		{ path: "/b.md", after: bytes(long) },
+		{ maxBytes: 1_000, document: true },
+	);
+	expect(isRendered(plain) && isRendered(whole)).toBe(true);
+	if (!isRendered(plain) || !isRendered(whole)) return;
+	expect(new TextEncoder().encode(plain.html).length).toBeLessThanOrEqual(
+		1_000,
+	);
+	expect(whole.html).toContain(plain.html);
+	// A card with no room for a line and its frame is still refused.
+	expect(
+		toHtml({ path: "/b.md", after: bytes(long) }, { maxBytes: 200 }),
+	).toEqual({ skipped: "too-large" });
 	// A document the trim can shorten fits instead, and says how much it left.
 	const many = `${Array.from({ length: 200 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n")}\n`;
 	const trimmed = toHtml(
@@ -238,6 +400,47 @@ test("a long table is trimmed, not refused, and says what it left out", () => {
 	).toEqual({ skipped: "too-large" });
 });
 
+test("a wide table is trimmed to the columns that changed", () => {
+	// An export has a column per field, and a card is narrower than an export.
+	// The row trim cannot help: one row of a hundred columns is wider than the
+	// whole card on its own.
+	const columns = Array.from({ length: 120 }, (_, index) => `field_${index}`);
+	const row = (index: number) =>
+		columns.map((_, column) => `r${index}c${column}`).join(",");
+	const before = `${columns.join(",")}\n${Array.from({ length: 30 }, (_, index) => row(index)).join("\n")}\n`;
+	const after = before.replace("r5c60", "CHANGED");
+
+	const result = toHtml(
+		{ path: "/export.csv", before: bytes(before), after: bytes(after) },
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	// The changed column survives, with its name; the untouched width does not,
+	// and is named where it was rather than silently missing.
+	expect(result.html).toContain("CHANGED");
+	expect(result.html).toContain("field_60");
+	expect(result.html).toContain("csv-diff-gap-column");
+	expect(result.html).toMatch(/⋯ \d+ columns/);
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+
+	// A table that fits keeps every column it has.
+	const narrow = toHtml(
+		{
+			path: "/leads.csv",
+			before: bytes("id,name,stage\n1,Acme,lead\n"),
+			after: bytes("id,name,stage\n1,Acme,qualified\n"),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(narrow) && narrow.html).not.toContain(
+		"csv-diff-gap-column",
+	);
+});
+
 test("a ledger is trimmed to the rows that changed", () => {
 	const rows = Array.from({ length: 120 }, (_, index) => `${index},acme,open`);
 	const before = `id,account,state\n${rows.join("\n")}\n`;
@@ -260,6 +463,51 @@ test("a ledger is trimmed to the rows that changed", () => {
 	// stayed reads as a deletion.
 	const removed = result.html.match(/data-diff-status="removed"/g) ?? [];
 	expect(removed.length).toBeLessThan(3);
+});
+
+test("a cell wider than the card is cut around what changed", () => {
+	// A JSON blob, a pasted document, a base64 thumbnail: one cell can be
+	// wider than the whole card, and no ceiling on rows or columns makes a
+	// cell narrower.
+	const blob = (mark: string) =>
+		`${"x".repeat(30_000)}${mark}${"y".repeat(30_000)}`;
+	const result = toHtml(
+		{
+			path: "/records.csv",
+			before: bytes(`id,payload\n1,${blob("BEFORE")}\n2,ok\n`),
+			after: bytes(`id,payload\n1,${blob("AFTER")}\n2,ok\n`),
+		},
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	// The cut opens where the two sides first differ, so what changed is still
+	// on the card rather than cut away with the thirty thousand characters
+	// before it, and the cell is marked as the change it is.
+	expect(result.html).toContain("AFTER");
+	expect(result.html).toContain('data-diff-status="modified"');
+	expect(result.html).toMatch(/⋯ \d+ more characters/);
+	expect(result.html).toMatch(/⋯ \d+ characters ⋯/);
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+
+	// A cell that fits is never cut: most cells are a word.
+	const ordinary = toHtml(
+		{
+			path: "/leads.csv",
+			before: bytes("id,note\n1,A short note about the account.\n"),
+			after: bytes("id,note\n1,A shorter note about the account.\n"),
+		},
+		{ maxBytes: 24_000 },
+	);
+	expect(isRendered(ordinary) && ordinary.html).toContain(
+		"note about the account.",
+	);
+	expect(isRendered(ordinary) && ordinary.html).not.toContain(
+		"more characters",
+	);
 });
 
 test("a host retints by redefining a token on an ancestor", () => {

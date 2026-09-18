@@ -2,7 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import { parseMarkdown } from "../editor/markdown";
 import { astToTiptapDoc } from "../editor/tiptap-markdown-bridge/mdwc-to-tiptap";
 import { buildMarkdownReviewDocument } from "../review/build-review-document";
-import { pruneToChanges } from "./prune";
+import { capLongLines, pruneToChanges } from "./prune";
 import {
 	carriesChange,
 	countMarkdownDiff,
@@ -18,6 +18,12 @@ export type MarkdownDiffOptions = {
 	readonly context?: number;
 	/** Ceiling on lines kept per list, table or document. Default 14. */
 	readonly maxLines?: number;
+	/**
+	 * Ceiling on the characters one line may keep. A line longer than the card
+	 * is cut here and says how much more there is, because no ceiling on lines
+	 * shortens a single paragraph. Default: no ceiling.
+	 */
+	readonly maxChars?: number;
 	/** Skip the trim and render the whole document. */
 	readonly full?: boolean;
 	/**
@@ -65,8 +71,12 @@ export function renderMarkdownDiff(options: MarkdownDiffOptions): MarkdownDiff {
 					? { maxPerContainer: options.maxLines }
 					: {}),
 			});
+	// The cut comes after the trim: a line the trim already dropped is not
+	// worth measuring, and a line it kept is one the reader is meant to read.
+	const capped =
+		options.maxChars === undefined ? doc : capLongLines(doc, options.maxChars);
 	return {
-		html: renderReviewHtml(doc, {
+		html: renderReviewHtml(capped, {
 			...(options.images ? { images: options.images } : {}),
 		}),
 		stats,
