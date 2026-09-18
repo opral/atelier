@@ -5,7 +5,7 @@ import type {
 	StaticRenderer,
 } from "../../../render/types";
 import { fileText } from "../../../lib/decode-file-data";
-import { renderMarkdownDiff } from "./index";
+import { type MarkdownDiff, renderMarkdownDiff } from "./index";
 
 /**
  * The Markdown view, rendered without a shell.
@@ -27,6 +27,9 @@ const MAX_NESTING = 24;
 
 /** Lines kept per list, table or document before the budget trims. */
 const DEFAULT_MAX_LINES = 14;
+
+/** Lines a card shows however tight the budget: the change, and its edges. */
+const MIN_LINES = 3;
 
 export const markdownStaticRenderer: StaticRenderer = {
 	fileExtensions: ["md", "markdown", "mdx"],
@@ -50,17 +53,39 @@ export const markdownStaticRenderer: StaticRenderer = {
 			if (source.trim() === "") return { skipped: "empty" };
 		}
 
-		const diff = renderMarkdownDiff({
-			beforeMarkdown: before,
-			afterMarkdown: after,
-			context: 1,
-			maxLines: lineBudget(options.maxBytes),
-			...imageOption(options),
-		});
+		const review = (maxLines: number): MarkdownDiff =>
+			renderMarkdownDiff({
+				beforeMarkdown: before,
+				afterMarkdown: after,
+				context: 1,
+				maxLines,
+				...imageOption(options),
+			});
+
+		// The line budget is an estimate — a line of prose runs to a couple of
+		// hundred bytes once it carries tags, and a table row to a cell's worth
+		// each — so a render that overshoots the caller's budget is halved and
+		// drawn again rather than refused. Three attempts take it from most of
+		// the document to the change and its neighbours.
+		let lines = lineBudget(options.maxBytes);
+		let diff = review(lines);
 		if (diff.unchanged) return { skipped: "unchanged" };
+		let html = scoped(diff.html);
+		for (
+			let attempt = 0;
+			attempt < 3 &&
+			options.maxBytes !== undefined &&
+			byteLength(html) > options.maxBytes &&
+			lines > MIN_LINES;
+			attempt += 1
+		) {
+			lines = Math.max(MIN_LINES, Math.floor(lines / 2));
+			diff = review(lines);
+			html = scoped(diff.html);
+		}
 		return {
 			kind: content.kind,
-			html: scoped(diff.html),
+			html,
 			counts: {
 				added: diff.stats.added,
 				modified: diff.stats.modified,

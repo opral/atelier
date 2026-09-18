@@ -139,6 +139,33 @@ test("a budget trims the render and says what it left out", () => {
 	);
 });
 
+test("a render that overshoots the budget is drawn again, not refused", () => {
+	// A page of a spec, newly written: every paragraph is a change, so there is
+	// no unchanged bulk for the trim to take first. Fourteen lines of prose fit
+	// the line budget and not the byte budget, because the budget only
+	// estimates what a line costs once it carries tags.
+	const spec = `${Array.from(
+		{ length: 30 },
+		(_, index) =>
+			`Section ${index + 1}. ${"The service records every write and replays it on demand. ".repeat(20)}`,
+	).join("\n\n")}\n`;
+
+	const result = toHtml(
+		{ path: "/spec.md", after: bytes(spec) },
+		{ maxBytes: 24_000 },
+	);
+
+	expect(isRendered(result)).toBe(true);
+	if (!isRendered(result)) return;
+	expect(result.html).toContain("Section 1.");
+	// Shorter, and it says how much of the document is not on the card.
+	expect(result.hidden).toBeGreaterThan(0);
+	expect(result.html).toContain("md-diff-gap");
+	expect(new TextEncoder().encode(result.html).length).toBeLessThanOrEqual(
+		24_000,
+	);
+});
+
 test("a document carries its own styles and nothing else", () => {
 	const result = toHtml(
 		{ path: "/README.md", after: bytes("# Acme\n\nOne repository.\n") },
