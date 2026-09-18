@@ -282,14 +282,14 @@ export function DataGrid({
 								return (
 									<td
 										key={column.name}
-										className="h-8 border-b border-[var(--color-border-subtle)] px-3.5 text-right whitespace-nowrap"
+										className="h-8 border-b border-border-subtle px-3.5 text-right whitespace-nowrap"
 									>
 										<button
 											type="button"
 											onClick={() => onLazyBlobRequest(row, column)}
 											disabled={isLoading}
 											data-attr="sql-lazy-blob"
-											className="font-mono text-[11.5px] text-[var(--color-text-tertiary)] underline decoration-[var(--color-border-panel)] underline-offset-2 hover:text-[var(--color-text-primary)] disabled:cursor-wait disabled:opacity-60"
+											className="font-mono text-[11.5px] text-fg-subtle underline decoration-border underline-offset-2 hover:text-fg disabled:cursor-wait disabled:opacity-60"
 										>
 											{isLoading ? "Loading…" : "Load"}
 										</button>
