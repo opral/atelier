@@ -91,6 +91,35 @@ test("a view that cannot draw a file says so instead of failing", () => {
 	).toEqual({ skipped: "unsupported" });
 });
 
+test("a code sample is source, not nesting", () => {
+	// A fence holds whatever was pasted into it, and a formatter indents. The
+	// nesting guard is about what a parser recurses into, so a document with
+	// indented YAML, JSX or ASCII art in it is an ordinary document.
+	for (const sample of [
+		`\`\`\`yaml\n${" ".repeat(60)}key: value\n\`\`\``,
+		`\`\`\`jsx\n${"    ".repeat(14)}<div />\n\`\`\``,
+		`\`\`\`\n${" ".repeat(60)}+---+\n\`\`\``,
+		// An indented code block is source too, and its indentation nests
+		// nothing either.
+		`    ${" ".repeat(60)}deep()`,
+	]) {
+		const result = toHtml({
+			path: "/guide.md",
+			after: bytes(`# Guide\n\n${sample}\n`),
+		});
+		expect(isRendered(result)).toBe(true);
+	}
+	// A document that really is a stack is still refused: the guard is about
+	// the recursion, and a list nested thirty deep is that recursion.
+	const nested = Array.from(
+		{ length: 30 },
+		(_, level) => `${"  ".repeat(level)}- level ${level}`,
+	).join("\n");
+	expect(toHtml({ path: "/deep.md", after: bytes(`${nested}\n`) })).toEqual({
+		skipped: "too-large",
+	});
+});
+
 test("a budget trims the render and says what it left out", () => {
 	const rows = Array.from({ length: 60 }, (_, index) => `- Item ${index + 1}`);
 	const result = toHtml(

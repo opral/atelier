@@ -100,11 +100,32 @@ function byteLength(value: string): number {
 	return new TextEncoder().encode(value).length;
 }
 
+/**
+ * Only what the parser recurses into counts.
+ *
+ * A fence holds source, not structure, and a formatter indents source: a card
+ * refused any document with wrapped YAML or JSX in it. Outside a fence,
+ * indentation is nesting only where it indents a list marker — elsewhere it is
+ * a continuation line or an indented code block, and neither recurses.
+ */
 function tooDeep(markdown: string): boolean {
+	let fence: string | null = null;
 	for (const line of markdown.split("\n")) {
+		const mark = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+		if (fence !== null) {
+			// A fence closes on its own character, and never on a shorter run.
+			if (mark && mark[0] === fence[0] && mark.length >= fence.length)
+				fence = null;
+			continue;
+		}
+		if (mark) {
+			fence = mark;
+			continue;
+		}
 		const quotes = (/^[\s>]*/.exec(line)?.[0] ?? "").split(">").length - 1;
-		const indent = (/^[ \t]*/.exec(line)?.[0] ?? "").length;
-		if (quotes > MAX_NESTING || indent / 2 > MAX_NESTING) return true;
+		if (quotes > MAX_NESTING) return true;
+		const indent = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]/.exec(line)?.[1];
+		if (indent !== undefined && indent.length / 2 > MAX_NESTING) return true;
 	}
 	return false;
 }
