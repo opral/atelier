@@ -3150,3 +3150,33 @@ test("the Delete key on selected rows leaves the keyboard on the row that moved 
 		await fixture.close();
 	}
 });
+
+test("deleting the last row lands on the row that is the end of the table now", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		await act(async () => {
+			props().onCellContextMenu?.([0, 2], {
+				preventDefault: () => {},
+				bounds: { x: 10, y: 10, width: 100, height: 40 },
+				localEventX: 5,
+				localEventY: 5,
+			});
+		});
+		const remove = await screen.findByRole("menuitem", { name: /delete row/i });
+		await act(async () => {
+			remove.click();
+		});
+		await waitFor(() => expect(props().rows).toBe(2));
+		// The anchor used to name the deleted row itself, which is past the end
+		// of the table the edit leaves behind: Glide drops a selection there and
+		// answers no key.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 1]),
+		);
+	} finally {
+		await fixture.close();
+	}
+});

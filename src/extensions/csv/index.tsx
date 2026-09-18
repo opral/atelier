@@ -135,7 +135,7 @@ import { createReactExtensionDefinition } from "../../extension-runtime/react-ex
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import manifestJson from "./manifest.json";
 import { parseCsv, type CsvParseResult, type CsvRow } from "./csv-data";
-import { columnAnchorAfterDelete } from "./csv-grid-anchor";
+import { anchorAfterDelete } from "./csv-grid-anchor";
 import {
 	appendDocumentRow,
 	CSV_SEED_TEXT,
@@ -1934,19 +1934,13 @@ function CsvTable({
 		.toArray()
 		.filter((row) => row < rowMap.length);
 	const deleteRows = (rows: readonly number[]) => {
-		// The row that moves up into the first deleted one's place — or the
-		// last row left, when the deletion ran to the end of the table.
-		const remaining = parsed.rows.length - rows.length;
-		const first = Math.min(
-			rows.length ? Math.min(...rows) : 0,
-			Math.max(0, remaining - 1),
-		);
+		const first = anchorAfterDelete(rows, parsed.rows.length);
 		editing?.onDeleteRows(rows.map(sourceRowIndex));
 		clearSelection();
 		// Glide answers no key without a selection, so the table takes the row
 		// that moved up into the first deleted one's place.
 		requestAnimationFrame(() =>
-			requestAnimationFrame(() => focusGrid([0, Math.max(0, first)])),
+			requestAnimationFrame(() => focusGrid([0, first])),
 		);
 	};
 	const deleteSelectedRows = () => deleteRows(selectedRows);
@@ -2909,7 +2903,7 @@ function CsvTable({
 								runStructuralEdit(
 									() => editing.onDeleteColumns(menuColumns),
 									// The column that takes the first deleted one's place.
-									[columnAnchorAfterDelete(menuColumns, columnCount), 0],
+									[anchorAfterDelete(menuColumns, columnCount), 0],
 								)
 							}
 						/>
@@ -2936,7 +2930,7 @@ function CsvTable({
 								runStructuralEdit(
 									() => editing.onDeleteRows(rows.map(sourceRowIndex)),
 									// The row that takes the first deleted one's place.
-									[0, Math.max(0, Math.min(...rows))],
+									[0, anchorAfterDelete(rows, parsed.rows.length)],
 								)
 							}
 						/>
