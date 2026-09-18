@@ -496,6 +496,43 @@ const EMPTY_ATELIER_EXTENSIONS: readonly AtelierExtensionRegistration[] = [];
 const EMPTY_DEFAULT_OPEN_PANELS: readonly DefaultOpenArea[] = [];
 const MIN_UNCOLLAPSED_RIGHT_SIZE = 35;
 const MIN_VISIBLE_PANEL_SIZE = 1;
+
+/**
+ * Keeps the keyboard out of a panel that has just collapsed.
+ *
+ * A collapsed panel is zero wide and shows nothing: its section picker
+ * leaves with its content, and what stays mounted is off screen. Focus that
+ * was in either had nowhere to be and fell to `<body>` — the next Tab then
+ * restarts at the top of the page — whether the panel was collapsed from its
+ * own "Hide sidebar", from the shortcut, or from the bar. The panel's toggle
+ * in the top bar is the one control that brings it back, so that is where
+ * the act carries on, and without a ring: collapsing a panel is not a
+ * keyboard navigation moment.
+ *
+ * Only a keyboard the collapse stranded is moved. One that is somewhere else
+ * already — the main area, another panel — is left where it is.
+ */
+function useCollapsedPanelFocus(
+	side: Exclude<Area, "main">,
+	contentVisible: boolean,
+) {
+	const wasVisible = useRef(contentVisible);
+	useEffect(() => {
+		const collapsed = wasVisible.current && !contentVisible;
+		wasVisible.current = contentVisible;
+		if (!collapsed) return;
+		const active = document.activeElement;
+		const panel = document.querySelector(`aside[data-area-side="${side}"]`);
+		const stranded =
+			active === null ||
+			active === document.body ||
+			(panel?.contains(active) ?? false);
+		if (!stranded) return;
+		document
+			.querySelector<HTMLElement>(`[data-attr="topbar-toggle-${side}-panel"]`)
+			?.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+	}, [contentVisible, side]);
+}
 function deriveUntitledMarkdownPathForSuffix(suffix: number | null): string {
 	const baseStem = "new-file";
 	if (suffix === null) {
@@ -1445,6 +1482,13 @@ function LayoutShellLoadedContentResolved({
 		sidePanelRevealIntent.left,
 		sidePanelRevealIntent.right,
 	]);
+	// A panel that is collapsed but revealing is on its way on screen, so it
+	// counts as visible: its content mounts before it is shown.
+	const isLeftContentVisible = !isLeftCollapsed || sidePanelRevealIntent.left;
+	const isRightContentVisible =
+		!isRightCollapsed || sidePanelRevealIntent.right;
+	useCollapsedPanelFocus("left", isLeftContentVisible);
+	useCollapsedPanelFocus("right", isRightContentVisible);
 	const [workspaceUiIntent, setWorkspaceUiIntent] = useState<{
 		collapseSide: Exclude<Area, "main"> | null;
 		focusCentral: boolean;
@@ -4775,7 +4819,7 @@ function LayoutShellLoadedContentResolved({
 								title="Navigator"
 								area={leftPanel}
 								isFocused={!isLeftCollapsed && focusedArea === "left"}
-								contentVisible={!isLeftCollapsed || sidePanelRevealIntent.left}
+								contentVisible={isLeftContentVisible}
 								onFocusArea={focusPanel}
 								onSelectView={handleSelectLeftView}
 								onAddView={addViewOnLeft}
@@ -4875,9 +4919,7 @@ function LayoutShellLoadedContentResolved({
 								title="Secondary"
 								area={rightPanel}
 								isFocused={!isRightCollapsed && focusedArea === "right"}
-								contentVisible={
-									!isRightCollapsed || sidePanelRevealIntent.right
-								}
+								contentVisible={isRightContentVisible}
 								onFocusArea={focusPanel}
 								onSelectView={handleSelectRightView}
 								onAddView={addViewOnRight}

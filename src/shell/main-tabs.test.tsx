@@ -58,7 +58,13 @@ const sideToolExtension: AtelierExtensionRegistration = {
 	description: "A removable side-panel view.",
 	placement: ["left", "right"],
 	icon: TabIcon,
-	Component: () => <div data-testid="test-side-tool">side tool</div>,
+	Component: () => (
+		<div data-testid="test-side-tool">
+			<button type="button" data-testid="test-side-tool-control">
+				side tool
+			</button>
+		</div>
+	),
 };
 
 const extensions = [homeRegistration, dirRegistration, sideToolExtension];
@@ -316,6 +322,78 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("ending a rename puts the keyboard back on the chip", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			const field = () =>
+				document.querySelector<HTMLInputElement>(
+					"[data-attr='panel-tab-rename-input']",
+				);
+
+			// Escape gives up on the rename.
+			const tab = mainTabButtons().at(-1)!;
+			tab.focus();
+			fireEvent.keyDown(tab, { key: "F2" });
+			await waitFor(() => expect(field()).toHaveFocus());
+			await act(async () => {
+				fireEvent.keyDown(field()!, { key: "Escape" });
+			});
+			await waitFor(() => expect(field()).toBeNull());
+			// Not <body>: the field replaced the chip, so the chip takes the
+			// keyboard back rather than dropping it and restarting the next Tab
+			// at the top of the page.
+			expect(mainTabButtons().at(-1)).toHaveFocus();
+
+			// Enter commits it, and the renamed chip has the keyboard.
+			const tabAgain = mainTabButtons().at(-1)!;
+			tabAgain.focus();
+			fireEvent.keyDown(tabAgain, { key: "F2" });
+			await waitFor(() => expect(field()).toHaveFocus());
+			await act(async () => {
+				fireEvent.change(field()!, { target: { value: "plan" } });
+				fireEvent.keyDown(field()!, { key: "Enter" });
+			});
+			await waitFor(() =>
+				expect(mainTabLabels()).toEqual(["«home»", "plan.md"]),
+			);
+			expect(mainTabButtons().at(-1)).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("a rename abandoned by clicking away leaves the keyboard where it went", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			const tab = mainTabButtons().at(-1)!;
+			tab.focus();
+			fireEvent.keyDown(tab, { key: "F2" });
+			const field = () =>
+				document.querySelector<HTMLInputElement>(
+					"[data-attr='panel-tab-rename-input']",
+				);
+			await waitFor(() => expect(field()).toHaveFocus());
+
+			// The reader clicks elsewhere: the rename commits unchanged, and the
+			// chip coming back must not pull the keyboard off what was clicked.
+			const elsewhere = screen.getByRole("button", { name: "Add view" });
+			await act(async () => {
+				elsewhere.focus();
+				fireEvent.blur(field()!);
+			});
+			await waitFor(() => expect(field()).toBeNull());
+			expect(elsewhere).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("animates the pinned home label between expanded and compact states", async () => {
 		const shell = await renderTabbedShell();
 		try {
@@ -467,6 +545,38 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("closing the document the keyboard is in lands on the tab that takes over", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+				await shell.atelier.documents.open("/two.md", { newTab: true });
+			});
+			await waitFor(() =>
+				expect(screen.getByRole("heading", { name: "Two" })).toBeVisible(),
+			);
+			const survivor = screen.getByRole("button", { name: "one.md" });
+			// The keyboard is in the document, where reading and typing happen —
+			// not on the tab — and the close comes from elsewhere: a host's
+			// shortcut, the Files view, the end of a review.
+			const openDocument = document.querySelector<HTMLElement>(
+				'[data-view-instance][data-active="true"] .ProseMirror',
+			);
+			expect(openDocument).not.toBeNull();
+			openDocument!.focus();
+
+			await act(async () => {
+				await shell.atelier.documents.closeActive();
+			});
+
+			expect(mainTabLabels()).toEqual(["«home»", "one.md"]);
+			// Not <body>: the view left with the keyboard inside it.
+			expect(survivor).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("newTab appends at the end of the strip; open activates an existing tab", async () => {
 		const shell = await renderTabbedShell();
 		try {
@@ -603,6 +713,40 @@ describe("main tabs with a pinned home", () => {
 					`aside button[data-view-key="${SIDE_EXTENSION_ID}"]`,
 				),
 			).toBeNull();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("collapsing a sidebar leaves the keyboard on its top-bar toggle", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.views.open(SIDE_EXTENSION_ID, { area: "right" });
+			});
+			await screen.findByTestId("test-side-tool");
+			const picker = document.querySelector<HTMLButtonElement>(
+				'aside button[aria-label="Side Tool panel view menu"]',
+			)!;
+			picker.focus();
+
+			await act(async () => {
+				fireEvent.keyDown(window, { key: "2", code: "Digit2", ctrlKey: true });
+			});
+
+			// The picker left with the panel. Not <body>: the toggle is what
+			// brings the panel back, so that is where the keyboard waits.
+			await waitFor(() =>
+				expect(
+					screen.getByRole("button", { name: "Toggle right panel" }),
+				).toHaveFocus(),
+			);
+			// The view stays mounted — it keeps its state for when the panel
+			// comes back — but a zero-wide panel is no place for the keyboard to
+			// walk into on the next Tab.
+			const control = screen.getByTestId("test-side-tool-control");
+			control.focus();
+			expect(control).not.toHaveFocus();
 		} finally {
 			await shell.cleanup();
 		}
