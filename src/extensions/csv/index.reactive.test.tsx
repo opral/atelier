@@ -3247,3 +3247,57 @@ test("a row inserted under a search takes the keyboard where the row actually la
 		await fixture.close();
 	}
 });
+
+test("a structural edit keeps the axis it did not touch", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		const at = (cell: readonly [number, number]) => ({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.empty(),
+			current: {
+				cell: cell as [number, number],
+				range: { x: cell[0], y: cell[1], width: 1, height: 1 },
+				rangeStack: [],
+			},
+		});
+		await act(async () => {
+			props().onGridSelectionChange?.(at([1, 2]));
+		});
+		// A column is added: the reader's row is none of its business, and a
+		// long table scrolled back to its first row when it took one.
+		clickCsvHeader(0);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Insert column left" }),
+		);
+		await waitFor(() => expect(props().columns).toHaveLength(3));
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 2]),
+		);
+
+		// And the other way round: a row goes, the reader's column stays.
+		await act(async () => {
+			props().onGridSelectionChange?.(at([2, 2]));
+		});
+		await act(async () => {
+			props().onCellContextMenu?.([2, 0], {
+				preventDefault: () => {},
+				bounds: { x: 10, y: 10, width: 100, height: 40 },
+				localEventX: 5,
+				localEventY: 5,
+			});
+		});
+		const remove = await screen.findByRole("menuitem", { name: /delete row/i });
+		await act(async () => {
+			remove.click();
+		});
+		await waitFor(() => expect(props().rows).toBe(2));
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([2, 0]),
+		);
+	} finally {
+		await fixture.close();
+	}
+});

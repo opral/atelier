@@ -1839,6 +1839,16 @@ function CsvTable({
 	}));
 	const gridSelectionRef = useRef(gridSelection);
 	gridSelectionRef.current = gridSelection;
+	// The cell the reader was on last. A structural edit names the line it
+	// acted on; the other half of the anchor is this one, so a column added
+	// beside row 40 does not scroll the table back to its first row, and a row
+	// added beside the last column does not send the keyboard to the first.
+	const lastCell = useRef<readonly [number, number]>([0, 0]);
+	if (gridSelection.current) lastCell.current = gridSelection.current.cell;
+	const readerRow = () =>
+		Math.min(lastCell.current[1], Math.max(0, parsed.rows.length - 1));
+	const readerColumn = () =>
+		Math.min(lastCell.current[0], Math.max(0, columnCount - 1));
 	const hasSelection = (selection: GridSelection) =>
 		selection.current !== undefined ||
 		selection.rows.length > 0 ||
@@ -1953,7 +1963,7 @@ function CsvTable({
 		// Glide answers no key without a selection, so the table takes the row
 		// that moved up into the first deleted one's place.
 		requestAnimationFrame(() =>
-			requestAnimationFrame(() => focusGrid([0, first])),
+			requestAnimationFrame(() => focusGrid([readerColumn(), first])),
 		);
 	};
 	const deleteSelectedRows = () => deleteRows(selectedRows);
@@ -1962,7 +1972,7 @@ function CsvTable({
 	const clearRowSelection = () => {
 		const first = selectedRows.length ? Math.min(...selectedRows) : 0;
 		clearSelection();
-		focusGrid([0, first]);
+		focusGrid([readerColumn(), first]);
 	};
 
 	// Preserve view predicates on rename; reset when column identities/positions change.
@@ -2010,6 +2020,7 @@ function CsvTable({
 		if (!pendingColumnReveal.current) return;
 		pendingColumnReveal.current = false;
 		const column = columnCount - 1;
+		const row = readerRow();
 		// The new column is where the reader is now, the same way an appended
 		// row takes the selection: landing back on the first cell of the table
 		// makes a column added on the right feel like it happened elsewhere.
@@ -2017,8 +2028,8 @@ function CsvTable({
 			columns: CompactSelection.empty(),
 			rows: CompactSelection.empty(),
 			current: {
-				cell: [column, 0],
-				range: { x: column, y: 0, width: 1, height: 1 },
+				cell: [column, row],
+				range: { x: column, y: row, width: 1, height: 1 },
 				rangeStack: [],
 			},
 		});
@@ -2041,17 +2052,18 @@ function CsvTable({
 			pendingRowReveal.current = null;
 			const row = rowMap.indexOf(pending.source);
 			if (row >= 0) {
+				const column = readerColumn();
 				setGridSelection({
 					columns: CompactSelection.empty(),
 					rows: CompactSelection.empty(),
 					current: {
-						cell: [0, row],
-						range: { x: 0, y: row, width: 1, height: 1 },
+						cell: [column, row],
+						range: { x: column, y: row, width: 1, height: 1 },
 						rangeStack: [],
 					},
 				});
 				pendingFocus.current = true;
-				requestAnimationFrame(() => gridRef.current?.scrollTo(0, row));
+				requestAnimationFrame(() => gridRef.current?.scrollTo(column, row));
 				return;
 			}
 		}
@@ -2907,8 +2919,8 @@ function CsvTable({
 							onInsertLeft={() =>
 								runStructuralEdit(
 									() => editing.onInsertColumn(menu.column),
-									// The column that was just made, not the table's corner.
-									[menu.column, 0],
+									// The column that was just made, on the reader's row.
+									[menu.column, readerRow()],
 								)
 							}
 							onInsertRight={() =>
@@ -2916,13 +2928,13 @@ function CsvTable({
 									if (menu.column === columnCount - 1)
 										pendingColumnReveal.current = true;
 									editing.onInsertColumn(menu.column + 1);
-								}, [menu.column + 1, 0])
+								}, [menu.column + 1, readerRow()])
 							}
 							onDelete={() =>
 								runStructuralEdit(
 									() => editing.onDeleteColumns(menuColumns),
 									// The column that takes the first deleted one's place.
-									[anchorAfterDelete(menuColumns, columnCount), 0],
+									[anchorAfterDelete(menuColumns, columnCount), readerRow()],
 								)
 							}
 						/>
@@ -2950,7 +2962,7 @@ function CsvTable({
 								runStructuralEdit(
 									() => editing.onDeleteRows(rows.map(sourceRowIndex)),
 									// The row that takes the first deleted one's place.
-									[0, anchorAfterDelete(rows, parsed.rows.length)],
+									[readerColumn(), anchorAfterDelete(rows, parsed.rows.length)],
 								)
 							}
 						/>
