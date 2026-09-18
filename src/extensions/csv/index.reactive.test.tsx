@@ -40,6 +40,8 @@ type MockedDataEditorProps = {
 	onDelete?: (selection: {
 		rows: { length: number; toArray: () => number[] };
 	}) => boolean;
+	gridSelection: GridSelection;
+	onGridSelectionChange?: (next: GridSelection) => void;
 	columns: readonly { title: string; width?: number }[];
 	onColumnResizeEnd?: (
 		column: { title: string },
@@ -3119,5 +3121,183 @@ test("a removed row keeps the height its wrapped value needs", async () => {
 	} finally {
 		utils?.unmount();
 		await lix.close();
+	}
+});
+
+test("the Delete key on selected rows leaves the keyboard on the row that moved up", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\nDave,d\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		await act(async () => {
+			props().onGridSelectionChange?.({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.fromSingleSelection(1),
+			});
+		});
+		await act(async () => {
+			props().onDelete?.(props().gridSelection);
+		});
+		await waitFor(() => expect(props().rows).toBe(3));
+		// Backspace already landed here; Delete deleted and selected nothing,
+		// and Glide answers no key at all in that state.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 1]),
+		);
+		expect(props().getCellContent([0, 1]).displayData).toBe("Carol");
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("deleting the last row lands on the row that is the end of the table now", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		await act(async () => {
+			props().onCellContextMenu?.([0, 2], {
+				preventDefault: () => {},
+				bounds: { x: 10, y: 10, width: 100, height: 40 },
+				localEventX: 5,
+				localEventY: 5,
+			});
+		});
+		const remove = await screen.findByRole("menuitem", { name: /delete row/i });
+		await act(async () => {
+			remove.click();
+		});
+		await waitFor(() => expect(props().rows).toBe(2));
+		// The anchor used to name the deleted row itself, which is past the end
+		// of the table the edit leaves behind: Glide drops a selection there and
+		// answers no key.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 1]),
+		);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("clearing a row selection leaves the keyboard on the first row that was picked", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\nDave,d\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		await act(async () => {
+			props().onGridSelectionChange?.({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.fromSingleSelection([2, 4]),
+			});
+		});
+		await act(async () => {
+			screen.getByRole("button", { name: /clear/i }).click();
+		});
+		// Clearing deletes nothing, so the rows that were picked are all still
+		// there; the anchor used to be clamped as if they had gone.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 2]),
+		);
+		expect(props().rows).toBe(4);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("a row inserted under a search takes the keyboard where the row actually landed", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,keep\nCarol,c\nDave,keep\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		fireEvent.change(screen.getByRole("textbox", { name: "Search table" }), {
+			target: { value: "keep" },
+		});
+		await waitFor(() =>
+			expect(screen.getByText("2 of 4 rows")).toBeInTheDocument(),
+		);
+		// Below Bob, the first of the two hits: line 3 of the file.
+		await act(async () => {
+			props().onCellContextMenu?.([0, 0], {
+				preventDefault: () => {},
+				bounds: { x: 10, y: 10, width: 100, height: 40 },
+				localEventX: 5,
+				localEventY: 5,
+			});
+		});
+		const insert = await screen.findByRole("menuitem", {
+			name: /insert row below/i,
+		});
+		await act(async () => {
+			insert.click();
+		});
+		await waitFor(() => expect(props().rows).toBe(5));
+		// The search is lifted to show the new row, so the row the reader was
+		// pointing at is no longer the row that number names: the anchor used
+		// to name Bob, one line above what had just been made.
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 2]),
+		);
+		expect(props().getCellContent([0, 2]).displayData).toBe("");
+		expect(props().getCellContent([0, 1]).displayData).toBe("Bob");
+	} finally {
+		await fixture.close();
+	}
+});
+
+test("a structural edit keeps the axis it did not touch", async () => {
+	const fixture = await renderMetadataCsv(
+		"name,stage\nAlice,a\nBob,b\nCarol,c\n",
+	);
+	try {
+		const props = () => latestDataEditorProps.current!;
+		const at = (cell: readonly [number, number]) => ({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.empty(),
+			current: {
+				cell: cell as [number, number],
+				range: { x: cell[0], y: cell[1], width: 1, height: 1 },
+				rangeStack: [],
+			},
+		});
+		await act(async () => {
+			props().onGridSelectionChange?.(at([1, 2]));
+		});
+		// A column is added: the reader's row is none of its business, and a
+		// long table scrolled back to its first row when it took one.
+		clickCsvHeader(0);
+		fireEvent.click(
+			await screen.findByRole("menuitem", { name: "Insert column left" }),
+		);
+		await waitFor(() => expect(props().columns).toHaveLength(3));
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([0, 2]),
+		);
+
+		// And the other way round: a row goes, the reader's column stays.
+		await act(async () => {
+			props().onGridSelectionChange?.(at([2, 2]));
+		});
+		await act(async () => {
+			props().onCellContextMenu?.([2, 0], {
+				preventDefault: () => {},
+				bounds: { x: 10, y: 10, width: 100, height: 40 },
+				localEventX: 5,
+				localEventY: 5,
+			});
+		});
+		const remove = await screen.findByRole("menuitem", { name: /delete row/i });
+		await act(async () => {
+			remove.click();
+		});
+		await waitFor(() => expect(props().rows).toBe(2));
+		await waitFor(() =>
+			expect(props().gridSelection.current?.cell).toEqual([2, 0]),
+		);
+	} finally {
+		await fixture.close();
 	}
 });

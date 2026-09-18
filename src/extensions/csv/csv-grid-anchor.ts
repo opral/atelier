@@ -6,14 +6,17 @@
  * corner, which reads as the edit having happened elsewhere.
  */
 
-/** The column that takes the place of the first one deleted. */
-export function columnAnchorAfterDelete(
+/**
+ * The line — column or row — that takes the place of the first one deleted.
+ * Both axes ask the same question, so they ask it in one place.
+ */
+export function anchorAfterDelete(
 	deleted: readonly number[],
-	columnCount: number,
+	count: number,
 ): number {
 	if (deleted.length === 0) return 0;
-	const remaining = columnCount - deleted.length;
-	// Deleting the last columns leaves the one before them; deleting them all
+	const remaining = count - deleted.length;
+	// Deleting the last lines leaves the one before them; deleting them all
 	// leaves the corner, which is all there is.
 	return Math.max(0, Math.min(Math.min(...deleted), remaining - 1));
 }
