@@ -105,7 +105,7 @@ import {
 	createCentralSlotBehavior,
 	type CentralSlotBehavior,
 } from "./main-slot-behavior";
-import { findFileHandlerExtension } from "../extension-runtime/file-handlers";
+import { fileViewExtension } from "../extension-runtime/file-handlers";
 import {
 	coerceAtelierUiState,
 	coerceAtelierSessionUiState,
@@ -1340,7 +1340,7 @@ function LayoutShellLoadedContentResolved({
 				return { kind: view.kind, instance: view.instance };
 			}
 			const kind =
-				findFileHandlerExtension(extensionMap.values(), filePath)?.kind ??
+				fileViewExtension(extensionMap.values(), filePath)?.kind ??
 				FILE_EXTENSION_KIND;
 			return kind === view.kind
 				? { kind: view.kind, instance: view.instance }
@@ -2244,7 +2244,7 @@ function LayoutShellLoadedContentResolved({
 			newTab?: boolean;
 		}) => {
 			const handler =
-				findFileHandlerExtension(extensionMap.values(), filePath) ?? undefined;
+				fileViewExtension(extensionMap.values(), filePath) ?? undefined;
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
 			emitEvent({
 				type: "document_open_attempted",

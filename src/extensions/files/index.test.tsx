@@ -381,7 +381,9 @@ describe("FilesView", () => {
 				.where("path", "=", "/planning/budget.csv")
 				.executeTakeFirst();
 			expect(created?.path).toBe("/planning/budget.csv");
-			expect(new TextDecoder().decode(created?.content)).toBe("Column 1\n");
+			// Empty on disk: the CSV view draws the table a new file is about to
+			// be, and writes it once something is typed into it.
+			expect(new TextDecoder().decode(created?.content)).toBe("");
 		});
 		expect(openFile).not.toHaveBeenCalled();
 

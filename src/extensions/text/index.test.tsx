@@ -146,6 +146,99 @@ describe("TextView", () => {
 		await lix.close();
 	});
 
+	test("a file no extension claims is typed into, not apologised for", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("dockerfile"),
+				path: "/Dockerfile",
+				content: new TextEncoder().encode("FROM node:22-alpine\n"),
+			})
+			.execute();
+		const atelier = await createRuntime(lix);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={atelier}
+								fileId={fakeUuid("dockerfile")}
+								filePath="/Dockerfile"
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+		const content = await waitFor(() => {
+			const element =
+				utils!.container.querySelector<HTMLElement>(".cm-content");
+			if (!element) throw new Error("Editor not mounted");
+			return element;
+		});
+		await waitFor(() =>
+			expect(screen.getByTestId("text-editor-view")).toHaveTextContent(
+				"node:22-alpine",
+			),
+		);
+		expect(content).toHaveAttribute("contenteditable", "true");
+		expect(screen.queryByText(/not supported yet/i)).toBeNull();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
+	test("bytes that are not UTF-8 are declined rather than drawn as nonsense", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fakeUuid("binary-blob"),
+				path: "/archive.bin",
+				content: new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0xc3]),
+			})
+			.execute();
+		const atelier = await createRuntime(lix);
+		let utils: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			utils = render(
+				<div className="atelier-root">
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<TextView
+								atelier={atelier}
+								fileId={fakeUuid("binary-blob")}
+								filePath="/archive.bin"
+								isActiveView
+								isPanelFocused={false}
+							/>
+						</Suspense>
+					</LixProvider>
+				</div>,
+			);
+		});
+		expect(
+			await screen.findByText(/archive\.bin is not a text file/i),
+		).toBeInTheDocument();
+		// Nothing was written back over the bytes the editor refused to show.
+		const row = await qb(lix)
+			.selectFrom("lix_file")
+			.select("content")
+			.where("id", "=", fakeUuid("binary-blob"))
+			.executeTakeFirstOrThrow();
+		expect(new Uint8Array(row.content as Uint8Array)).toEqual(
+			new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0xc3]),
+		);
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
 	test("persists user edits and applies externally-originated updates", async () => {
 		const lix = await openLix();
 		await qb(lix)

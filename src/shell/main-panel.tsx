@@ -1,5 +1,5 @@
 import { useCallback, type ReactNode } from "react";
-import { FilePlus } from "lucide-react";
+import { FilePlus, FileText } from "lucide-react";
 import type {
 	AreaState,
 	Area,
@@ -108,24 +108,33 @@ export function MainArea({
 /**
  * Empty editor island in an open workspace: start a document, or hand off to
  * the agent island.
+ *
+ * A host nobody can write to hands over no `onCreateNewFile`, and there the
+ * copy says what is true instead of offering a new document and then
+ * withholding the button — "Start writing" over a workspace that takes no
+ * writing was the whole of the empty state a reader got.
  */
 function EmptyStateContent({
 	onCreateNewFile,
 }: {
 	onCreateNewFile?: () => void | Promise<void>;
 }) {
+	const canCreate = onCreateNewFile !== undefined;
+	const Glyph = canCreate ? FilePlus : FileText;
 	return (
 		<div
 			className="flex h-full flex-col items-center justify-center p-10 text-center"
 			data-testid="main-panel-empty-state"
+			data-can-create={canCreate ? "true" : "false"}
 		>
-			<FilePlus className="size-8 text-fg-subtle" strokeWidth={1.5} />
+			<Glyph className="size-8 text-fg-subtle" strokeWidth={1.5} />
 			<h1 className="mt-4 text-2xl font-bold tracking-[-0.02em] text-fg">
-				Start writing
+				{canCreate ? "Start writing" : "Nothing open"}
 			</h1>
 			<p className="mt-1.5 max-w-90 text-sm leading-relaxed text-fg-muted text-pretty">
-				Open a file from the left, or create a new document — saved as plain
-				markdown in this folder.
+				{canCreate
+					? "Open a file from the left, or create a new document — saved as plain markdown in this folder."
+					: "Open a file from the left to read it."}
 			</p>
 			{onCreateNewFile ? (
 				<button
