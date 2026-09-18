@@ -316,6 +316,78 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("ending a rename puts the keyboard back on the chip", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			const field = () =>
+				document.querySelector<HTMLInputElement>(
+					"[data-attr='panel-tab-rename-input']",
+				);
+
+			// Escape gives up on the rename.
+			const tab = mainTabButtons().at(-1)!;
+			tab.focus();
+			fireEvent.keyDown(tab, { key: "F2" });
+			await waitFor(() => expect(field()).toHaveFocus());
+			await act(async () => {
+				fireEvent.keyDown(field()!, { key: "Escape" });
+			});
+			await waitFor(() => expect(field()).toBeNull());
+			// Not <body>: the field replaced the chip, so the chip takes the
+			// keyboard back rather than dropping it and restarting the next Tab
+			// at the top of the page.
+			expect(mainTabButtons().at(-1)).toHaveFocus();
+
+			// Enter commits it, and the renamed chip has the keyboard.
+			const tabAgain = mainTabButtons().at(-1)!;
+			tabAgain.focus();
+			fireEvent.keyDown(tabAgain, { key: "F2" });
+			await waitFor(() => expect(field()).toHaveFocus());
+			await act(async () => {
+				fireEvent.change(field()!, { target: { value: "plan" } });
+				fireEvent.keyDown(field()!, { key: "Enter" });
+			});
+			await waitFor(() =>
+				expect(mainTabLabels()).toEqual(["«home»", "plan.md"]),
+			);
+			expect(mainTabButtons().at(-1)).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("a rename abandoned by clicking away leaves the keyboard where it went", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.documents.open("/one.md");
+			});
+			const tab = mainTabButtons().at(-1)!;
+			tab.focus();
+			fireEvent.keyDown(tab, { key: "F2" });
+			const field = () =>
+				document.querySelector<HTMLInputElement>(
+					"[data-attr='panel-tab-rename-input']",
+				);
+			await waitFor(() => expect(field()).toHaveFocus());
+
+			// The reader clicks elsewhere: the rename commits unchanged, and the
+			// chip coming back must not pull the keyboard off what was clicked.
+			const elsewhere = screen.getByRole("button", { name: "Add view" });
+			await act(async () => {
+				elsewhere.focus();
+				fireEvent.blur(field()!);
+			});
+			await waitFor(() => expect(field()).toBeNull());
+			expect(elsewhere).toHaveFocus();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("animates the pinned home label between expanded and compact states", async () => {
 		const shell = await renderTabbedShell();
 		try {

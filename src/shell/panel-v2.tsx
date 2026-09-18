@@ -1787,6 +1787,19 @@ function SortableTab({
 	onRename,
 }: SortableTabProps) {
 	const [renaming, setRenaming] = useState(false);
+	// The field replaces the chip, so ending the rename takes the focused
+	// element out of the document: Enter and Escape left the keyboard on
+	// `<body>` and the next Tab restarted at the top of the page. The chip
+	// that comes back is where the rename started, so that is where the
+	// keyboard goes — but only when the field still had it, because a rename
+	// ended by clicking elsewhere must not pull the focus off what was clicked.
+	const tabButtonRef = useRef<HTMLButtonElement | null>(null);
+	const restoreFocusRef = useRef(false);
+	useLayoutEffect(() => {
+		if (renaming || !restoreFocusRef.current) return;
+		restoreFocusRef.current = false;
+		tabButtonRef.current?.focus({ preventScroll: true });
+	}, [renaming]);
 	const {
 		attributes,
 		listeners,
@@ -1811,6 +1824,11 @@ function SortableTab({
 		transition,
 	};
 
+	const setTabButtonRef = (node: HTMLButtonElement | null) => {
+		tabButtonRef.current = node;
+		setNodeRef(node);
+	};
+
 	// The field replaces the chip rather than sitting inside it: a tab is a
 	// button, and a button is no place to type.
 	if (renaming && onRename)
@@ -1821,7 +1839,10 @@ function SortableTab({
 				name={label}
 				style={style}
 				onRename={onRename}
-				onDone={() => setRenaming(false)}
+				onDone={(keptFocus) => {
+					restoreFocusRef.current = keptFocus;
+					setRenaming(false);
+				}}
 			/>
 		);
 
@@ -1834,7 +1855,7 @@ function SortableTab({
 			onCloseRight={onCloseRight}
 		>
 			<TabButtonBase
-				ref={setNodeRef}
+				ref={setTabButtonRef}
 				icon={icon}
 				label={label}
 				onRenameRequest={onRename ? () => setRenaming(true) : undefined}
@@ -1889,7 +1910,12 @@ const TabRenameField = forwardRef<
 		readonly name: string;
 		readonly style?: CSSProperties;
 		readonly onRename: (nextName: string) => Promise<boolean>;
-		readonly onDone: () => void;
+		/**
+		 * The rename is over. `keptFocus` says the field still had the keyboard
+		 * as it closed — Enter or Escape, not a click elsewhere — so the chip
+		 * taking its place is the one that should have it next.
+		 */
+		readonly onDone: (keptFocus: boolean) => void;
 	}
 >(({ icon: Icon, name, style, onRename, onDone }, ref) => {
 	const inputRef = useRef<HTMLInputElement | null>(null);
@@ -1914,21 +1940,29 @@ const TabRenameField = forwardRef<
 		return () => cancelAnimationFrame(frame);
 	}, [name]);
 
-	const finish = () => {
+	// Whether the field still holds the keyboard is the caller's to say, not
+	// `document.activeElement`'s: the field disables itself while the rename
+	// is in flight, and disabling a focused input blurs it, so by the time a
+	// commit settles the keyboard has left an input the reader never left.
+	const finish = (keptFocus: boolean) => {
 		if (settled.current) return;
 		settled.current = true;
-		onDone();
+		onDone(keptFocus);
 	};
 
-	const commit = async () => {
+	const commit = async (keptFocus: boolean) => {
 		if (settled.current || busy) return;
 		const next = value.trim();
-		if (next.length === 0 || next === name) return finish();
+		if (next.length === 0 || next === name) return finish(keptFocus);
 		setBusy(true);
 		const renamed = await onRename(next);
 		setBusy(false);
-		if (renamed) return finish();
+		if (renamed) return finish(keptFocus);
 		setRejected(true);
+		// The field stays open on the refused name, so it takes the keyboard
+		// back: `select()` alone marks the text in an input nothing is typing
+		// into, because the disabled spell above blurred it.
+		if (keptFocus) inputRef.current?.focus();
 		inputRef.current?.select();
 	};
 
@@ -1972,18 +2006,20 @@ const TabRenameField = forwardRef<
 					// A name the workspace refused is abandoned by clicking away;
 					// asking again on every blur would be a trap.
 					if (busy || !focused.current) return;
-					if (rejected) finish();
-					else void commit();
+					// The keyboard has gone to whatever was clicked; the chip that
+					// comes back must not take it off there.
+					if (rejected) finish(false);
+					else void commit(false);
 				}}
 				onKeyDown={(event) => {
 					if (event.key === "Enter") {
 						event.preventDefault();
-						void commit();
+						void commit(true);
 						return;
 					}
 					if (event.key === "Escape") {
 						event.preventDefault();
-						finish();
+						finish(true);
 					}
 				}}
 			/>
