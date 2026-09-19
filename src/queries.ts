@@ -280,7 +280,14 @@ export function selectFilesStateAt(lix: Lix, commitId: string) {
 	);
 }
 
-export const CHECKPOINT_PREVIEW_PAGE_SIZE = 20;
+/**
+ * Checkpoints a history panel shows, and asks about, at a time.
+ *
+ * Ten fills the panel without a scroll on an ordinary window, and the reader
+ * asks for the next ten. The number is also the bound on one history read:
+ * the preview names the files in a page, and a page is what is on screen.
+ */
+export const CHECKPOINT_PREVIEW_PAGE_SIZE = 10;
 export type CheckpointFilePreviewRow = {
 	commit_id: string;
 	id: string;
@@ -296,7 +303,9 @@ export function selectCheckpointFilePreviewPage(
 		commitIds.length === 0 ||
 		commitIds.length > CHECKPOINT_PREVIEW_PAGE_SIZE
 	) {
-		throw new Error("A checkpoint preview page must contain 1–20 commit IDs.");
+		throw new Error(
+			`A checkpoint preview page must contain 1–${CHECKPOINT_PREVIEW_PAGE_SIZE} commit IDs.`,
+		);
 	}
 	return qb(lix)
 		.selectFrom(
