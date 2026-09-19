@@ -1009,6 +1009,16 @@
 			line-height: 0;
 		}
 
+		/* A picture that brought no size of its own: the default object size
+		   a replaced element gets, so an SVG without width and height is seen
+		   rather than laid out to nothing. */
+		.markdown-view
+			.ProseMirror
+			.markdown-image-block-content[data-markdown-image-sizeless] {
+			width: min(300px, 100%);
+			height: auto;
+		}
+
 		.markdown-view
 			.ProseMirror
 			.markdown-image-embed
