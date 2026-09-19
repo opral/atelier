@@ -79,8 +79,8 @@ async function renderEditorForMarkdownFile({
 					// Coalesce away the own-save echo so these tests explicitly
 					// exercise a remote observation arriving while still dirty.
 					if (
-						!event ||
-						!event.result.rows.some(
+						event.done ||
+						!event.value.result.rows.some(
 							(row) =>
 								row.content instanceof Uint8Array &&
 								new TextDecoder().decode(row.content) ===

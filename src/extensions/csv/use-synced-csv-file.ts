@@ -260,10 +260,8 @@ export function useSyncedCsvFile({
 		let closed = false;
 		void (async () => {
 			try {
-				for (;;) {
+				for await (const event of events) {
 					if (closed) break;
-					const event = await events.next();
-					if (!event || closed) continue;
 					const row = event.result.rows[0];
 					if (!row) continue;
 					observationSequence.current += 1;
@@ -294,7 +292,7 @@ export function useSyncedCsvFile({
 		})();
 		return () => {
 			closed = true;
-			events.close();
+			void events.return?.();
 		};
 	}, [fileId, lix]);
 

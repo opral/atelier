@@ -495,9 +495,8 @@ function observeQueryEntry<TRow>(
 		let expiredRetries = 0;
 		for (;;) {
 			try {
-				while (true) {
-					const event = await events.next();
-					if (closed || event === undefined) return;
+				for await (const event of events) {
+					if (closed) return;
 					const nextRows = reuseObservedResult
 						? queryResultToRows<TRow>(event.result)
 						: await (async () => {
@@ -508,6 +507,7 @@ function observeQueryEntry<TRow>(
 					expiredRetries = 0;
 					setQueryRows(entry, nextRows);
 				}
+				return;
 			} catch (error) {
 				if (closed) return;
 				expiredRetries += 1;
@@ -518,7 +518,7 @@ function observeQueryEntry<TRow>(
 					setQueryError(entry, error);
 					return;
 				}
-				events.close();
+				void events.return?.();
 				await new Promise((resolve) =>
 					setTimeout(resolve, expiredRetries * 50),
 				);
@@ -531,7 +531,7 @@ function observeQueryEntry<TRow>(
 
 	return () => {
 		closed = true;
-		events.close();
+		void events.return?.();
 	};
 }
 

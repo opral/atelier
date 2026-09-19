@@ -155,9 +155,8 @@ export function DeclarativeExtension({
 		);
 		void (async () => {
 			try {
-				while (true) {
-					const event = await events.next();
-					if (disposed || event === undefined) return;
+				for await (const event of events) {
+					if (disposed) return;
 					clearTimeout(timer);
 					timer = setTimeout(() => {
 						void reload();
@@ -172,7 +171,7 @@ export function DeclarativeExtension({
 			disposed = true;
 			controller?.abort();
 			clearTimeout(timer);
-			events.close();
+			void events.return?.();
 		};
 	}, [atelier.lix, definition, fileKey, key, location]);
 
