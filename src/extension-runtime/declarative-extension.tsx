@@ -155,7 +155,7 @@ export function DeclarativeExtension({
 		);
 		void (async () => {
 			try {
-				for await (const event of events) {
+				for await (const _event of events) {
 					if (disposed) return;
 					clearTimeout(timer);
 					timer = setTimeout(() => {

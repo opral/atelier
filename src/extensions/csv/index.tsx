@@ -1845,10 +1845,14 @@ function CsvTable({
 	// added beside the last column does not send the keyboard to the first.
 	const lastCell = useRef<readonly [number, number]>([0, 0]);
 	if (gridSelection.current) lastCell.current = gridSelection.current.cell;
-	const readerRow = () =>
-		Math.min(lastCell.current[1], Math.max(0, parsed.rows.length - 1));
-	const readerColumn = () =>
-		Math.min(lastCell.current[0], Math.max(0, columnCount - 1));
+	const readerRow = useCallback(
+		() => Math.min(lastCell.current[1], Math.max(0, parsed.rows.length - 1)),
+		[parsed.rows.length],
+	);
+	const readerColumn = useCallback(
+		() => Math.min(lastCell.current[0], Math.max(0, columnCount - 1)),
+		[columnCount],
+	);
 	const hasSelection = (selection: GridSelection) =>
 		selection.current !== undefined ||
 		selection.rows.length > 0 ||
@@ -2037,7 +2041,7 @@ function CsvTable({
 		requestAnimationFrame(() =>
 			gridRef.current?.scrollTo(column, 0, "horizontal"),
 		);
-	}, [columnCount]);
+	}, [columnCount, readerRow]);
 	useEffect(() => {
 		const previous = previousRowMap.current;
 		const rowMap = rowMapRef.current;
@@ -2100,7 +2104,7 @@ function CsvTable({
 			}
 			return next;
 		});
-	}, [rowMapKey]);
+	}, [readerColumn, rowMapKey]);
 
 	const handleCellContextMenu = useCallback(
 		(
@@ -2282,6 +2286,8 @@ function CsvTable({
 			{/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Handles bubbled Escape from child controls. */}
 			<div
 				className="csv-toolbar-content"
+				role="group"
+				aria-label="Table controls"
 				onPointerDown={deselectOnBlankPress}
 				onKeyDown={(event) => {
 					if (
