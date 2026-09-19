@@ -150,11 +150,11 @@ export function createLixBranchSession(
 						if (!observing) return;
 						observing = false;
 						stopObserving = undefined;
-						events.close();
+						void events.return?.();
 					};
 					void (async () => {
 						try {
-							while (await events.next()) {
+							for await (const _event of events) {
 								if (!observing) return;
 								await refreshActiveBranch();
 							}
@@ -168,7 +168,7 @@ export function createLixBranchSession(
 							if (observing) {
 								observing = false;
 								stopObserving = undefined;
-								events.close();
+								void events.return?.();
 							}
 						}
 					})();

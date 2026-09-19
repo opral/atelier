@@ -216,6 +216,50 @@ describe("SidePanel", () => {
 		).toBeInTheDocument();
 	});
 
+	test("closing the section picker puts the keyboard back on it", async () => {
+		const panelState: AreaState = {
+			views: [{ instance: "files-1", kind: FILES_EXTENSION_KIND }],
+			activeInstance: "files-1",
+		};
+
+		render(
+			<ExtensionHostRegistryProvider>
+				<DndContext>
+					<SidePanel
+						side="left"
+						title="Navigator"
+						area={panelState}
+						onSelectView={() => {}}
+						onAddView={() => {}}
+						onRemoveView={() => {}}
+						viewContext={createViewContext()}
+						isFocused={false}
+						onFocusArea={() => {}}
+					/>
+				</DndContext>
+			</ExtensionHostRegistryProvider>,
+		);
+
+		const picker = await screen.findByRole("button", {
+			name: "Files panel view menu",
+		});
+
+		// Choosing a view: the picker it was chosen from keeps the keyboard.
+		picker.focus();
+		fireEvent.pointerDown(picker, { button: 0 });
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Files" }));
+		// Not <body>: the next Tab carries on from the sidebar instead of
+		// restarting at the top of the page.
+		await waitFor(() => expect(picker).toHaveFocus());
+
+		// And giving up on the menu, which is where dropping the keyboard is
+		// least forgivable: nothing happened, and the reader is nowhere.
+		fireEvent.pointerDown(picker, { button: 0 });
+		await screen.findByRole("menuitem", { name: "Files" });
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
+		await waitFor(() => expect(picker).toHaveFocus());
+	});
+
 	test("hides the sidebar from the section picker", async () => {
 		const handleHide = vi.fn();
 		const panelState: AreaState = {

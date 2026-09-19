@@ -1895,7 +1895,29 @@ function setImageDomSource(dom: HTMLElement, src: string): void {
 	dom.dataset.assetState = "ready";
 	dom.removeAttribute("aria-busy");
 	const image = markdownImageElement(dom);
-	if (image) image.src = src;
+	if (!image) return;
+	// A new picture is measured afresh; the mark below is about the one that
+	// was there.
+	delete image.dataset.markdownImageSizeless;
+	image.src = src;
+	markSizelessImage(image);
+	image.addEventListener("load", () => markSizelessImage(image), {
+		once: true,
+	});
+}
+
+/**
+ * An SVG written without width and height has no intrinsic size, and the
+ * embed sizes itself to its image: the two agree on nothing and the picture
+ * lands at zero by zero — loaded, and invisible. Marked, it takes the size a
+ * replaced element gets when it brings none of its own.
+ */
+function markSizelessImage(image: HTMLImageElement): void {
+	if (!image.complete) return;
+	// Only ever set: the mark is what gives the picture its size, so asking
+	// again afterwards would find a sized picture and take it away again.
+	if (image.getBoundingClientRect().width === 0)
+		image.dataset.markdownImageSizeless = "";
 }
 
 function markdownImageElement(dom: HTMLElement): HTMLImageElement | null {

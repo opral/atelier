@@ -10,7 +10,7 @@ import {
 	createCheckpointForFiles,
 	restoreCheckpoint,
 	restoreCheckpointFiles,
-	revertWorkingChangesForFiles,
+	discardWorkingChangesForFiles,
 	writeReviewedFile,
 } from "./lix-diff-commands";
 
@@ -127,7 +127,7 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, secondId, "/second.md", "after second");
 
 			expect(
-				await revertWorkingChangesForFiles(
+				await discardWorkingChangesForFiles(
 					lix,
 					[firstId],
 					await workingEpoch(lix),
@@ -171,7 +171,7 @@ describe("Lix SQL diff commands", () => {
 			await writeFile(lix, fileId, "/stale-revert.md", "newer");
 
 			await expect(
-				revertWorkingChangesForFiles(lix, [fileId], reviewedEpoch),
+				discardWorkingChangesForFiles(lix, [fileId], reviewedEpoch),
 			).rejects.toThrow("working diff changed");
 			expect(await readFile(lix, fileId)).toBe("newer");
 		} finally {
@@ -205,9 +205,14 @@ describe("Lix SQL diff commands", () => {
 			const checkpoint = await createCheckpoint(lix);
 			await writeFile(lix, keptId, "/kept.md", "current data");
 			await writeFile(lix, laterId, "/later.md", "added afterwards");
-			await createCheckpoint(lix);
-
+			const latest = await createCheckpoint(lix);
 			await restoreCheckpoint(lix, checkpoint.commitId);
+			const state = await lix.execute(
+				"SELECT lix_active_branch_commit_id() AS head, (SELECT working_base_commit_id FROM lix_branch WHERE id = lix_active_branch_id()) AS baseline",
+			);
+			expect(state.rows[0]?.head).not.toBe(checkpoint.commitId);
+			expect(state.rows[0]?.head).not.toBe(latest.commitId);
+			expect(state.rows[0]?.baseline).toBe(latest.commitId);
 
 			expect(await readFile(lix, keptId)).toBe("checkpoint data");
 			// The later-added file cannot appear in the span's file list, so

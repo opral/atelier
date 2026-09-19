@@ -54,19 +54,20 @@ export async function createCheckpointForFiles(
 	return { commitId };
 }
 
-export async function revertWorkingChangesForFiles(
+export async function discardWorkingChangesForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
 	epoch: { readonly beforeCommitId: string; readonly afterCommitId: string },
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
 	const result = await lix.execute(
-		`INSERT INTO lix_revert (row_ref)
+		`SELECT commit_id FROM lix_restore($1, ARRAY(
 		 SELECT row_ref
 		 FROM lix_diff('lix_file')
 		 WHERE lixcol_from_commit_id = $1
 		   AND lixcol_to_commit_id = $2
-		   AND id IN (${fileIdParameters(fileIds, 3)})`,
+		   AND id IN (${fileIdParameters(fileIds, 3)})
+		 ))`,
 		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
 	if (result.rowsAffected === 0) {
@@ -136,7 +137,7 @@ export async function restoreCheckpoint(
 	lix: Lix,
 	checkpointCommitId: string,
 ): Promise<void> {
-	await lix.execute("INSERT INTO lix_restore (commit_id) VALUES ($1)", [
+	await lix.execute("SELECT commit_id FROM lix_restore($1)", [
 		checkpointCommitId,
 	]);
 }
@@ -147,23 +148,9 @@ export async function restoreCheckpointFiles(
 	fileIds: readonly string[],
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
-	const headResult = await lix.execute(
-		"SELECT lix_active_branch_commit_id() AS commit_id",
-	);
-	const headCommitId = headResult.rows[0]?.commit_id;
-	if (typeof headCommitId !== "string") {
-		throw new Error("The active Lix branch has no head commit.");
-	}
-	if (headCommitId === checkpointCommitId) return 0;
-
-	// Applying the head→checkpoint diff for the selected files restores their
-	// checkpoint state without touching anything else.
 	const result = await lix.execute(
-		`INSERT INTO lix_apply (row_ref)
-		 SELECT row_ref
-		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE id IN (${fileIdParameters(fileIds, 3)})`,
-		[headCommitId, checkpointCommitId, ...fileIds],
+		`SELECT commit_id FROM lix_restore($1, ARRAY[${fileIds.map((_, index) => `lix_row_ref('lix_file', $${index + 2})`).join(", ")}])`,
+		[checkpointCommitId, ...fileIds],
 	);
 	return result.rowsAffected;
 }
@@ -195,8 +182,8 @@ export async function undoAppliedFiles(
 				"These files changed after the reviewed changes. Undo was not applied; review the newer edits first.",
 			);
 		await tx.execute(
-			`INSERT INTO lix_apply (row_ref) SELECT row_ref FROM lix_diff('lix_file', $1, $2) WHERE id IN (${fileIdParameters(fileIds, 3)})`,
-			[range.afterCommitId, range.beforeCommitId, ...fileIds],
+			`SELECT commit_id FROM lix_revert_range($1, $2, ARRAY[${fileIds.map((_, index) => `lix_row_ref('lix_file', $${index + 3})`).join(", ")}])`,
+			[range.beforeCommitId, range.afterCommitId, ...fileIds],
 		);
 		await tx.commit();
 	} catch (error) {

@@ -42,26 +42,6 @@
 			pointer-events: none;
 		}
 
-		.csv-create-table-button {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
-			margin-top: 8px;
-			padding: 6px 14px;
-			border: 1px solid var(--atelier-accent);
-			border-radius: var(--atelier-radius-control);
-			background: var(--atelier-accent);
-			color: var(--atelier-accent-on);
-			font-size: 13px;
-			font-weight: 500;
-			line-height: 1.2;
-			cursor: pointer;
-		}
-
-		.csv-create-table-button:hover {
-			background: var(--atelier-accent-hover);
-		}
-
 		/* Append controls continue the grid geometry and use quiet table states. */
 		.csv-append-column-strip,
 		.csv-append-row-strip {

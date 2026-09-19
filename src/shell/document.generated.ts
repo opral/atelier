@@ -448,4 +448,9 @@ display: table-row;
 .atelier-document tr.md-diff-gap > td {
 color: var(--atelier-fg-subtle);
 font-size: calc(var(--atelier-doc-em) * 0.75);
+}
+.atelier-document span.md-diff-gap {
+display: inline;
+margin: 0 0 0 0.25em;
+padding: 0;
 }`;
