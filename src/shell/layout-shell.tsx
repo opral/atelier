@@ -54,7 +54,7 @@ import {
 	createCheckpointForFiles,
 	restoreCheckpoint,
 	restoreCheckpointFiles,
-	revertWorkingChangesForFiles,
+	discardWorkingChangesForFiles,
 	undoAppliedFiles,
 	writeReviewedFile,
 } from "@/lib/lix-diff-commands";
@@ -3215,7 +3215,7 @@ function LayoutShellLoadedContentResolved({
 			);
 			const range = session.range;
 			if (!range) return;
-			await revertWorkingChangesForFiles(lix, selectedFileIds, range);
+			await discardWorkingChangesForFiles(lix, selectedFileIds, range);
 			// A review concludes when nothing is left to review, not when a
 			// verb is used. A revert publishes a commit, so the session's
 			// range — the epoch every file view reads both sides from — is

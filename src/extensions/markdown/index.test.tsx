@@ -1387,7 +1387,7 @@ describe("MarkdownView", () => {
 			})
 			.execute();
 
-		await lix.execute("INSERT INTO lix_restore (commit_id) VALUES ($1)", [
+		await lix.execute("SELECT commit_id FROM lix_restore($1)", [
 			restoreTarget,
 		]);
 		const workingDiff = await lix.execute(
