@@ -17,9 +17,9 @@ export function functionDescription(name: string): string {
 		(
 			{
 				lix_history:
-					"Changes introduced by retained mainline commits. Filter lixcol_commit_is_checkpoint for checkpoints.",
+					"Changes introduced by retained mainline commits. Join lix_log(anchor) on lixcol_to_commit_id and filter log.is_checkpoint for checkpoints.",
 				lix_log:
-					"Retained mainline commits, with immutable and active checkpoint flags and first parents.",
+					"Retained mainline commits, with the checkpoint flag active at the anchor and first parents.",
 				lix_as_of: "Tracked state of a relation at a specific commit.",
 				lix_diff:
 					"Compare a relation across commits. Defaults to working baseline → active head.",

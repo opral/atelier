@@ -1,6 +1,6 @@
-import { qb } from "@/lib/lix-kysely";
 import { useQueryResult } from "@/lib/lix-react";
 import { formatCheckpointCreatedAt } from "@/lib/checkpoint-format";
+import { selectCommitCreatedAt } from "@/queries";
 
 /**
  * The empty state for a tab whose file has no version at the point in history
@@ -20,13 +20,7 @@ export function CheckpointAbsentFile({
 	// would reach the view's own boundary and hide the whole comparison, the
 	// present side included, until one row came back.
 	const checkpointResult = useQueryResult<{ created_at: string }>(
-		(lix) =>
-			qb(lix)
-				.selectFrom("lix_commit")
-				.select(["created_at"])
-				.where("is_checkpoint", "=", true)
-				.where("id", "=", commitId ?? "")
-				.limit(1),
+		(lix) => selectCommitCreatedAt(lix, commitId ?? ""),
 		{ subscribe: false },
 	);
 	const checkpoint =

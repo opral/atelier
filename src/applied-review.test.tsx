@@ -108,7 +108,7 @@ for (const decision of ["keep", "undo", "stale"] as const) {
 				);
 				const checkpointCount = (
 					await lix.execute(
-						"SELECT count(*) AS n FROM lix_commit WHERE is_checkpoint",
+						"SELECT count(*) AS n FROM lix_log() WHERE is_checkpoint",
 					)
 				).rows[0]!.n;
 				expect(Number(checkpointCount)).toBe(1);

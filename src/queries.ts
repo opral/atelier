@@ -137,22 +137,31 @@ export function selectFileCheckpointChanges(
 	commitIds?: readonly string[],
 ) {
 	return qb(lix)
-		.selectFrom(sql<any>`lix_history('lix_file')`.as("history"))
+		.selectFrom(sql<any>`lix_log()`.as("log"))
+		.innerJoin(
+			sql<any>`lix_history('lix_file')`.as("history"),
+			"history.lixcol_to_commit_id",
+			"log.commit_id",
+		)
 		.select([
-			sql<string>`lixcol_to_commit_id`.as("commit_id"),
-			sql<string>`lixcol_from_commit_id`.as("parent_commit_id"),
-			sql<string>`lixcol_commit_created_at`.as("commit_created_at"),
-			sql<FileCheckpointChangeRow["change_kind"]>`diff_type`.as("change_kind"),
-			sql<string | null>`coalesce(to_path, from_path)`.as("path"),
+			sql<string>`history.lixcol_to_commit_id`.as("commit_id"),
+			sql<string>`history.lixcol_from_commit_id`.as("parent_commit_id"),
+			sql<string>`history.lixcol_commit_created_at`.as("commit_created_at"),
+			sql<FileCheckpointChangeRow["change_kind"]>`history.diff_type`.as(
+				"change_kind",
+			),
+			sql<string | null>`coalesce(history.to_path, history.from_path)`.as(
+				"path",
+			),
 		])
-		.where("id", "=", fileId)
+		.where("history.id", "=", fileId)
 		.$if(commitIds !== undefined, (query) =>
-			query.where(sql<string>`lixcol_to_commit_id`, "in", [
+			query.where(sql<string>`history.lixcol_to_commit_id`, "in", [
 				...(commitIds ?? []),
 			]),
 		)
-		.where(sql<boolean>`lixcol_commit_is_checkpoint`, "=", true)
-		.orderBy(sql`lixcol_position`, "asc")
+		.where("log.is_checkpoint", "=", true)
+		.orderBy(sql`log.position`, "asc")
 		.$castTo<FileCheckpointChangeRow>();
 }
 
@@ -354,20 +363,23 @@ export async function selectFilePathsAtCommits(
 	return paths;
 }
 
+/** Reads a commit's creation time from the repository-global inventory. */
+export function selectCommitCreatedAt(lix: Lix, commitId: string) {
+	return qb(lix)
+		.selectFrom("lix_commit")
+		.select("created_at")
+		.where("id", "=", commitId)
+		.limit(1);
+}
+
 /** Checkpoints on the active branch, ordered by ancestry rather than time. */
 export function selectCheckpoints(lix: Lix) {
-	return (
-		qb(lix)
-			.selectFrom(sql<any>`lix_log()`.as("log"))
-			.select(["commit_id", "parent_commit_id", "created_at"])
-			.where("is_checkpoint", "=", true)
-			// is_checkpoint is immutable history metadata. The active flag is
-			// derived from incorporated undo/redo state, so retired checkpoints
-			// stay hidden even after a later checkpoint advances the baseline.
-			.where("is_checkpoint_active", "=", true)
-			.orderBy("position", "asc")
-			.$castTo<CheckpointRow>()
-	);
+	return qb(lix)
+		.selectFrom(sql<any>`lix_log()`.as("log"))
+		.select(["commit_id", "parent_commit_id", "created_at"])
+		.where("is_checkpoint", "=", true)
+		.orderBy("position", "asc")
+		.$castTo<CheckpointRow>();
 }
 
 export function selectLatestCheckpoint(lix: Lix) {
@@ -393,7 +405,6 @@ export function selectLatestCheckpointWithWorkingBase(lix: Lix) {
 			)`.as("working_base_commit_id"),
 		])
 		.where("is_checkpoint", "=", true)
-		.where("is_checkpoint_active", "=", true)
 		.orderBy("position", "asc")
 		.limit(1)
 		.$castTo<LatestCheckpointWithWorkingBaseRow>();

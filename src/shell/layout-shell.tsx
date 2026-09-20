@@ -64,6 +64,7 @@ import { qb } from "@/lib/lix-kysely";
 import {
 	selectFilePathsAtCommits,
 	selectFilesStateAt,
+	selectCommitCreatedAt,
 	selectWorkingFileDiffSnapshot,
 	selectAppliedFileDiffSnapshot,
 	selectLatestCheckpoint,
@@ -4471,11 +4472,11 @@ function LayoutShellLoadedContentResolved({
 			}
 			let createdAt: string | undefined;
 			try {
-				const result = await lix.execute(
-					"SELECT created_at FROM lix_commit WHERE id = $1 AND is_checkpoint LIMIT 1",
-					[options.target.commitId],
-				);
-				const value = result.rows[0]?.created_at;
+				const result = await selectCommitCreatedAt(
+					lix,
+					options.target.commitId,
+				).execute();
+				const value = result[0]?.created_at;
 				if (typeof value === "string") createdAt = value;
 			} catch {
 				// The checkpoint title falls back to a generic label.
