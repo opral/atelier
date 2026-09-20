@@ -84,6 +84,8 @@ type ExternalWriteReviewControlsProps = {
 	readonly readOnly?: boolean;
 	/** Which diff-mode flow the float commits: working changes or a historical checkpoint. */
 	readonly mode: DiffFloatMode;
+	/** Historical mode uses Undo only for the effective latest checkpoint. */
+	readonly historicalUndoable?: boolean;
 	readonly navigation?: ExternalWriteReviewNavigation;
 	/** Every changed file in this diff, in stepper order. */
 	readonly files?: readonly DiffFloatFile[];
@@ -143,6 +145,7 @@ export function ExternalWriteReviewControls({
 	isActive,
 	readOnly = false,
 	mode,
+	historicalUndoable = false,
 	navigation,
 	files,
 	onUndo,
@@ -325,6 +328,11 @@ export function ExternalWriteReviewControls({
 		? tickedFiles.map((file) => file.id)
 		: allFileIds;
 	const hasSelection = selectionIds.length > 0;
+	// A checkpoint can contain only its durable metadata marker. Historical
+	// review still needs to expose the full checkpoint action when there are no
+	// file rows to select.
+	const canRunEmptyHistoricalAction =
+		mode === "historical" && listFiles.length === 0;
 	const activeFile = listFiles.find((file) => file.id === activeFileId);
 	const activeCheckpointed = activeFile?.checkpointed === true;
 
@@ -342,7 +350,7 @@ export function ExternalWriteReviewControls({
 		async (scope: DiffFloatScope = "selection") => {
 			if (readOnly || !onPrimary || isCommitting) return;
 			const fileIds = idsForScope(scope);
-			if (fileIds.length === 0) return;
+			if (fileIds.length === 0 && !canRunEmptyHistoricalAction) return;
 			setCommitError(null);
 			setIsCommitting(true);
 			try {
@@ -365,7 +373,13 @@ export function ExternalWriteReviewControls({
 				setIsCommitting(false);
 			}
 		},
-		[idsForScope, isCommitting, onPrimary, readOnly],
+		[
+			canRunEmptyHistoricalAction,
+			idsForScope,
+			isCommitting,
+			onPrimary,
+			readOnly,
+		],
 	);
 	const runUndo = useCallback(
 		async (scope: DiffFloatUndoScope = "selection") => {
@@ -559,7 +573,10 @@ export function ExternalWriteReviewControls({
 		};
 	}, [openMenu, positionMenu]);
 
-	const verb = PRIMARY_VERBS[mode];
+	const verb =
+		mode === "historical" && historicalUndoable
+			? { label: "Undo", busyLabel: "Undoing…" }
+			: PRIMARY_VERBS[mode];
 	const fileCount = navigation?.fileCount ?? listFiles.length;
 	// The name slot is sized by the longest file name (capped by the
 	// ellipsis) and the counter by its widest value, so the float keeps one
@@ -1007,7 +1024,11 @@ export function ExternalWriteReviewControls({
 							type="button"
 							className="external-write-review-button external-write-review-button-accept"
 							onClick={() => void runPrimary("selection")}
-							disabled={readOnly || isCommitting || !hasSelection}
+							disabled={
+								readOnly ||
+								isCommitting ||
+								(!hasSelection && !canRunEmptyHistoricalAction)
+							}
 							aria-label={isCommitting ? verb.busyLabel : primaryLabel}
 							data-attr="diff-primary"
 							title={

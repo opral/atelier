@@ -106,7 +106,7 @@ export function isReadOnlyStatement(sqlText: string): boolean {
 		/^(select|with|values|explain|show|describe|table)$/i.test(firstKeyword) &&
 		!tokens.some(
 			(token, i) =>
-				/^(lix_create_checkpoint|lix_restore|lix_revert|lix_revert_range|lix_apply)$/i.test(
+				/^(lix_create_checkpoint|lix_restore|lix_revert|lix_revert_range|lix_apply|lix_undo|lix_redo)$/i.test(
 					token.kind === "identifier"
 						? token.text.slice(1, -1).replaceAll('""', '"')
 						: token.text,

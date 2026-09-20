@@ -19,7 +19,7 @@ export function functionDescription(name: string): string {
 				lix_history:
 					"Changes introduced by retained mainline commits. Filter lixcol_commit_is_checkpoint for checkpoints.",
 				lix_log:
-					"Retained mainline commits, with checkpoint flags and first parents.",
+					"Retained mainline commits, with immutable and active checkpoint flags and first parents.",
 				lix_as_of: "Tracked state of a relation at a specific commit.",
 				lix_diff:
 					"Compare a relation across commits. Defaults to working baseline → active head.",
@@ -27,6 +27,9 @@ export function functionDescription(name: string): string {
 					"Reachable commits and their depth from the active head or a specified commit.",
 				lix_create_checkpoint:
 					"Creates a checkpoint. This function changes repository state.",
+				lix_undo:
+					"Undoes an ordinary commit or checkpoint and returns its commit receipt.",
+				lix_redo: "Redoes an undo receipt and returns its commit receipt.",
 			} as Record<string, string>
 		)[name] ?? "Table function provided by this database."
 	);

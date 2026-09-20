@@ -54,6 +54,8 @@ import {
 	createCheckpointForFiles,
 	restoreCheckpoint,
 	restoreCheckpointFiles,
+	undoCheckpoint,
+	undoCheckpointFiles,
 	discardWorkingChangesForFiles,
 	undoAppliedFiles,
 	writeReviewedFile,
@@ -64,6 +66,8 @@ import {
 	selectFilesStateAt,
 	selectWorkingFileDiffSnapshot,
 	selectAppliedFileDiffSnapshot,
+	selectLatestCheckpoint,
+	selectLatestCheckpointWithWorkingBase,
 } from "@/queries";
 import { epochAfterOwnWrite } from "./working-review-epoch";
 import {
@@ -717,10 +721,6 @@ function carryReviewFiles(
 	return [...carried, ...snapshot.filter((file) => !carriedIds.has(file.id))];
 }
 
-/** The newest checkpoint on the head's first-parent chain, and what it follows. */
-const LATEST_CHECKPOINT_SQL =
-	"SELECT commit_id, parent_commit_id FROM lix_log() WHERE is_checkpoint ORDER BY position LIMIT 1";
-
 /**
  * The one diff-mode state: a review of the span between two commits, aimed at
  * either the mutable working state or an immutable historical commit.
@@ -753,6 +753,8 @@ type DiffReviewState = {
 	readonly externalWriteReviews: readonly ExternalWriteReview[];
 	/** When the target commit was created (historical float title). */
 	readonly createdAt?: string;
+	/** True when this checkpoint is the effective latest checkpoint. */
+	readonly checkpointUndoable?: boolean;
 	/** True once the first snapshot view finished opening (historical). */
 	readonly opened?: boolean;
 };
@@ -1593,7 +1595,8 @@ function LayoutShellLoadedContentResolved({
 		workingReviewOpeningRef.current = false;
 	}, []);
 	// Both diff-mode targets are views over the same state: "working" reviews
-	// the mutable head, "historical" a read-only checkpoint (verb: Restore).
+	// the mutable head, "historical" a read-only checkpoint (Restore for an
+	// older checkpoint, Undo for the effective latest checkpoint).
 	const workingReview = diffReview?.kind === "working" ? diffReview : null;
 	const historicalReview =
 		diffReview?.kind === "historical" ? diffReview : null;
@@ -1876,19 +1879,32 @@ function LayoutShellLoadedContentResolved({
 		}
 	}, [exitDiffReview, isHostReadOnly, lix, retireAcceptedReviews]);
 
-	const handleRestoreCheckpoint = useCallback(
+	const handleHistoricalCheckpointAction = useCallback(
 		async (selectedFileIds: readonly string[]) => {
-			if (!historicalReview?.range || selectedFileIds.length === 0) return;
+			if (
+				!historicalReview?.range ||
+				(selectedFileIds.length === 0 && historicalReview.files.length !== 0)
+			)
+				return;
 			const commitId = historicalReview.range.afterCommitId;
-			// A full selection means "make the repository look like this
-			// checkpoint": the exact restore also removes files created after
-			// it, which the span's file list cannot name. A partial selection
-			// stays file-scoped.
+			// A full selection means the whole checkpoint transition. For the
+			// effective latest checkpoint, hard undo includes its metadata and
+			// moves the working baseline; older checkpoints retain Restore's
+			// exact-state semantics. A partial selection always carries exactly
+			// the selected file row refs.
 			const selectedSet = new Set(selectedFileIds);
-			const restoresEverything = historicalReview.files.every((file) =>
-				selectedSet.has(file.id),
-			);
-			if (restoresEverything) {
+			const fullSelection =
+				historicalReview.files.length === 0 ||
+				historicalReview.files.every((file) => selectedSet.has(file.id));
+			if (historicalReview.checkpointUndoable) {
+				const receipt = fullSelection
+					? await undoCheckpoint(lix, commitId)
+					: await undoCheckpointFiles(lix, commitId, selectedFileIds);
+				// NULL is a durable no-op (for example, an exhausted or already
+				// consumed selected scope). Keep the review open so the user can
+				// inspect/retry against the unchanged state.
+				if (!receipt.commitId) return;
+			} else if (fullSelection) {
 				await restoreCheckpoint(lix, commitId);
 			} else {
 				await restoreCheckpointFiles(lix, commitId, selectedFileIds);
@@ -2937,6 +2953,14 @@ function LayoutShellLoadedContentResolved({
 			readonly createdAt?: string;
 		}) => {
 			const requestId = ++historicalRequestRef.current;
+			// The action is decided from the repository-wide effective latest
+			// checkpoint before file scope is applied. A file-scoped History panel
+			// may omit that checkpoint entirely when it did not touch this file.
+			const latestCheckpoint =
+				await selectLatestCheckpointWithWorkingBase(lix).execute();
+			const checkpointUndoable =
+				latestCheckpoint.at(0)?.commit_id === commitId &&
+				latestCheckpoint.at(0)?.working_base_commit_id === commitId;
 			const files =
 				previousCommitId === null
 					? await selectFilesAtCommit(lix, commitId)
@@ -3004,6 +3028,7 @@ function LayoutShellLoadedContentResolved({
 				// live-navigation exit guard arms immediately.
 				...(convertedCount > 0 ? { opened: true } : {}),
 				...(createdAt !== undefined ? { createdAt } : {}),
+				checkpointUndoable,
 			};
 			// Publish the new span before this promise resolves. Callers chain
 			// work onto open() — the History view opens a file next — and that
@@ -3306,13 +3331,13 @@ function LayoutShellLoadedContentResolved({
 		async (fileIds: readonly string[]) => {
 			if (diffReviewRef.current?.intent === "review-applied")
 				return resolveAppliedFiles(fileIds, "accepted");
-			if (historicalReview) return handleRestoreCheckpoint(fileIds);
+			if (historicalReview) return handleHistoricalCheckpointAction(fileIds);
 			return handleCreateCheckpoint(fileIds);
 		},
 		[
 			resolveAppliedFiles,
 			historicalReview,
-			handleRestoreCheckpoint,
+			handleHistoricalCheckpointAction,
 			handleCreateCheckpoint,
 		],
 	);
@@ -4355,7 +4380,11 @@ function LayoutShellLoadedContentResolved({
 				...(historicalReview.createdAt
 					? { createdAt: historicalReview.createdAt }
 					: {}),
-				capabilities: { checkpoint: false, undo: false, restore: true },
+				capabilities: {
+					checkpoint: false,
+					undo: historicalReview.checkpointUndoable === true,
+					restore: historicalReview.checkpointUndoable !== true,
+				},
 			};
 		}
 		if (workingReview) {
@@ -4528,6 +4557,7 @@ function LayoutShellLoadedContentResolved({
 	const [reviewFloatClosing, setReviewFloatClosing] = useState(false);
 	const lastReviewFloatRef = useRef<{
 		historical: boolean;
+		historicalUndoable: boolean;
 		applied: boolean;
 		navigation: typeof reviewNavigation;
 		files: typeof pendingReviewFiles;
@@ -4539,6 +4569,7 @@ function LayoutShellLoadedContentResolved({
 	// exit fade.
 	const liveReviewFloatContent = {
 		historical: Boolean(historicalReview),
+		historicalUndoable: historicalReview?.checkpointUndoable === true,
 		applied: diffReview?.intent === "review-applied",
 		navigation: reviewNavigation,
 		files: pendingReviewFiles,
@@ -4587,8 +4618,7 @@ function LayoutShellLoadedContentResolved({
 			return;
 		}
 		void (async () => {
-			const result = await lix.execute(LATEST_CHECKPOINT_SQL);
-			const row = result.rows[0];
+			const row = (await selectLatestCheckpoint(lix).execute()).at(0);
 			const commitId = row?.commit_id;
 			if (typeof commitId !== "string") {
 				// No checkpoint yet: history is where that is explained.
@@ -4947,6 +4977,7 @@ function LayoutShellLoadedContentResolved({
 									? "historical"
 									: "working-changes"
 						}
+						historicalUndoable={reviewFloatContent.historicalUndoable}
 						navigation={reviewFloatContent.navigation}
 						files={reviewFloatContent.files}
 						onUndo={
@@ -4968,7 +4999,9 @@ function LayoutShellLoadedContentResolved({
 					autoAcceptAgentChanges={autoAcceptAgentChanges}
 					onAutoAcceptAgentChangesChange={onAutoAcceptAgentChangesChange}
 					reviewingWorkingChanges={workingChangesReviewOpen}
-					reviewingLatestCheckpoint={historicalReview !== null}
+					reviewingLatestCheckpoint={
+						historicalReview?.checkpointUndoable === true
+					}
 					// An applied review is pinned to a span the host chose, not to
 					// the working epoch, and refreshing would drop that span. Only
 					// a review of the working changes can be behind them.

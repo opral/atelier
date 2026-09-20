@@ -46,6 +46,11 @@ export type CheckpointRow = {
 	created_at: string;
 };
 
+/** The effective latest checkpoint and the baseline read with one snapshot. */
+export type LatestCheckpointWithWorkingBaseRow = CheckpointRow & {
+	working_base_commit_id: string | null;
+};
+
 /**
  * Unified filesystem listing containing both directories and files ordered by path.
  *
@@ -351,14 +356,45 @@ export async function selectFilePathsAtCommits(
 
 /** Checkpoints on the active branch, ordered by ancestry rather than time. */
 export function selectCheckpoints(lix: Lix) {
-	return qb(lix)
-		.selectFrom(sql<any>`lix_log()`.as("log"))
-		.select(["commit_id", "parent_commit_id", "created_at"])
-		.where("is_checkpoint", "=", true)
-		.orderBy("position", "asc")
-		.$castTo<CheckpointRow>();
+	return (
+		qb(lix)
+			.selectFrom(sql<any>`lix_log()`.as("log"))
+			.select(["commit_id", "parent_commit_id", "created_at"])
+			.where("is_checkpoint", "=", true)
+			// is_checkpoint is immutable history metadata. The active flag is
+			// derived from incorporated undo/redo state, so retired checkpoints
+			// stay hidden even after a later checkpoint advances the baseline.
+			.where("is_checkpoint_active", "=", true)
+			.orderBy("position", "asc")
+			.$castTo<CheckpointRow>()
+	);
 }
 
 export function selectLatestCheckpoint(lix: Lix) {
 	return selectCheckpoints(lix).limit(1);
+}
+
+/**
+ * Reads the repository-wide effective latest checkpoint together with the
+ * active branch baseline in one statement. Callers use the pair to decide
+ * whether a historical review is an Undo or a Restore.
+ */
+export function selectLatestCheckpointWithWorkingBase(lix: Lix) {
+	return qb(lix)
+		.selectFrom(sql<any>`lix_log()`.as("log"))
+		.select([
+			"commit_id",
+			"parent_commit_id",
+			"created_at",
+			sql<string | null>`(
+				SELECT working_base_commit_id
+				FROM lix_branch
+				WHERE id = lix_active_branch_id()
+			)`.as("working_base_commit_id"),
+		])
+		.where("is_checkpoint", "=", true)
+		.where("is_checkpoint_active", "=", true)
+		.orderBy("position", "asc")
+		.limit(1)
+		.$castTo<LatestCheckpointWithWorkingBaseRow>();
 }

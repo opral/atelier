@@ -140,6 +140,12 @@ hands both refs to every view and decides nothing by file type. A view that is
 about to compare says so, and the prepared document waits: one revision painted
 first would only be replaced a moment later.
 
+History keeps the effective latest checkpoint rooted at the branch's working
+baseline. Its review action is **Undo**, including exact selected file rows;
+older checkpoint rows remain **Restore**. The SQL actions return the new
+`commit_id` receipt, or `NULL` when the selected undo scope has no pending
+effect.
+
 ## Extensions
 
 Extensions load data and render in Atelier's React tree:

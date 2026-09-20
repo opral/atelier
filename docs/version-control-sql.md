@@ -2,10 +2,18 @@
 
 Atelier requires Lix's consolidated version-control SQL contract. These are coordinated breaking changes; an older SDK/engine cannot execute the new queries.
 
-- `lix_log()` lists retained commits on the active first-parent chain. History filters `is_checkpoint` and uses `parent_commit_id` for the comparison. Repository-global checkpoint metadata comes from `lix_commit WHERE is_checkpoint`.
+- `lix_log()` lists retained commits on the active first-parent chain. History filters immutable `is_checkpoint` rows at the active branch's `working_base_commit_id`, which is the effective checkpoint floor after a whole-checkpoint undo. The latest checkpoint at that floor uses `SELECT commit_id FROM lix_undo($1[, ARRAY row_refs])`; older checkpoints keep `SELECT commit_id FROM lix_restore($1[, ARRAY row_refs])`. Repository-global checkpoint metadata comes from `lix_commit WHERE is_checkpoint`.
 - `lix_history('lix_file')` returns endpoint differences introduced by each retained mainline commit. File History filters `lixcol_commit_is_checkpoint`, consumes `diff_type` directly, and uses the before/after paths. It no longer infers changes from neighboring revisions or timestamp-ordered checkpoint markers.
 - `lix_diff('lix_file')` compares the actual working baseline with the head. `lix_branch.working_base_commit_id` and `commit_id` are captured with the diff in one read batch, including when the diff is empty. Selected checkpoint/revert and inline-review guards use the diff's actual endpoint columns.
 - `lix_as_of('lix_file', commit_id)` reads complete file state at one retained commit. Historical contents, metadata, paths, media, and Markdown assets remain lazy and pinned to their selected commit.
+
+Undo and redo functions are mutating SQL table functions even though callers use
+`SELECT` to receive a nullable `commit_id` receipt. `lix_undo` accepts an
+ordinary forward commit or the effective latest checkpoint and optional exact
+`lix_row_ref` values; `lix_redo` accepts the returned undo receipt and the same
+optional row scope. An empty selected scope is a no-op. Atelier keeps stale
+review epoch guards around working and applied reviews before issuing these
+functions.
 
 A checkpoint comparison means its actual parent → the checkpoint. On a dirty fork, that parent can be an unmarked automatic commit. Inherited content remains in the checkpoint's complete state but is not attributed to the checkpoint's own changes. Selecting checkpoint rows never changes the comparison baseline.
 

@@ -311,7 +311,7 @@ export type AtelierDiffSession = {
 	readonly activePath: string | null;
 	/** When the target commit was created; drives the "Viewing checkpoint" title. */
 	readonly createdAt?: string;
-	/** Derived from the refs — a mutable target reviews, an immutable one restores. */
+	/** Derived from the refs — the effective latest checkpoint can be undone; older checkpoints restore. */
 	readonly capabilities: {
 		readonly checkpoint: boolean;
 		readonly undo: boolean;
