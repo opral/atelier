@@ -389,3 +389,29 @@ describe("more CommonMark block shortcuts", () => {
 		expect(md(editor)).toBe("3. three\n");
 	});
 });
+
+describe("Backspace right after a block shortcut", () => {
+	test.each(["## ", "- ", "* ", "> ", "1. ", "[] ", "[x] ", "```js "])(
+		"%s: Backspace gives the typed marker back",
+		(marker) => {
+			const editor = editorFor("");
+			type(editor, marker);
+			expect(editor.state.doc.firstChild?.type.name).not.toBe("paragraph");
+			key(editor, "Backspace");
+			expect(editor.state.doc.childCount).toBe(1);
+			expect(editor.state.doc.firstChild?.type.name).toBe("paragraph");
+			expect(editor.state.doc.textContent).toBe(marker);
+			expect(editor.state.selection.from).toBe(1 + marker.length);
+		},
+	);
+
+	test("later, Backspace in the empty block keeps today's behaviour", () => {
+		const editor = editorFor("");
+		type(editor, "## ");
+		type(editor, "a");
+		key(editor, "Backspace");
+		editor.view.dispatch(editor.state.tr.deleteRange(1, 2));
+		key(editor, "Backspace");
+		expect(editor.state.doc.textContent).toBe("");
+	});
+});

@@ -10,17 +10,19 @@ import {
 	wrappingInputRule,
 } from "@tiptap/core";
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
-import { closeHistory } from "@tiptap/pm/history";
+import { closeHistory, undo } from "@tiptap/pm/history";
 import type { Schema } from "@tiptap/pm/model";
 import {
 	type EditorState,
 	NodeSelection,
 	Plugin,
+	PluginKey,
 	type PluginSpec,
 	Selection,
 	TextSelection,
 	type Transaction,
 } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import { normalizeUrl } from "../normalize-url";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
@@ -336,6 +338,46 @@ function inlineInputRulesPlugin(editor: Editor, rules: InputRule[]) {
 	return plugin;
 }
 
+const blockAutoformatKey = new PluginKey<{ typed: string } | null>(
+	"markdownBlockAutoformat",
+);
+
+/**
+ * Remembers a block autoformat ("## ", "- ", "> ", "```js ") until anything
+ * else happens, so the Backspace right after it can take it back. The ids
+ * given to the new block arrive as an appended transaction; that one does
+ * not count. (@tiptap/core's own record of the rule is cleared by it, which
+ * is why Backspace there used to leave an empty paragraph.)
+ */
+function blockAutoformatPlugin() {
+	return new Plugin({
+		key: blockAutoformatKey,
+		state: {
+			init: () => null,
+			apply(tr, previous: { typed: string } | null) {
+				const autoformat = tr.getMeta(blockAutoformatKey);
+				if (autoformat) return autoformat;
+				if (tr.getMeta("appendedTransaction")) return previous;
+				return tr.docChanged || tr.selectionSet ? null : previous;
+			},
+		},
+	});
+}
+
+/**
+ * Backspace right after a block autoformat gives the typed marker back, as
+ * it already does after "---" and after inline autoformats: the conversion
+ * is its own undo step, so undoing it restores the marker, and the
+ * character that completed it is typed again.
+ */
+function restoreBlockMarker(view: EditorView): boolean {
+	const autoformat = blockAutoformatKey.getState(view.state);
+	if (!autoformat || !view.state.selection.empty) return false;
+	if (!undo(view.state, view.dispatch)) return false;
+	view.dispatch(view.state.tr.insertText(autoformat.typed).scrollIntoView());
+	return true;
+}
+
 // Markdown-like typing shortcuts and editor keybindings
 // - "# ": Convert to heading (level by number of #)
 // - "- ", "* ": Start bullet list
@@ -561,13 +603,18 @@ export const MarkdownWcShortcuts = Extension.create({
 		}
 
 		// Every conversion is its own undo step: Mod-Z after "# " gives the
-		// typed "#" back instead of erasing it with the heading.
+		// typed "#" back instead of erasing it with the heading. The
+		// conversion also notes what was typed to complete it, for Backspace.
 		return rules.map(
 			(rule) =>
 				new InputRule({
 					find: rule.find,
 					handler: (props) => {
-						closeHistory(props.state.tr);
+						const { tr } = props.state;
+						closeHistory(tr);
+						tr.setMeta(blockAutoformatKey, {
+							typed: props.match[0].slice(props.range.to - props.range.from),
+						});
 						return rule.handler(props);
 					},
 				}),
@@ -577,6 +624,7 @@ export const MarkdownWcShortcuts = Extension.create({
 	addProseMirrorPlugins() {
 		return [
 			inlineInputRulesPlugin(this.editor, inlineInputRules(this.editor.schema)),
+			blockAutoformatPlugin(),
 		];
 	},
 
@@ -1194,6 +1242,7 @@ export const MarkdownWcShortcuts = Extension.create({
 
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
+				if (restoreBlockMarker(this.editor.view)) return true;
 				if (escapeEmptyBlockquote()) return true;
 				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
