@@ -780,6 +780,19 @@ export const MarkdownWcShortcuts = Extension.create({
 				);
 				return true;
 			}
+			// An empty line goes itself rather than pulling the next block up
+			// into it: a heading below keeps its level.
+			if (
+				$from.parent.type.name === "paragraph" &&
+				$from.parent.content.size === 0 &&
+				nextNode
+			) {
+				const blockStart = $from.before($from.depth);
+				const tr = state.tr.delete(blockStart, afterBlock);
+				tr.setSelection(Selection.near(tr.doc.resolve(blockStart), 1));
+				view.dispatch(tr.scrollIntoView());
+				return true;
+			}
 			const nextStart = firstTextblockStartFrom($from.pos);
 			if (nextStart < 0) return false;
 			const $next = state.doc.resolve(nextStart);
@@ -940,11 +953,14 @@ export const MarkdownWcShortcuts = Extension.create({
 				const $from: any = selection.$from;
 				// A heading turns back into text first, like Notion; the merge
 				// into the block above is the next keystroke.
+				// An empty line above goes before that, so Backspace undoes Enter
+				// at the start of a heading.
 				if (
 					$from.parent?.type?.name === "heading" &&
 					$from.parentOffset === 0 &&
 					$from.parent.content.size > 0
 				) {
+					if (removeEmptyBlockAbove($from, -1)) return true;
 					return this.editor.commands.setNode("paragraph");
 				}
 				// Backspace at the top of the body selects the frontmatter first;
@@ -1179,19 +1195,36 @@ export const MarkdownWcShortcuts = Extension.create({
 					}
 				}
 				if (!inListItem) {
-					// Enter replaces a range selection before splitting the remaining block.
-					// Running both commands in one chain keeps the split position mapped to
-					// the document produced by the deletion.
-					// The second half of a split heading is text, and inline code
-					// does not carry into the new block.
-					const splitsHeading =
-						$from.parent.type.name === "heading" &&
-						$from.parentOffset < $from.parent.content.size;
-					const chain = state.selection.empty
-						? this.editor.chain().splitBlock()
-						: this.editor.chain().deleteSelection().splitBlock();
-					if (splitsHeading) chain.setNode("paragraph");
-					return chain.unsetMark("code").run();
+					// Enter replaces a range selection before splitting the remaining
+					// block. Running both in one chain keeps the split position mapped
+					// to the document produced by the deletion, and the caret is read
+					// from that document, not from the one before it.
+					const chain = this.editor.chain();
+					if (!state.selection.empty) chain.deleteSelection();
+					return chain
+						.command(({ tr, commands }) => {
+							const $at = tr.selection.$from;
+							const block = $at.parent;
+							// Enter at the start of a line opens an empty line above it
+							// and leaves the line as it was: a heading stays a heading.
+							if ($at.parentOffset === 0 && block.content.size > 0) {
+								const paragraph = tr.doc.type.schema.nodes.paragraph!;
+								const index = $at.index(-1);
+								if ($at.node(-1).canReplaceWith(index, index, paragraph)) {
+									tr.insert($at.before(), paragraph.create());
+									return true;
+								}
+							}
+							// The second half of a split heading is text.
+							const splitsHeading =
+								block.type.name === "heading" &&
+								$at.parentOffset < block.content.size;
+							if (!commands.splitBlock()) return false;
+							if (splitsHeading) commands.setNode("paragraph");
+							return true;
+						})
+						.unsetMark("code")
+						.run();
 				}
 				// If current paragraph is empty, exit the list (lift)
 				const para: any = $from.parent;

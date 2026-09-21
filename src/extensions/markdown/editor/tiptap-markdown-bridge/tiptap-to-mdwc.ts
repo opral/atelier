@@ -133,7 +133,11 @@ function pmBlockToAst(
 				type: "heading",
 				depth: node.attrs?.level || 1,
 				data: headingData.data,
-				children: pmInlineToMd(node.content || []),
+				// Only levels 1 and 2 have a setext form that can hold a line
+				// break; an ATX heading would fold the break into a space.
+				children: pmInlineToMd(node.content || [], {
+					htmlBreaks: (node.attrs?.level || 1) > 2,
+				}),
 			};
 		case "bulletList":
 		case "orderedList": {
@@ -203,7 +207,16 @@ function pmBlockToAst(
 			return {
 				type: "blockquote",
 				data: blockquoteData.data,
-				children: (node.content || []).map((child) => pmBlockToAst(child)),
+				// An empty line inside a quote survives the same way it does at
+				// the top level; a bare ">" would be dropped on the next load.
+				children: (node.content || []).map((child, _index, items) =>
+					pmBlockToAst(child, {
+						preserveEmptyParagraph:
+							items.length > 1 &&
+							child.type === "paragraph" &&
+							!pmInlineToMd(child.content || []).length,
+					}),
+				),
 			};
 		case "codeBlock": {
 			const text = collectText(node.content || []);

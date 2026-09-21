@@ -241,6 +241,64 @@ describe("Delete across block boundaries", () => {
 });
 
 describe("Enter", () => {
+	test("at the start of a heading opens a line above and keeps the heading", () => {
+		const editor = editorFor("# Obsidian Version Control\n\nbody\n");
+		caret(editor, "Obsidian Version Control", 0);
+		expect(key(editor, "Enter")).toBe(true);
+		expect(md(editor)).toBe(
+			"<span></span>\n\n# Obsidian Version Control\n\nbody\n",
+		);
+		const $caret = editor.state.selection.$from;
+		expect($caret.parent.type.name).toBe("heading");
+		expect($caret.parentOffset).toBe(0);
+		type(editor, "x");
+		expect(md(editor)).toBe(
+			"<span></span>\n\n# xObsidian Version Control\n\nbody\n",
+		);
+	});
+
+	test("at the start of a heading inside a quote keeps the heading", () => {
+		const editor = editorFor("> # Quoted\n");
+		caret(editor, "Quoted", 0);
+		expect(key(editor, "Enter")).toBe(true);
+		expect(md(editor)).toBe("> <span></span>\n>\n> # Quoted\n");
+	});
+
+	test("then Backspace takes the empty line back and keeps the heading", () => {
+		const editor = editorFor("# Title\n");
+		caret(editor, "Title", 0);
+		key(editor, "Enter");
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("# Title\n");
+		// With nothing empty above, Backspace turns the heading into text.
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("Title\n");
+	});
+
+	test("over a heading's whole text does not throw", () => {
+		const editor = editorFor("# Title\n\nbody\n");
+		const $start = editor.state.doc.resolve(1);
+		editor.view.dispatch(
+			editor.state.tr.setSelection(
+				TextSelection.create(editor.state.doc, $start.start(), $start.end()),
+			),
+		);
+		expect(key(editor, "Enter")).toBe(true);
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.doc.childCount).toBe(3);
+	});
+
+	test("over the start of a heading keeps the rest a heading", () => {
+		const editor = editorFor("# Title\n");
+		editor.view.dispatch(
+			editor.state.tr.setSelection(
+				TextSelection.create(editor.state.doc, 1, 3),
+			),
+		);
+		expect(key(editor, "Enter")).toBe(true);
+		expect(md(editor)).toBe("<span></span>\n\n# tle\n");
+	});
+
 	test("splitting a heading leaves the second half as text", () => {
 		const editor = editorFor("# Hello world\n");
 		caret(editor, "Hello world", 5);
@@ -281,5 +339,35 @@ describe("outdent numbering", () => {
 		caret(editor, "c", 0);
 		expect(key(editor, "Tab", { shiftKey: true })).toBe(true);
 		expect(md(editor)).toBe("1. a\n   1. b\n2. c\n   1. d\n3. e\n");
+	});
+});
+
+describe("Delete", () => {
+	test("on an empty line above a heading removes the line, not the level", () => {
+		const editor = editorFor("<span></span>\n\n# Title\n");
+		caret(editor, "", 0);
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toBe("# Title\n");
+		expect(editor.state.selection.$from.parent.type.name).toBe("heading");
+	});
+});
+
+describe("serialization", () => {
+	test("an empty line inside a quote survives a reload", () => {
+		const editor = editorFor("> quote\n");
+		caret(editor, "quote", "end");
+		key(editor, "Enter");
+		const out = md(editor);
+		expect(out).toBe("> quote\n>\n> <span></span>\n");
+		expect(md(editorFor(out))).toBe(out);
+	});
+
+	test("a line break in an h3 heading survives a reload", () => {
+		const editor = editorFor("### Title\n");
+		caret(editor, "Title", 2);
+		key(editor, "Enter", { shiftKey: true });
+		const out = md(editor);
+		expect(out).toBe("### Ti<br>tle\n");
+		expect(md(editorFor(out))).toBe(out);
 	});
 });
