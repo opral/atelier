@@ -372,3 +372,20 @@ describe("leaving a footnote definition from the keyboard", () => {
 		expect(md(editor)).toBe("text[^1]\n\n[^1]: note one\n\nx\n");
 	});
 });
+
+describe("a code block at the top of the document", () => {
+	test("ArrowUp at its start opens a line above, like a table or a rule", () => {
+		const editor = editorFor("```\nx\n```\n\nafter\n");
+		caret(editor, "x", 0);
+		expect(key(editor, "ArrowUp")).toBe(true);
+		type(editor, "y");
+		expect(md(editor)).toBe("y\n\n```\nx\n```\n\nafter\n");
+	});
+	test("ArrowLeft at its start does the same", () => {
+		const editor = editorFor("```\nx\n```\n");
+		caret(editor, "x", 0);
+		expect(key(editor, "ArrowLeft")).toBe(true);
+		type(editor, "y");
+		expect(md(editor)).toBe("y\n\n```\nx\n```\n");
+	});
+});

@@ -572,8 +572,19 @@ export const MarkdownWcShortcuts = Extension.create({
 				return true;
 			}
 
-			if (direction < 0) return false;
-			return exitCode(state, (transaction) => view.dispatch(transaction));
+			if (direction > 0) {
+				return exitCode(state, (transaction) => view.dispatch(transaction));
+			}
+			// A code block that opens the document gets a line above it, as a
+			// table or a rule there does; otherwise nothing could be typed
+			// above it.
+			if ($from.depth !== 1) return false;
+			const paragraph = state.schema.nodes.paragraph;
+			if (!paragraph) return false;
+			const tr = state.tr.insert(boundary, paragraph.create());
+			tr.setSelection(TextSelection.create(tr.doc, boundary + 1));
+			view.dispatch(tr.scrollIntoView());
+			return true;
 		};
 
 		// A footnote's note is left by the same keys as a quote.
