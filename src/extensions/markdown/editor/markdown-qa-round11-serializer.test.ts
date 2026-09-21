@@ -3,9 +3,10 @@ import { Editor, type JSONContent } from "@tiptap/core";
 import { afterEach, describe, expect, test } from "vitest";
 import { buildMarkdownFromEditor } from "./build-markdown-from-editor";
 import { createEditor } from "./create-editor";
-import { parseMarkdown } from "./markdown";
+import { parseMarkdown, serializeAst } from "./markdown";
 import { MarkdownWc } from "./tiptap-markdown-bridge/markdown-wc";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge/mdwc-to-tiptap";
+import { tiptapDocToAst } from "./tiptap-markdown-bridge/tiptap-to-mdwc";
 
 const editors: Editor[] = [];
 afterEach(() => {
@@ -232,5 +233,70 @@ describe("inline HTML keeps the marks around it", () => {
 		expect(await typeAfter("**<kbd>Ctrl</kbd> key** end", "end")).toBe(
 			"**<kbd>Ctrl</kbd> key** endZ\n",
 		);
+	});
+});
+
+/** The spelling a document has after one trip through the editor. */
+function throughEditor(markdown: string): string {
+	return serializeAst(
+		tiptapDocToAst(astToTiptapDoc(parseMarkdown(markdown)) as any),
+	);
+}
+
+describe("HTML line breaks", () => {
+	test.each([
+		"Line A<br>\nLine B\n",
+		"Line A<br/>\nLine B\n",
+		"Line A<br />\nLine B\n",
+		"Line A<br><br>\nLine B\n",
+		"- Line A<br>\n  Line B\n",
+		"> Line A<br>\n> Line B\n",
+	])("an edit elsewhere leaves %j untouched", async (block) => {
+		expect(await typeAfter(`Intro\n\n${block}`, "Intro")).toBe(
+			`IntroZ\n\n${block}`,
+		);
+	});
+
+	test("editing the line keeps the break and its spelling", async () => {
+		expect(await typeAfter("Line A<br/>\nLine B\n", "Line B")).toBe(
+			"Line A<br/>\nLine BZ\n",
+		);
+		expect(await typeAfter("Line A<br>Line B\n", "Line B")).toBe(
+			"Line A<br>Line BZ\n",
+		);
+	});
+
+	test("a typed break before a source newline is written as <br>", async () => {
+		const { editor, lastWrite } = await openForSave("Line A\nLine B\n");
+		const end = textPosition(editor, "Line A") + 6;
+		editor.view.dispatch(
+			editor.state.tr.insert(end, editor.schema.nodes.hardBreak!.create()),
+		);
+		await settle();
+		expect(lastWrite()).toBe("Line A<br>\nLine B\n");
+	});
+});
+
+describe("canonical stability", () => {
+	// Whatever the editor writes must be what it would write again after a
+	// reload; otherwise an untouched block no longer matches its source and
+	// is rewritten on an unrelated edit.
+	test.each([
+		"Line A<br>\nLine B",
+		"Line A<br><br>\nLine B",
+		"a<br/>b<br />c",
+		"**a *b* c**",
+		"**bold *text***",
+		"~~[x](u) y~~",
+		"[a  \nb](u)",
+		'[<img src="badge.svg">](https://ci.example.com)',
+		"**<kbd>Ctrl</kbd> key**",
+		"***a*** and *__b__*",
+		"| a<br>b | c |\n| --- | --- |\n| 1 | 2 |",
+		"### Heading<br>\ncontinued",
+		"- a<br>\n  b\n- c",
+	])("%j", (markdown) => {
+		const once = throughEditor(markdown);
+		expect(throughEditor(once)).toBe(once);
 	});
 });

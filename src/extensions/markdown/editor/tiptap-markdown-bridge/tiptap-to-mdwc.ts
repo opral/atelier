@@ -4,6 +4,7 @@ import {
 	LIST_LEADING_PARAGRAPH_DATA_KEY,
 	EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY,
 	EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY,
+	HTML_BREAK_DATA_KEY,
 } from "./mdwc-to-tiptap";
 
 const SPREAD_META_KEY = "__mdwc_spread";
@@ -325,11 +326,15 @@ function pmInlineToMd(
 				});
 				continue;
 			}
+			const { [HTML_BREAK_DATA_KEY]: spelling, ...data } = n.attrs?.data ?? {};
+			// A break written as HTML keeps its spelling (`<br/>`, `<br />`).
 			const br: any =
-				options.htmlBreaks || isTrailingHardBreak(nodes, index)
-					? { type: "html", value: "<br>" }
-					: { type: "break" };
-			if (n.attrs?.data != null) br.data = n.attrs.data;
+				typeof spelling === "string"
+					? { type: "html", value: spelling }
+					: options.htmlBreaks || endsLine(nodes, index)
+						? { type: "html", value: "<br>" }
+						: { type: "break" };
+			if (Object.keys(data).length > 0) br.data = data;
 			items.push({ leaf: br, marks, isBreak: true });
 		} else if (n.type === "footnoteRef") {
 			const label = String(n.attrs?.label ?? n.attrs?.identifier ?? "");
@@ -539,10 +544,17 @@ function mergeAdjacentInlineMarks(nodes: any[]): any[] {
 	return out;
 }
 
-function isTrailingHardBreak(nodes: PMNode[], index: number): boolean {
+/**
+ * A backslash break is written as `\` plus a newline, so it needs text on the
+ * next line of the same paragraph. When the breaks run to the end of the
+ * block, or into a source newline, `\` would leave a stray backslash and a
+ * blank line that splits the paragraph; `<br>` says the same thing in place.
+ */
+function endsLine(nodes: PMNode[], index: number): boolean {
 	for (let nextIndex = index + 1; nextIndex < nodes.length; nextIndex += 1) {
 		const next = nodes[nextIndex];
-		if (next?.type !== "hardBreak" || next.attrs?.soft === true) return false;
+		if (next?.type !== "hardBreak") return false;
+		if (next.attrs?.soft === true) return true;
 	}
 	return true;
 }

@@ -6,6 +6,8 @@ export const LIST_LEADING_PARAGRAPH_DATA_KEY =
 	"__atelier_list_leading_paragraph";
 export const CODE_META_DATA_KEY = "__mdwc_code_meta";
 export const EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY = "__atelier_empty_paragraph";
+/** The source spelling of a line break written as HTML (`<br/>`). */
+export const HTML_BREAK_DATA_KEY = "__atelier_html_break";
 
 type PMMark = {
 	type: "bold" | "italic" | "strike" | "code" | "link";
@@ -412,7 +414,11 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 				if (isHtmlHardBreak(html)) {
 					out.push({
 						type: "hardBreak",
-						attrs: { data: html.data ?? null } as any,
+						attrs: {
+							data: buildNodeData(html.data, {
+								[HTML_BREAK_DATA_KEY]: html.value,
+							}),
+						} as any,
 					});
 					break;
 				}
