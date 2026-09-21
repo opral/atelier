@@ -807,8 +807,66 @@ export function markdownWcNodes(
 		}),
 		Mark.create({
 			name: "code",
+			// Input rules skip code: "**" typed inside `a b` is code, not bold.
+			// Other marks may still wrap it (`**\`x\`**`), so no `excludes`.
+			code: true,
 			renderHTML() {
 				return ["code", 0];
+			},
+			addKeyboardShortcuts() {
+				return {
+					// A span that ends the line has no plain text after it to move
+					// into. ArrowRight steps out of it instead, so what is typed next
+					// is plain text; the next press moves on as usual.
+					ArrowRight: ({ editor }) => {
+						const { selection, storedMarks } = editor.state;
+						const { $from } = selection;
+						if (
+							!selection.empty ||
+							$from.parentOffset !== $from.parent.content.size ||
+							!this.type.isInSet(storedMarks ?? $from.marks())
+						) {
+							return false;
+						}
+						editor.view.dispatch(
+							editor.state.tr.setStoredMarks(
+								this.type.removeFromSet($from.marks()),
+							),
+						);
+						return true;
+					},
+				};
+			},
+			addProseMirrorPlugins() {
+				const codeType = this.type;
+				return [
+					new Plugin({
+						props: {
+							// At the start of a line ProseMirror takes the marks of the
+							// text after the caret, so typing there went into a code span
+							// that opens the line, with no way to type before it.
+							handleTextInput(view, from, to, text) {
+								const { state } = view;
+								if (from !== to || to > state.doc.content.size) return false;
+								const $from = state.doc.resolve(from);
+								if (
+									$from.parentOffset !== 0 ||
+									state.storedMarks ||
+									!codeType.isInSet($from.marks())
+								) {
+									return false;
+								}
+								const marks = codeType.removeFromSet($from.marks());
+								view.dispatch(
+									state.tr
+										.replaceWith(from, to, state.schema.text(text, marks))
+										.scrollIntoView(),
+								);
+								return true;
+							},
+						},
+					}),
+				];
 			},
 		}),
 		Mark.create({

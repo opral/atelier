@@ -131,4 +131,73 @@ describe("autolink on Enter", () => {
 		editor.commands.undo();
 		expect(runs(editor)).toEqual([["a www.x.io", ""]]);
 	});
+	test("not inside inline code", () => {
+		const editor = editorFor("run `https://a.b`\n");
+		caret(editor, "run https://a.b", "end");
+		editor.view.dispatch(editor.state.tr.setStoredMarks(null));
+		key(editor, "Enter");
+		expect(runs(editor)[1]).toEqual(["https://a.b", "code"]);
+	});
+});
+
+describe("inline code edges", () => {
+	test("ArrowRight at the end of a line steps out of a code span", () => {
+		const editor = editorFor("run `ls`\n");
+		caret(editor, "run ls", "end");
+		expect(key(editor, "ArrowRight")).toBe(true);
+		type(editor, " now");
+		expect(runs(editor)).toEqual([
+			["run ", ""],
+			["ls", "code"],
+			[" now", ""],
+		]);
+	});
+
+	test("a second ArrowRight moves on as usual", () => {
+		const editor = editorFor("run `ls`\n\nnext\n");
+		caret(editor, "run ls", "end");
+		key(editor, "ArrowRight");
+		expect(key(editor, "ArrowRight")).toBeFalsy();
+	});
+
+	test("typing at the very start of a line does not join a code span", () => {
+		const editor = editorFor("`ls` it\n");
+		caret(editor, "ls it", 0);
+		type(editor, "Run ");
+		expect(runs(editor)).toEqual([
+			["Run ", ""],
+			["ls", "code"],
+			[" it", ""],
+		]);
+	});
+
+	test("typing at the end of a span inside a line still extends it", () => {
+		const editor = editorFor("`ls` it\n");
+		caret(editor, "ls it", 2);
+		type(editor, " -a");
+		expect(runs(editor)[0]).toEqual(["ls -a", "code"]);
+	});
+
+	test("Mod-e then typing writes code", () => {
+		const editor = editorFor("x\n");
+		caret(editor, "x", "end");
+		key(editor, "e", { ctrlKey: true });
+		type(editor, "abc");
+		expect(runs(editor)).toEqual([
+			["x", ""],
+			["abc", "code"],
+		]);
+	});
+
+	test("Markdown typed inside a code span stays code", () => {
+		const editor = editorFor("`a b`\n");
+		caret(editor, "a b", 1);
+		type(editor, " **k** _i_ ");
+		expect(runs(editor)).toEqual([["a **k** _i_  b", "code"]]);
+	});
+
+	test("bold around code still round-trips", () => {
+		const editor = editorFor("**`x`** and [`y`](https://y.io)\n");
+		expect(md(editor)).toBe("**`x`** and [`y`](https://y.io)\n");
+	});
 });
