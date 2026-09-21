@@ -171,6 +171,21 @@ export function handlePaste(args: {
 		const tiptapDoc = astToTiptapDoc(ast) as any;
 		const blocks = tiptapDoc?.content ?? [];
 		if (
+			blocks[0]?.type === "markdownFrontmatter" &&
+			!replacesDocumentStart(editor.state)
+		) {
+			// Frontmatter only exists at the top of a file. Anywhere else the
+			// node would save as a "---" fence that reloads as a rule and a
+			// heading, so the YAML stays visible as a code block instead.
+			blocks[0] = {
+				type: "codeBlock",
+				attrs: { language: "yaml" },
+				content: blocks[0].attrs?.value
+					? [{ type: "text", text: blocks[0].attrs.value }]
+					: [],
+			};
+		}
+		if (
 			blocks.length === 1 &&
 			blocks[0].type === "imageBlock" &&
 			!/[\r\n]/.test(text) &&
@@ -241,6 +256,24 @@ export function handlePaste(args: {
 	} finally {
 		editor.view?.dispatch(closeHistory(editor.state.tr));
 	}
+}
+
+/**
+ * Whether a paste lands at the very top of a document that has no
+ * frontmatter left once the selection is replaced.
+ */
+function replacesDocumentStart(state: any): boolean {
+	const { selection, doc } = state;
+	const $from = selection.$from;
+	const atStart =
+		selection.from === 0 ||
+		($from.depth === 1 && $from.index(0) === 0 && $from.parentOffset === 0);
+	const existing = doc.firstChild;
+	return (
+		atStart &&
+		(existing?.type.name !== "markdownFrontmatter" ||
+			(selection.from === 0 && selection.to >= existing.nodeSize))
+	);
 }
 
 /** The paragraph or heading at one edge, through lists and quotes. */

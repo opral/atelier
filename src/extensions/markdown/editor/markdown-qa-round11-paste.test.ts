@@ -427,3 +427,30 @@ describe("code copied from VS Code", () => {
 		expect(md(editor)).toBe("```python\npass\nx = a * b\n```\n");
 	});
 });
+
+describe("pasted frontmatter", () => {
+	const yaml = "---\ntitle: Hello\n---\n\nBody";
+
+	test("stays frontmatter at the top of a document without any", () => {
+		const editor = setup("");
+		paste(editor, { "text/plain": yaml });
+		expect(md(editor)).toBe("---\ntitle: Hello\n---\n\nBody\n");
+	});
+
+	test("becomes a YAML code block below the top", () => {
+		const editor = setup("Intro");
+		editor.commands.setTextSelection(find(editor, "Intro").to);
+		paste(editor, { "text/plain": yaml });
+		expect(md(editor)).toBe("Intro\n\n```yaml\ntitle: Hello\n```\n\nBody\n");
+		expect(reload(md(editor))).toBe(md(editor));
+	});
+
+	test("does not add a second frontmatter block", () => {
+		const editor = setup("---\ntitle: One\n---\n\nText");
+		editor.commands.setTextSelection(find(editor, "Text").from);
+		paste(editor, { "text/plain": yaml });
+		expect(md(editor)).toBe(
+			"---\ntitle: One\n---\n\n```yaml\ntitle: Hello\n```\n\nBodyText\n",
+		);
+	});
+});
