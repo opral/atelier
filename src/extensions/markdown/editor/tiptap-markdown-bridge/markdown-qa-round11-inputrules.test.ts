@@ -296,3 +296,21 @@ describe("undo right after an inline autoformat", () => {
 		expect(runs(editor)).toEqual([["hello **b**", ""]]);
 	});
 });
+
+describe("task shortcut in an ordered list", () => {
+	test("[ ] in a new numbered item makes that item a task", () => {
+		const editor = editorFor("1. a\n");
+		caret(editor, "a", "end");
+		key(editor, "Enter");
+		type(editor, "[ ] b");
+		editor.state.doc.check();
+		expect(md(editor)).toBe("1. a\n2. [ ] b\n");
+	});
+
+	test("1. [x] in an empty document", () => {
+		const editor = editorFor("");
+		type(editor, "1. [x] done");
+		editor.state.doc.check();
+		expect(md(editor)).toBe("1. [x] done\n");
+	});
+});

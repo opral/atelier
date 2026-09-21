@@ -405,10 +405,15 @@ export const MarkdownWcShortcuts = Extension.create({
 						handler: ({ state, range, match, commands }) => {
 							const checked = /x/i.test(String((match && match[1]) || ""));
 							const $from: any = (state as any).selection.$from;
-							// Check if we're inside an existing bullet list
+							// Inside an existing list the item itself becomes the task.
+							// A numbered one too: GFM writes it "2. [ ] b", and wrapping
+							// it in a bullet list left an empty numbered item behind.
 							for (let d = $from.depth; d > 0; d--) {
 								const n = $from.node(d);
-								if (n?.type?.name === "bulletList") {
+								if (
+									n?.type?.name === "bulletList" ||
+									n?.type?.name === "orderedList"
+								) {
 									return commands.command(({ state, tr, dispatch }: any) => {
 										const selectionFrom = state.selection.$from;
 										let listItemDepth = -1;
