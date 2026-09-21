@@ -292,3 +292,120 @@ describe("Delete above an item that starts with a table", () => {
 		expect(await saved()).toBe("- itemh\n- next\n");
 	});
 });
+
+describe("the saved file keeps what the edit did not touch", () => {
+	const RAGGED = "| a | b | c |\n|---|---|---|\n| 1 |\n| 5 | 6 | 7 | extra |\n";
+
+	test("a row with cells past the header keeps them, once, where it goes", async () => {
+		const { editor, saved } = await open(RAGGED);
+		caretIn(editor, "5");
+		editor.commands.moveTableRowUp();
+		expect(await saved()).toBe(
+			"| a | b | c |\n|---|---|---|\n| 5 | 6 | 7 | extra |\n| 1 |\n",
+		);
+		undo(editor.state, editor.view.dispatch);
+		expect(await saved()).toBe(RAGGED);
+	});
+
+	test("an edited row keeps its extra cells and the spelling of the others", async () => {
+		const { editor, saved } = await open(
+			"| a | b | c |\n|---|---|---|\n| &#124; | 6 | 7 | extra |\n",
+		);
+		caretIn(editor, "6", 1);
+		type(editor, "!");
+		expect(await saved()).toBe(
+			"| a | b | c |\n|---|---|---|\n| &#124; | 6! | 7 | extra |\n",
+		);
+	});
+
+	test("adding or deleting a column, and undoing it, gives the file back", async () => {
+		const { editor, saved } = await open(RAGGED);
+		caretIn(editor, "5");
+		editor.commands.addTableColumnAfter();
+		expect(await saved()).toBe(
+			"| a |  | b | c |\n|---|---|---|---|\n| 1 |\n| 5 |  | 6 | 7 | extra |\n",
+		);
+		undo(editor.state, editor.view.dispatch);
+		expect(await saved()).toBe(RAGGED);
+		caretIn(editor, "6");
+		editor.commands.deleteTableColumn();
+		expect(await saved()).toBe(
+			"| a | c |\n|---|---|\n| 1 |\n| 5 | 7 | extra |\n",
+		);
+		undo(editor.state, editor.view.dispatch);
+		expect(await saved()).toBe(RAGGED);
+	});
+
+	test("a moved column keeps its cells' spelling", async () => {
+		const { editor, saved } = await open(
+			"| a | b |\n|:--|---|\n| &#124; | `x\\|y` |\n",
+		);
+		caretIn(editor, "b");
+		editor.commands.moveTableColumnLeft();
+		expect(await saved()).toBe("| b | a |\n|---|:--|\n| `x\\|y` | &#124; |\n");
+	});
+
+	test("a table in a list: only the new row is written", async () => {
+		const source =
+			"- _em_ and __b__ and [ref][r]\n- x\n\n  | a | b |\n  |:--|---|\n  | 1 | 2 |\n- y\n\n[r]: https://example.com\n";
+		const { editor, saved } = await open(source);
+		caretIn(editor, "1");
+		editor.commands.addTableRowAfter();
+		expect(await saved()).toBe(
+			source.replace("  | 1 | 2 |\n", "  | 1 | 2 |\n  |  |  |\n"),
+		);
+		editor.commands.setTableColumnAlign("center");
+		expect(await saved()).toBe(
+			source.replace(
+				"  |:--|---|\n  | 1 | 2 |\n",
+				"  |:-:|---|\n  | 1 | 2 |\n  |  |  |\n",
+			),
+		);
+		undo(editor.state, editor.view.dispatch);
+		undo(editor.state, editor.view.dispatch);
+		expect(await saved()).toBe(source);
+	});
+
+	test("a table in a quote: only the new row is written", async () => {
+		const source = "> | a | b |\n> |---|---|\n> | 1 | 2 |\n\nafter\n";
+		const { editor, saved } = await open(source);
+		caretIn(editor, "a");
+		editor.commands.addTableRowAfter();
+		expect(await saved()).toBe(
+			"> | a | b |\n> |---|---|\n> |  |  |\n> | 1 | 2 |\n\nafter\n",
+		);
+	});
+
+	test("a table without outer pipes keeps its style", async () => {
+		const source = "a | b\n--|--\n1 | 2\n3 | 4\n";
+		const { editor, saved } = await open(source);
+		caretIn(editor, "1");
+		editor.commands.deleteTableRow();
+		expect(await saved()).toBe("a | b\n--|--\n3 | 4\n");
+		undo(editor.state, editor.view.dispatch);
+		expect(await saved()).toBe(source);
+		editor.commands.setTableColumnAlign("center");
+		expect(await saved()).toBe("a | b\n:-:|--\n1 | 2\n3 | 4\n");
+		undo(editor.state, editor.view.dispatch);
+		caretIn(editor, "3");
+		editor.commands.addTableColumnAfter();
+		// A row with an empty cell at an end needs its outer pipes.
+		expect(await saved()).toBe("a |  | b\n--|--|--\n1 |  | 2\n3 |  | 4\n");
+		caretIn(editor, "3");
+		editor.commands.addTableRowAfter();
+		expect(await saved()).toBe(
+			"a |  | b\n--|--|--\n1 |  | 2\n3 |  | 4\n|  |  |  |\n",
+		);
+	});
+
+	test("an indented table keeps its rows' indentation", async () => {
+		const { editor, saved } = await open(
+			"x\n\n   | a | b |\n   |---|---|\n   | 1 | 2 |\n\ny\n",
+		);
+		caretIn(editor, "1");
+		editor.commands.addTableRowAfter();
+		expect(await saved()).toBe(
+			"x\n\n   | a | b |\n   |---|---|\n   | 1 | 2 |\n   |  |  |\n\ny\n",
+		);
+	});
+});
