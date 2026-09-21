@@ -29,6 +29,7 @@ import { isBlankLine } from "../table-commands";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
+import { LIST_LEADING_PARAGRAPH_DATA_KEY } from "./mdwc-to-tiptap";
 import { focusIsOnEditorControl } from "../focused-control";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
@@ -1032,13 +1033,25 @@ export const MarkdownWcShortcuts = Extension.create({
 			node.type.name === "footnoteDef" || node.type.name === "tableCell";
 		/**
 		 * The block a keystroke meets at the near edge of `node` (at `pos`):
-		 * lists, items and quotes are only wrappers around it.
+		 * lists, items and quotes are only wrappers around it. So is the empty
+		 * line the editor puts first in an item that starts with a table or
+		 * another block: it is not in the file, and Delete joining into it
+		 * merged the item into the one above and wrote `<span></span>`.
 		 */
 		const edgeBlock = (node: any, pos: number, direction: -1 | 1) => {
 			while (!node.isTextblock && !isOpaqueBlock(node) && node.childCount) {
 				if (direction > 0) {
 					pos += 1;
-					node = node.firstChild;
+					const first = node.firstChild;
+					if (
+						node.type.name === "listItem" &&
+						node.childCount > 1 &&
+						first.content.size === 0 &&
+						first.attrs.data?.[LIST_LEADING_PARAGRAPH_DATA_KEY]
+					) {
+						pos += first.nodeSize;
+						node = node.child(1);
+					} else node = first;
 				} else {
 					pos += node.nodeSize - 1 - node.lastChild.nodeSize;
 					node = node.lastChild;

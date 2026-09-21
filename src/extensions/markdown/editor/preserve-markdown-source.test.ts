@@ -95,3 +95,19 @@ test("a column added to an unaligned table keeps its delimiter spelling", () => 
 		),
 	).toBe("| a | b | c |\n| :-- | --- | --: |\n| 1 | 2 | 3 |\n");
 });
+
+test("a row added to a table in a list rewrites neither the list nor the table", () => {
+	const original =
+		"- _em_ and __b__ and [ref][r]\n- x\n\n  | a | b |\n  |:--|---|\n  | 1 | 2 |\n\n[r]: https://example.com\n";
+	const edited = original.replace(
+		"  | 1 | 2 |\n",
+		"  | 1 | 2 |\n  | 3 | 4 |\n",
+	);
+	expect(preserveMarkdownSource(original, normalized(edited))).toBe(edited);
+});
+
+test("a quoted table keeps its delimiter when a row moves", () => {
+	const original = "> | a | b |\n> |:-|---|\n> | 1 | 2 |\n> | 3 | 4 |\n";
+	const edited = "> | a | b |\n> |:-|---|\n> | 3 | 4 |\n> | 1 | 2 |\n";
+	expect(preserveMarkdownSource(original, normalized(edited))).toBe(edited);
+});
