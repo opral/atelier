@@ -66,6 +66,7 @@ import manifestJson from "./manifest.json";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import { CodeLanguageMenu } from "./components/code-language-menu";
+import { TableControls } from "./components/table-controls";
 import { SelectionToolbar } from "./components/selection-toolbar";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
@@ -660,6 +661,7 @@ function MarkdownLiveDocument({
 					<SelectionToolbar />
 					<SlashCommandMenu />
 					<CodeLanguageMenu />
+					<TableControls />
 					<EmojiPickerMenu />
 					<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
 					<MentionMenu sourceFilePath={effectiveFileRow.path} />

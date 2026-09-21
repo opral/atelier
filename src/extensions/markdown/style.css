@@ -1850,6 +1850,210 @@
 			outline-offset: 2px;
 		}
 
+		/* Table row and column controls. The grips sit on the table's left and
+		   top borders, over the hovered row and column; the "+" bars run along
+		   its bottom and right edges. They are portaled out of the table, whose
+		   element is a scroll room that clips anything drawn outside it. */
+		.markdown-table-grip,
+		.markdown-table-add {
+			position: fixed;
+			z-index: 40;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0;
+			border: 1px solid var(--atelier-border);
+			background: var(--atelier-panel);
+			color: var(--atelier-fg-subtle);
+			cursor: pointer;
+			animation: markdown-table-control-in var(--atelier-duration) ease-out;
+			transition:
+				background-color var(--atelier-duration-fast) ease,
+				border-color var(--atelier-duration-fast) ease,
+				color var(--atelier-duration-fast) ease;
+		}
+
+		.markdown-table-grip {
+			border-radius: 5px;
+			box-shadow: var(--atelier-shadow-sm);
+		}
+
+		.markdown-table-grip svg {
+			width: 12px;
+			height: 12px;
+			stroke-width: 2;
+		}
+
+		.markdown-table-grip:hover {
+			border-color: var(--atelier-border-strong);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
+		}
+
+		.markdown-table-grip[data-active="true"] {
+			border-color: var(--atelier-accent);
+			background: var(--atelier-accent);
+			color: var(--atelier-accent-on);
+		}
+
+		.markdown-table-add {
+			border-color: transparent;
+			border-radius: 4px;
+			background: var(--atelier-bg-subtle);
+			color: var(--atelier-fg-faint);
+		}
+
+		.markdown-table-add svg {
+			width: 12px;
+			height: 12px;
+			stroke-width: 2;
+		}
+
+		.markdown-table-add:hover {
+			border-color: var(--atelier-border);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
+		}
+
+		@keyframes markdown-table-control-in {
+			from {
+				opacity: 0;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.markdown-table-grip,
+			.markdown-table-add {
+				animation: none;
+				transition: none;
+			}
+		}
+
+		/* The row or column a grip's menu is about. */
+		.markdown-view .ProseMirror table :is(th, td).markdown-table-cell-selected {
+			background-color: var(--atelier-accent-subtle);
+		}
+
+		/* The row and column menu: the slash palette's shell, with compact rows,
+		   the key for each action at its end, and the destructive ones last. */
+		.markdown-table-menu {
+			outline: none;
+		}
+
+		.markdown-table-menu .markdown-slash-menu-scroll {
+			padding: 0.3rem;
+		}
+
+		.markdown-table-menu-label {
+			overflow: hidden;
+			padding: 0.4rem 0.5rem 0.3rem;
+			color: var(--atelier-fg-subtle);
+			font-size: var(--atelier-text-ui-xs);
+			font-weight: 600;
+			line-height: 1.2;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-table-menu-separator {
+			height: 1px;
+			margin: 0.25rem 0.3rem;
+			background: var(--atelier-border-subtle);
+		}
+
+		.markdown-table-menu-item {
+			display: flex;
+			min-height: 1.875rem;
+			align-items: center;
+			gap: 0.55rem;
+			padding: 0 0.5rem;
+			border-radius: 6px;
+			color: var(--atelier-fg);
+			cursor: pointer;
+			font-size: 0.8125rem;
+			user-select: none;
+		}
+
+		.markdown-table-menu-item > svg {
+			width: 0.9rem;
+			height: 0.9rem;
+			flex-shrink: 0;
+			color: var(--atelier-fg-subtle);
+			stroke-width: 1.8;
+		}
+
+		.markdown-table-menu-item-label {
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-table-menu-shortcut {
+			color: var(--atelier-fg-faint);
+			font-family: inherit;
+			font-size: var(--atelier-text-ui-xs);
+			letter-spacing: 0.02em;
+			white-space: nowrap;
+		}
+
+		.markdown-table-menu-item[data-active="true"] {
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-table-menu-item[data-active="true"] > svg {
+			color: var(--atelier-fg-muted);
+		}
+
+		.markdown-table-menu-item[data-danger="true"],
+		.markdown-table-menu-item[data-danger="true"] > svg {
+			color: var(--atelier-danger);
+		}
+
+		.markdown-table-menu-item[data-danger="true"][data-active="true"] {
+			background: var(--atelier-danger-subtle);
+		}
+
+		.markdown-table-menu-align {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 2px;
+			margin: 0.15rem 0.3rem;
+			padding: 2px;
+			border-radius: 7px;
+			background: var(--atelier-bg-subtle);
+		}
+
+		.markdown-table-menu-align-option {
+			display: flex;
+			height: 1.625rem;
+			align-items: center;
+			justify-content: center;
+			border-radius: 5px;
+			color: var(--atelier-fg-subtle);
+			cursor: pointer;
+		}
+
+		.markdown-table-menu-align-option svg {
+			width: 0.9rem;
+			height: 0.9rem;
+			stroke-width: 1.8;
+		}
+
+		.markdown-table-menu-align-option[data-active="true"] {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		.markdown-table-menu-align-option[data-checked="true"] {
+			background: var(--atelier-panel);
+			color: var(--atelier-link);
+			box-shadow:
+				var(--atelier-shadow-sm),
+				inset 0 0 0 1px var(--atelier-accent-border);
+		}
+
 		/* Slash command palette. It is portaled into .atelier-root so it keeps the
 		   same typography, theme tokens, and sizing model as the editor shell. */
 		.markdown-slash-menu {
