@@ -168,8 +168,9 @@ describe("root & paragraph", () => {
 		expect(roundtripMarkdownThroughEditor("first\nsecond\n")).toBe(
 			"first\nsecond\n",
 		);
+		// The soft break sits inside the bold run, so the run stays one span.
 		expect(roundtripMarkdownThroughEditor("**first\nsecond**\n")).toBe(
-			"**first**\n**second**\n",
+			"**first\nsecond**\n",
 		);
 
 		const editor = new Editor({

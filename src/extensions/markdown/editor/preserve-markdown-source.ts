@@ -1,6 +1,9 @@
 import {
+	minimizeEscapes,
 	parseMarkdownSource,
 	parseMarkdownSourceRaw,
+	normalizeAst,
+	restoreCharacterReferences,
 	serializeAst,
 } from "./markdown";
 import { astToTiptapDoc, tiptapDocToAst } from "./tiptap-markdown-bridge";
@@ -29,25 +32,36 @@ export function preserveMarkdownSource(
 	const canonical = canonicalMarkdown;
 	const target = canonical(serialized);
 	if (canonical(original) === target) return original;
-	const segments = (text: string) => {
-		const nodes = parseMarkdownSource(text).children;
-		return nodes.map((node, index) => ({
-			key: canonical(serializeAst({ type: "root", children: [node] })),
-			text: text.slice(
-				index === 0 ? 0 : node.position.start.offset,
-				nodes[index + 1]?.position.start.offset ?? text.length,
-			),
-		}));
-	};
-	const available = new Map<string, string[]>();
-	for (const block of segments(original)) {
-		const queue = available.get(block.key) ?? [];
-		queue.push(block.text);
-		available.set(block.key, queue);
+	const keyOf = (node: any) =>
+		canonical(serializeAst({ type: "root", children: [node] }));
+	// Top-level definitions are their own segments here, attached to the
+	// block they follow: they are invisible in the editor and absent from its
+	// serialized document, and must stay where they were when that block is
+	// edited rather than move to the end of the file.
+	const resolved = parseMarkdownSource(original).children;
+	const leadingDefinitions: string[] = [];
+	const originals: (Segment & { key: string; definitions: string[] })[] = [];
+	for (const segment of segments(
+		original,
+		parseMarkdownSourceRaw(original).children,
+	)) {
+		if (segment.node.type === "definition") {
+			(originals.at(-1)?.definitions ?? leadingDefinitions).push(segment.text);
+			continue;
+		}
+		originals.push({
+			...segment,
+			key: keyOf(resolved[originals.length]),
+			definitions: [],
+		});
 	}
-	const next = segments(serialized);
-	// Definitions are invisible in the editor and absent from its serialized
-	// document. Keep their source even when their neighboring block was edited.
+	const available = new Map<string, number[]>();
+	originals.forEach((segment, index) => {
+		const queue = available.get(segment.key) ?? [];
+		queue.push(index);
+		available.set(segment.key, queue);
+	});
+	const next = segments(serialized, parseMarkdownSource(serialized).children);
 	const definitions: string[] = [];
 	const collectDefinitions = (node: any, depth: number): void => {
 		if (node.type === "definition") {
@@ -86,34 +100,197 @@ export function preserveMarkdownSource(
 		// A newly typed literal reference must not acquire a hidden old target.
 		return canonical(candidate) === target ? candidate : text;
 	};
-	const preserved = next.map((block) => {
-		const reused = available.get(block.key)?.shift();
-		return reused ?? block.text;
-	});
-	const candidate = withDefinitions(preserved.join(""));
-	if (canonical(candidate) === target) return candidate;
-	const separated = preserved.map((text, index) => {
-		// A formerly final block may now precede another block.
-		return index < next.length - 1 && !/\r?\n\r?\n$/.test(text)
-			? text + (text.endsWith("\n") ? "\n" : "\n\n")
-			: text;
-	});
-	const separatedCandidate = withDefinitions(separated.join(""));
-	if (canonical(separatedCandidate) === target) return separatedCandidate;
-	// A moved block may depend on its old neighbors or reference definitions.
-	// Retain every independently safe spelling instead of reformatting the
-	// entire file because one source boundary could not be reused.
-	const safe = next.map((block) => block.text);
-	for (let index = 0; index < safe.length; index++) {
-		const previous = safe[index]!;
-		safe[index] = separated[index]!;
-		if (canonical(withDefinitions(safe.join(""))) !== target)
-			safe[index] = previous;
-	}
-	const result = withDefinitions(safe.join(""));
+	const reused = next.map((segment) =>
+		available.get(keyOf(segment.node))?.shift(),
+	);
+	// An edit that changed blocks but added or removed none leaves one
+	// original block over for each edited one. Pair them in order, so an
+	// edited block keeps the blank lines and definitions that followed it.
+	const counterpart = [...reused];
+	const leftOver = originals.flatMap((_, index) =>
+		reused.includes(index) ? [] : [index],
+	);
+	const edited = next.flatMap((_, index) =>
+		reused[index] === undefined ? [index] : [],
+	);
+	if (leftOver.length === edited.length)
+		edited.forEach((index, order) => {
+			counterpart[index] = leftOver[order];
+		});
+	const definitionSource = definitions.join("\n");
+	// Blocks the editor re-emits are written with only the escapes their
+	// meaning needs, and with the character references and table rows of
+	// the block they replace. If the file then does not read back as the
+	// editor's document, they are written exactly as serialized instead.
+	const emitted = (restore: boolean) =>
+		next.map((segment, index) => {
+			// A reused block's source stands in for it; this spelling is only
+			// the fallback when that source cannot be reused in place.
+			if (reused[index] !== undefined) return segment.text;
+			const content = segment.text.slice(
+				0,
+				segment.text.length - segment.gap.length,
+			);
+			// The file's end is the editor's: an edited last block ends in one
+			// newline, as it always has, unless definitions follow it.
+			const pair = counterpart[index];
+			const between =
+				pair !== undefined &&
+				(originals[pair]!.definitions.length > 0 ||
+					(pair < originals.length - 1 && index < next.length - 1));
+			let written = content;
+			if (restore) {
+				written = minimizeEscapes(written, definitionSource);
+				if (pair !== undefined) {
+					const source = originals[pair]!.text;
+					written = restoreTableSource(
+						restoreCharacterReferences(written, source),
+						source,
+					);
+				}
+			}
+			return written + (between ? originals[pair]!.gap : segment.gap);
+		});
+	const withSourceDefinitions = (texts: readonly string[]) =>
+		texts.map((text, index) => {
+			const pair = counterpart[index];
+			return (
+				(index === 0 ? leadingDefinitions.join("") : "") +
+				text +
+				(pair === undefined ? "" : originals[pair]!.definitions.join(""))
+			);
+		});
+	const assemble = (fresh: readonly string[]): string | null => {
+		const preserved = fresh.map((text, index) => {
+			const match = reused[index];
+			return match === undefined ? text : originals[match]!.text;
+		});
+		const candidate = withDefinitions(
+			withSourceDefinitions(preserved).join(""),
+		);
+		if (canonical(candidate) === target) return candidate;
+		const separated = withSourceDefinitions(preserved).map((text, index) => {
+			// A formerly final block may now precede another block.
+			return index < next.length - 1 && !/\r?\n\r?\n$/.test(text)
+				? text + (text.endsWith("\n") ? "\n" : "\n\n")
+				: text;
+		});
+		const separatedCandidate = withDefinitions(separated.join(""));
+		if (canonical(separatedCandidate) === target) return separatedCandidate;
+		// A moved block may depend on its old neighbors or reference definitions.
+		// Retain every independently safe spelling instead of reformatting the
+		// entire file because one source boundary could not be reused.
+		const safe = withSourceDefinitions(fresh);
+		for (let index = 0; index < safe.length; index++) {
+			const previous = safe[index]!;
+			safe[index] = separated[index]!;
+			if (canonical(withDefinitions(safe.join(""))) !== target)
+				safe[index] = previous;
+		}
+		const result = withDefinitions(safe.join(""));
+		return canonical(result) === target ? result : null;
+	};
 	return matchLineEndings(
 		original,
-		canonical(result) === target ? result : serialized,
+		assemble(emitted(true)) ?? assemble(emitted(false)) ?? serialized,
+	);
+}
+
+type Segment = {
+	readonly node: any;
+	/** The block's source up to the next block. */
+	readonly text: string;
+	/** The whitespace between the block's content and the next block. */
+	readonly gap: string;
+};
+
+function segments(text: string, nodes: readonly any[]): Segment[] {
+	return nodes.map((node, index) => {
+		const start = index === 0 ? 0 : node.position.start.offset;
+		const end = nodes[index + 1]?.position.start.offset ?? text.length;
+		const contentEnd = Math.max(start, Math.min(node.position.end.offset, end));
+		return {
+			node,
+			text: text.slice(start, end),
+			gap: text.slice(contentEnd, end),
+		};
+	});
+}
+
+/**
+ * An edited table keeps the source of every row the edit did not touch.
+ * Cells past the header's width are not part of a GFM table and the editor
+ * drops them, but they are the author's text: they come back after their
+ * row. A table whose source is not column-aligned stays unaligned, so
+ * editing one cell no longer re-pads every row.
+ */
+function restoreTableSource(markdown: string, source: string): string {
+	const sourceTable = parseMarkdownSourceRaw(source).children[0];
+	const table = parseMarkdownSourceRaw(markdown).children[0];
+	if (sourceTable?.type !== "table" || table?.type !== "table") return markdown;
+	const width = sourceTable.children[0]?.children.length ?? 0;
+	if (
+		table.children.length !== sourceTable.children.length ||
+		table.children[0]?.children.length !== width
+	)
+		return markdown;
+	const slice = (text: string, node: any) =>
+		text.slice(node.position.start.offset, node.position.end.offset);
+	const lines = (text: string, node: any) => slice(text, node).split("\n");
+	const sourceLines = lines(source, sourceTable);
+	// A table padded so its columns line up is re-aligned as a whole when a
+	// cell changes, as before; any other table keeps its untouched rows.
+	const aligned =
+		new Set(sourceLines.map((line) => line.trimEnd().length)).size === 1 &&
+		sourceLines.some((line) => /\S {2,}\||\| {2,}\S/.test(line));
+	const meaning = (row: any) =>
+		JSON.stringify(
+			normalizeAst({ type: "root", children: row.children.slice(0, width) })
+				.children,
+		);
+	const rows = table.children.map((row: any, index: number) => {
+		const sourceRow = sourceTable.children[index];
+		if (!aligned && meaning(row) === meaning(sourceRow))
+			return slice(source, sourceRow);
+		const written = aligned
+			? slice(markdown, row)
+			: `| ${row.children
+					.map((cell: any) =>
+						slice(markdown, cell).replace(/^\|/, "").replace(/\|$/, "").trim(),
+					)
+					.join(" | ")} |`;
+		const excess =
+			sourceRow.children.length > width
+				? source.slice(
+						sourceRow.children[width].position.start.offset,
+						sourceRow.position.end.offset,
+					)
+				: "";
+		return excess ? written.replace(/\|[\t ]*$/, "") + excess : written;
+	});
+	const sameAlign =
+		JSON.stringify(table.align ?? []) ===
+		JSON.stringify(sourceTable.align ?? []);
+	const delimiter = aligned
+		? lines(markdown, table)[1]
+		: sameAlign
+			? sourceLines[1]
+			: `| ${(table.align ?? [])
+					.map((align: string | null) =>
+						align === "left"
+							? ":--"
+							: align === "right"
+								? "--:"
+								: align === "center"
+									? ":-:"
+									: "---",
+					)
+					.join(" | ")} |`;
+	if (delimiter === undefined) return markdown;
+	return (
+		markdown.slice(0, table.position.start.offset) +
+		[rows[0], delimiter, ...rows.slice(1)].join("\n") +
+		markdown.slice(table.position.end.offset)
 	);
 }
 

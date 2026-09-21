@@ -29,7 +29,220 @@ export function parseMarkdownSourceRaw(markdown: string): AstRoot {
 		mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
 	});
 	restoreEmptyTaskItems(ast, markdown);
+	markLiteralAutolinks(ast, markdown);
+	recordSourceStyle(ast, markdown);
 	return ast;
+}
+
+/**
+ * How a block was spelled where Markdown offers a choice: the bullet, the
+ * ordered delimiter and numbering, a setext heading, a `~~~` fence, the
+ * thematic break, a two-space line break. It rides along in the node's data
+ * so an edited block is written the way its author wrote it rather than in
+ * the serializer's house style (`* a` became `- a`, `1) 1) 1)` became
+ * `1. 2. 3.`).
+ */
+export const SOURCE_STYLE_DATA_KEY = "__atelier_style";
+
+type SourceStyle = {
+	bullet?: string;
+	bulletOrdered?: string;
+	incrementListMarker?: boolean;
+	listItemIndent?: "tab";
+	setext?: boolean;
+	fence?: string;
+	rule?: string;
+	ruleRepetition?: number;
+	ruleSpaces?: boolean;
+	breakSpelling?: string;
+	tightBefore?: boolean;
+};
+
+function recordSourceStyle(node: any, source: string): void {
+	if (!node || typeof node !== "object") return;
+	const style = node.position ? sourceStyle(node, source) : null;
+	if (style && Object.keys(style).length > 0)
+		node.data = { ...node.data, [SOURCE_STYLE_DATA_KEY]: style };
+	for (const child of Array.isArray(node.children) ? node.children : [])
+		recordSourceStyle(child, source);
+}
+
+function sourceStyle(node: any, source: string): SourceStyle | null {
+	const text = source.slice(
+		node.position.start.offset,
+		node.position.end.offset,
+	);
+	switch (node.type) {
+		case "list": {
+			const items = node.children ?? [];
+			const marker = (item: any) =>
+				item?.position
+					? /^(?:([*+-])|(\d{1,9})([.)]))([ \t]*)/.exec(
+							source.slice(
+								item.position.start.offset,
+								item.position.end.offset,
+							),
+						)
+					: null;
+			const first = marker(items[0]);
+			if (!first) return null;
+			const style: SourceStyle = {};
+			// Recorded even when it is the default, so a nested "-" list is
+			// not written with its parent's "*".
+			if (first[1]) style.bullet = first[1];
+			if (first[3] === ")") style.bulletOrdered = ")";
+			const second = marker(items[1]);
+			if (first[2] && second?.[2] && Number(second[2]) === Number(first[2]))
+				style.incrementListMarker = false;
+			// In a loose list, remember which items the source still wrote
+			// without a blank line before them.
+			if (node.spread)
+				items.forEach((item: any, index: number) => {
+					const previous = items[index - 1];
+					if (!previous?.position || !item.position) return;
+					const between = source.slice(
+						previous.position.end.offset,
+						item.position.start.offset,
+					);
+					if (!/\n[ \t>]*\n/.test(between))
+						item.data = {
+							...item.data,
+							[SOURCE_STYLE_DATA_KEY]: { tightBefore: true },
+						};
+				});
+			// `-   item`: the content starts at the next tab stop.
+			const width = first[0].length;
+			if (first[4]!.length > 1 && width % 4 === 0 && !first[4]!.includes("\t"))
+				style.listItemIndent = "tab";
+			return style;
+		}
+		case "heading":
+			return node.position.end.line > node.position.start.line
+				? { setext: true }
+				: null;
+		case "code":
+			return /^[ \t]*~/.test(text) ? { fence: "~" } : null;
+		case "thematicBreak": {
+			const marks = text.replace(/[ \t]/g, "");
+			return {
+				rule: marks[0],
+				ruleRepetition: marks.length,
+				ruleSpaces: /[*_-][ \t]+[*_-]/.test(text),
+			};
+		}
+		case "break": {
+			const spaces = /^( {2,})\r?\n$/.exec(text);
+			return spaces ? { breakSpelling: `${spaces[1]}\n` } : null;
+		}
+		default:
+			return null;
+	}
+}
+
+function styleOf(node: any): SourceStyle {
+	return node?.data?.[SOURCE_STYLE_DATA_KEY] ?? {};
+}
+
+/** Runs a default handler with the node's source style as its options. */
+function withSourceStyle(
+	handler: (node: any, parent: any, state: any, info: any) => string,
+	options: (node: any, parent: any) => Record<string, unknown>,
+) {
+	return (node: any, parent: any, state: any, info: any): string => {
+		const overrides = options(node, parent);
+		const saved = { ...state.options };
+		Object.assign(state.options, overrides);
+		try {
+			return handler(node, parent, state, info);
+		} finally {
+			// Nested lists set their own options; put this level's back.
+			for (const key of Object.keys(overrides)) delete state.options[key];
+			Object.assign(state.options, saved);
+		}
+	};
+}
+
+/**
+ * One blank line between two items makes a whole list loose, and the
+ * serializer then separates every item. Items the source wrote without one
+ * keep that, as long as some other blank line still makes the list loose
+ * when it is read back.
+ */
+function joinTightItems(left: any, right: any, parent: any): number | void {
+	if (parent?.type !== "list" || !parent.spread || !styleOf(right).tightBefore)
+		return;
+	const staysLoose = parent.children.some(
+		(item: any, index: number) =>
+			(index > 0 && !styleOf(item).tightBefore) ||
+			(item.spread && (item.children?.length ?? 0) > 1),
+	);
+	if (staysLoose && left.type === "listItem") return 0;
+}
+
+function sourceStyleToMarkdown(): any {
+	return {
+		join: [joinTightItems],
+		handlers: {
+			list: withSourceStyle(defaultHandlers.list, (node) => {
+				const { bullet, bulletOrdered, incrementListMarker, listItemIndent } =
+					styleOf(node);
+				return Object.fromEntries(
+					Object.entries({
+						bullet,
+						bulletOrdered,
+						incrementListMarker,
+						listItemIndent,
+					}).filter(([, value]) => value !== undefined),
+				);
+			}),
+			heading: withSourceStyle(defaultHandlers.heading, (node) =>
+				styleOf(node).setext ? { setext: true } : {},
+			),
+			code: withSourceStyle(defaultHandlers.code, (node) =>
+				styleOf(node).fence ? { fence: styleOf(node).fence } : {},
+			),
+			thematicBreak: withSourceStyle(
+				defaultHandlers.thematicBreak,
+				(node, parent) => {
+					const { rule, ruleRepetition, ruleSpaces } = styleOf(node);
+					// A "---" first line would open a frontmatter block.
+					if (!rule || (rule === "-" && parent?.children?.[0] === node))
+						return {};
+					return { rule, ruleRepetition, ruleSpaces };
+				},
+			),
+			break: (node: any, parent: any, state: any, info: any): string => {
+				const spelling = styleOf(node).breakSpelling;
+				const value = defaultHandlers.break(node, parent, state, info);
+				return spelling && value === "\\\n" ? spelling : value;
+			},
+		},
+	};
+}
+
+/** Marks a link written as a bare URL, `www.` domain or email address. */
+export const LITERAL_AUTOLINK_DATA_KEY = "__atelier_literal_autolink";
+
+/**
+ * GFM links a bare `https://x.com`, `www.x.com` or `me@x.com` without any
+ * syntax. The serializer only knows `<https://x.com>` and
+ * `[www.x.com](http://www.x.com)`, so an edit rewrote every bare URL in the
+ * block. Remember which links were bare so they can be written that way.
+ */
+function markLiteralAutolinks(node: any, source: string): void {
+	if (!node || typeof node !== "object") return;
+	if (node.type === "link") {
+		// Links GFM finds in text after parsing (`https\://x.com` too) have
+		// no position of their own.
+		const first = node.position
+			? source[node.position.start.offset]
+			: undefined;
+		if (first !== "[" && first !== "<") {
+			node.data = { ...node.data, [LITERAL_AUTOLINK_DATA_KEY]: true };
+		}
+	}
+	for (const child of Array.isArray(node.children) ? node.children : [])
+		markLiteralAutolinks(child, source);
 }
 
 /**
@@ -148,27 +361,196 @@ function normalizeIdentifier(identifier: string): string {
 
 export function serializeAst(ast: any): string {
 	return normalizeSerializedMarkdown(
-		toMarkdown(prepareAstForMarkdown(ast), {
-			extensions: [
-				gfmToMarkdown(),
-				taskListItemToMarkdown(),
-				frontmatterToMarkdown(["yaml"]),
-			],
-			bullet: "-",
-			listItemIndent: "one",
-			// "---" as a document's first line re-parses as a YAML frontmatter
-			// fence and swallows everything up to the next rule; "***" cannot.
-			rule: "*",
-			ruleRepetition: 3,
-			ruleSpaces: false,
-			// "_" cannot open intraword emphasis, so the serializer would fall
-			// back to hex entities for foo*bar*baz; "*" works in every position.
-			emphasis: "*",
-			strong: "*",
-			fence: "`",
-			fences: true,
-		}),
+		toMarkdown(prepareAstForMarkdown(ast), serializeOptions()),
 	);
+}
+
+/**
+ * One inline node's Markdown, as written in the middle of a line. Unlike
+ * serializeAst it keeps whitespace at the node's edges.
+ */
+export function serializeInlineNode(node: any): string {
+	return toMarkdown(
+		{ type: "paragraph", children: [node] } as any,
+		serializeOptions(),
+	).replace(/\n$/, "");
+}
+
+function serializeOptions(): any {
+	return {
+		extensions: [
+			gfmToMarkdown(),
+			taskListItemToMarkdown(),
+			frontmatterToMarkdown(["yaml"]),
+			sourceStyleToMarkdown(),
+		],
+		bullet: "-",
+		listItemIndent: "one",
+		// "---" as a document's first line re-parses as a YAML frontmatter
+		// fence and swallows everything up to the next rule; "***" cannot.
+		rule: "*",
+		ruleRepetition: 3,
+		ruleSpaces: false,
+		// "_" cannot open intraword emphasis, so the serializer would fall
+		// back to hex entities for foo*bar*baz; "*" works in every position.
+		emphasis: "*",
+		strong: "*",
+		fence: "`",
+		fences: true,
+	};
+}
+
+// A backslash before ASCII punctuation, or the hex character reference the
+// serializer writes where a backslash cannot help.
+const ESCAPE_PATTERN = /\\[!-/:-@[-`{-~]|&#x[0-9A-Fa-f]+;/g;
+
+/**
+ * Drops every escape that `markdown` does not need. mdast-util-to-markdown
+ * escapes a character wherever it could start syntax in some context, so an
+ * edited paragraph came back as `snake\_case`, `\[!NOTE]`, `\[[Note]]` or
+ * `AT\&T`. Each escape is removed only if the text still parses to the same
+ * document; `definitions` holds the file's reference definitions, so a
+ * literal `[label]` is not turned into a link to one of them.
+ */
+export function minimizeEscapes(markdown: string, definitions = ""): string {
+	const literal = literalRanges(markdown);
+	const candidates = [...markdown.matchAll(ESCAPE_PATTERN)].filter(
+		(match) =>
+			!literal.some(
+				([start, end]) => match.index >= start && match.index < end,
+			),
+	);
+	if (candidates.length === 0) return markdown;
+	const meaning = (text: string) =>
+		JSON.stringify(parseMarkdown(`${text}\n\n${definitions}`));
+	const expected = meaning(markdown);
+	const apply = (removed: ReadonlySet<number>) => {
+		let out = "";
+		let cursor = 0;
+		candidates.forEach((match, index) => {
+			if (!removed.has(index)) return;
+			out += markdown.slice(cursor, match.index);
+			out += match[0].startsWith("\\")
+				? match[0].slice(1)
+				: String.fromCodePoint(Number.parseInt(match[0].slice(3, -1), 16));
+			cursor = match.index + match[0].length;
+		});
+		return out + markdown.slice(cursor);
+	};
+	// Try the whole group first, since usually no escape is needed, and
+	// halve it only where one is.
+	let removed = new Set<number>();
+	const attempt = (group: readonly number[]): void => {
+		const trial = new Set([...removed, ...group]);
+		if (meaning(apply(trial)) === expected) {
+			removed = trial;
+			return;
+		}
+		if (group.length === 1) return;
+		const middle = Math.floor(group.length / 2);
+		attempt(group.slice(0, middle));
+		attempt(group.slice(middle));
+	};
+	attempt(candidates.map((_, index) => index));
+	return apply(removed);
+}
+
+const CHARACTER_REFERENCE_PATTERN =
+	/&(?:#[xX][0-9A-Fa-f]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});/g;
+
+/**
+ * Writes characters the way `source` wrote them. The editor holds decoded
+ * text, so an edited block turned `&nbsp;` into an invisible U+00A0 and
+ * `&copy;` into ©. Where the edited block has as many of a character as its
+ * source did, each occurrence takes the source's spelling in order; where
+ * the count changed and the source always used one reference, every
+ * occurrence uses it.
+ */
+export function restoreCharacterReferences(
+	markdown: string,
+	source: string,
+): string {
+	const sourceLiteral = literalRanges(source);
+	const outside = (ranges: [number, number][], index: number) =>
+		!ranges.some(([start, end]) => index >= start && index < end);
+	const references = [...source.matchAll(CHARACTER_REFERENCE_PATTERN)].filter(
+		(match) => outside(sourceLiteral, match.index),
+	);
+	if (references.length === 0) return markdown;
+	const decoded = new Map<string, string>();
+	for (const match of references) {
+		if (decoded.has(match[0])) continue;
+		const text = fromMarkdown(`a${match[0]}`).children[0] as any;
+		const value = text?.children?.[0]?.value;
+		if (typeof value === "string" && value.slice(1) !== match[0])
+			decoded.set(match[0], value.slice(1));
+	}
+	const markdownLiteral = literalRanges(markdown);
+	const replacements = new Map<number, string>();
+	for (const character of new Set(decoded.values())) {
+		const spellings = [
+			...references
+				.filter((match) => decoded.get(match[0]) === character)
+				.map((match) => ({ index: match.index, spelling: match[0] })),
+			...occurrences(source, character)
+				.filter((index) => outside(sourceLiteral, index))
+				.map((index) => ({ index, spelling: character })),
+		]
+			.sort((a, b) => a.index - b.index)
+			.map((entry) => entry.spelling);
+		const targets = occurrences(markdown, character).filter((index) =>
+			outside(markdownLiteral, index),
+		);
+		const uniform = new Set(spellings).size === 1 ? spellings[0] : undefined;
+		targets.forEach((index, order) => {
+			const spelling =
+				targets.length === spellings.length ? spellings[order] : uniform;
+			if (spelling && spelling !== character) replacements.set(index, spelling);
+		});
+	}
+	if (replacements.size === 0) return markdown;
+	let out = "";
+	let cursor = 0;
+	for (const index of [...replacements.keys()].sort((a, b) => a - b)) {
+		const character = String.fromCodePoint(markdown.codePointAt(index)!);
+		out += markdown.slice(cursor, index) + replacements.get(index);
+		cursor = index + character.length;
+	}
+	return out + markdown.slice(cursor);
+}
+
+function occurrences(text: string, character: string): number[] {
+	const out: number[] = [];
+	for (
+		let index = text.indexOf(character);
+		index !== -1;
+		index = text.indexOf(character, index + character.length)
+	)
+		out.push(index);
+	return out;
+}
+
+/**
+ * Source ranges written verbatim (code, HTML, frontmatter), where a backslash
+ * or `&copy;` is literal text rather than an escape or a reference.
+ */
+function literalRanges(markdown: string): [number, number][] {
+	const ranges: [number, number][] = [];
+	const visit = (node: any): void => {
+		if (
+			(node.type === "code" ||
+				node.type === "inlineCode" ||
+				node.type === "html" ||
+				node.type === "yaml") &&
+			node.position
+		) {
+			ranges.push([node.position.start.offset, node.position.end.offset]);
+			return;
+		}
+		for (const child of node.children ?? []) visit(child);
+	};
+	visit(parseMarkdownSourceRaw(markdown));
+	return ranges;
 }
 
 function taskListItemToMarkdown(): any {
@@ -227,7 +609,47 @@ function prepareAstForMarkdown(value: any): any {
 	if (isInlineContainer(out) && Array.isArray(out.children)) {
 		out.children = trimInlineBoundaryWhitespace(out.children);
 	}
+	if (Array.isArray(out.children) && out.children.some(isLiteralAutolink)) {
+		out.children = out.children.map((child: any, index: number) =>
+			isLiteralAutolink(child) &&
+			bareAutolinkFits(out.children[index - 1], out.children[index + 1])
+				? { type: "html", value: child.children[0].value }
+				: child,
+		);
+	}
 	return out;
+}
+
+/** A link that was a bare URL in the source and still reads as that URL. */
+function isLiteralAutolink(node: any): boolean {
+	if (node?.type !== "link" || !node.data?.[LITERAL_AUTOLINK_DATA_KEY])
+		return false;
+	const text = node.children?.length === 1 ? node.children[0] : null;
+	if (text?.type !== "text" || typeof text.value !== "string") return false;
+	if (!/^[\w./:@%?=&#+~-]+$/.test(text.value)) return false;
+	return (
+		node.url === text.value ||
+		node.url === `http://${text.value}` ||
+		node.url === `mailto:${text.value}`
+	);
+}
+
+/**
+ * A bare URL is only a link where GFM would find it again: after whitespace
+ * or at the start of its container, and ending before whitespace or trailing
+ * punctuation. Typing right after it (`https://x.comZ`) would otherwise
+ * extend the link.
+ */
+function bareAutolinkFits(before: any, after: any): boolean {
+	const opens =
+		before === undefined ||
+		(before.type === "text" && /\s$/.test(before.value ?? ""));
+	const closes =
+		after === undefined ||
+		after.type === "break" ||
+		(after.type === "text" &&
+			/^(?:\s|[.,:;!?]+(?:\s|$))/.test(after.value ?? ""));
+	return opens && closes;
 }
 
 function isInlineContainer(node: Record<string, any>): boolean {
@@ -336,18 +758,11 @@ function normalizeValue(value: any): any {
 	return out;
 }
 
+// Text is not Unicode-normalized: NFC rewrote decomposed accents and
+// replaced CJK compatibility ideographs (U+F9D1 became U+516D) in every
+// block the editor saved.
 function normalizeText(input: string): string {
-	const normalizedNewlines = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-	return isAscii(normalizedNewlines)
-		? normalizedNewlines
-		: normalizedNewlines.normalize("NFC");
-}
-
-function isAscii(input: string): boolean {
-	for (let index = 0; index < input.length; index++) {
-		if (input.charCodeAt(index) > 0x7f) return false;
-	}
-	return true;
+	return input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 function asRoot(ast: any): AstRoot {
