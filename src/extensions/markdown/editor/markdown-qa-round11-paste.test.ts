@@ -454,3 +454,43 @@ describe("pasted frontmatter", () => {
 		);
 	});
 });
+
+// Copying nested bold and italic produces invalid Markdown until the
+// serializer fix for `A **bold *both*** word` lands (tiptap-to-mdwc.ts).
+test.skip("copying bold text with nested italic pastes back unchanged", () => {
+	const editor = setup("A **bold *both*** word");
+	const text = find(editor, "bold");
+	select(editor, text.from, find(editor, "both").to);
+	const data = clip("copy", editor);
+	const target = setup("");
+	paste(target, data);
+	expect(md(target)).toBe("**bold *both***\n");
+});
+
+describe("pasting only line breaks", () => {
+	test.each(["\n", "\n\n", "\r\n"])(
+		"%j splits the paragraph like Enter",
+		(text) => {
+			const editor = setup("Hello world");
+			editor.commands.setTextSelection(find(editor, "world").from);
+			paste(editor, { "text/plain": text });
+			expect(md(editor)).toBe("Hello\n\nworld\n");
+			undo(editor);
+			expect(md(editor)).toBe("Hello world\n");
+		},
+	);
+
+	test("in a list item it starts a new item", () => {
+		const editor = setup("- Hello world");
+		editor.commands.setTextSelection(find(editor, "world").from);
+		paste(editor, { "text/plain": "\n" });
+		expect(md(editor)).toBe("- Hello\n- world\n");
+	});
+
+	test("in a code block it stays a literal newline", () => {
+		const editor = setup("```\nab\n```");
+		editor.commands.setTextSelection(find(editor, "ab").from + 1);
+		paste(editor, { "text/plain": "\n" });
+		expect(md(editor)).toBe("```\na\nb\n```\n");
+	});
+});

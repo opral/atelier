@@ -145,6 +145,13 @@ export function handlePaste(args: {
 		) {
 			// Code and whitespace are literal input. Parsing them as Markdown can
 			// replace a code fence with headings/lists or discard the input entirely.
+			// A line break in prose is a block break, as Enter makes it; a raw
+			// newline in a text node would save as a soft break.
+			if (!selection.$from.parent.type.spec.code && /[\r\n]/.test(text))
+				return editor.commands.first(({ commands }: any) => [
+					() => commands.splitListItem("listItem"),
+					() => commands.splitBlock(),
+				]);
 			editor.view.dispatch(editor.state.tr.insertText(text));
 			return true;
 		}
