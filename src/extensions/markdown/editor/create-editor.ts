@@ -3,7 +3,12 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
-import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
+import {
+	DOMSerializer,
+	type Fragment,
+	type Node as ProseMirrorNode,
+	type Slice,
+} from "@tiptap/pm/model";
 import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
@@ -38,6 +43,7 @@ import {
 	type MarkdownWorkspaceFileOpener,
 } from "./markdown-asset";
 import { renderPdfPreview } from "@/extensions/pdf/pdf-preview";
+import { OWN_CLIPBOARD_ATTRIBUTE } from "./clipboard-html";
 import { storePastedMarkdownImage } from "./store-pasted-image";
 import { bindDocumentLinks } from "./document-links";
 
@@ -218,10 +224,92 @@ function markdownClipboardText(slice: Slice): string {
 		if (trailing && !markdown.endsWith(trailing)) markdown += trailing;
 		return markdown;
 	}
-	return serializeTiptapDocToMarkdown({
+	let markdown = serializeTiptapDocToMarkdown({
 		type: "doc",
-		content: slice.content.toJSON(),
+		content:
+			slice.openStart > 0
+				? liftOpenNestedItems(slice.content.toJSON())
+				: slice.content.toJSON(),
 	});
+	// Blocks cut from the middle of a paragraph keep the spaces at the cut,
+	// so pasting them back rejoins "Body| text" instead of "Bodytext". The
+	// paste handler restores them onto the open edge blocks.
+	const first = openTextblock(slice.content, slice.openStart, "start");
+	const last = openTextblock(slice.content, slice.openEnd, "end");
+	const leading = first?.firstChild?.isText
+		? (first.firstChild.text?.match(/^[ \t]+/)?.[0] ?? "")
+		: "";
+	const trailing = last?.lastChild?.isText
+		? (last.lastChild.text?.match(/[ \t]+$/)?.[0] ?? "")
+		: "";
+	if (leading) markdown = leading + markdown;
+	if (trailing) markdown = markdown.replace(/\n$/, "") + trailing;
+	return markdown;
+}
+
+/**
+ * A selection that starts inside a nested list item opens its parent item
+ * without that item's own text, which would serialize as "- - child".
+ * Lift the nested items into the outer list instead.
+ */
+function liftOpenNestedItems(content: JSONContent[]): JSONContent[] {
+	const [list, ...rest] = content;
+	const [item, ...items] = list?.content ?? [];
+	const nested = item?.content?.length === 1 ? item.content[0] : null;
+	if (
+		!list ||
+		!/^(bulletList|orderedList)$/.test(list.type ?? "") ||
+		item?.type !== "listItem" ||
+		!nested ||
+		!/^(bulletList|orderedList)$/.test(nested.type ?? "")
+	)
+		return content;
+	const [lifted] = liftOpenNestedItems([nested]);
+	return [
+		{ ...list, content: [...(lifted?.content ?? []), ...items] },
+		...rest,
+	];
+}
+
+/**
+ * The schema's own HTML for a copy, with every top-level element marked as
+ * ours. Only then is the Markdown in text/plain the source of a paste; other
+ * ProseMirror editors also write data-pm-slice, and their plain text is not
+ * Markdown, so their HTML is converted instead.
+ */
+const markdownClipboardSerializer = {
+	serializeFragment(
+		fragment: Fragment,
+		options: { document?: Document } = {},
+		target?: HTMLElement | DocumentFragment,
+	) {
+		const schema = fragment.firstChild?.type.schema;
+		const dom = schema
+			? DOMSerializer.fromSchema(schema).serializeFragment(
+					fragment,
+					options,
+					target,
+				)
+			: (target ?? (options.document ?? document).createDocumentFragment());
+		for (const child of Array.from(dom.childNodes))
+			if (child.nodeType === 1)
+				(child as Element).setAttribute(OWN_CLIPBOARD_ATTRIBUTE, "");
+		return dom;
+	},
+} as unknown as DOMSerializer;
+
+/** The textblock an open slice edge ends in, if the slice is open that far. */
+function openTextblock(
+	content: Slice["content"],
+	openDepth: number,
+	side: "start" | "end",
+): ProseMirrorNode | null {
+	let node = side === "start" ? content.firstChild : content.lastChild;
+	for (let depth = 1; node && depth <= openDepth; depth += 1) {
+		if (node.isTextblock) return node;
+		node = side === "start" ? node.firstChild : node.lastChild;
+	}
+	return null;
 }
 
 function handleExternalLinkClick(event: MouseEvent): void {
@@ -499,6 +587,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			scrollThreshold: { top: 72, bottom: 96, left: 0, right: 0 },
 			scrollMargin: { top: 88, bottom: 128, left: 0, right: 0 },
 			clipboardTextSerializer: (slice: any) => markdownClipboardText(slice),
+			clipboardSerializer: markdownClipboardSerializer,
 			handlePaste: (_view: any, event: ClipboardEvent) => {
 				if (!currentEditor) return false;
 				return defaultHandlePaste({
