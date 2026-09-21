@@ -31,11 +31,13 @@ import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
 import type { AtelierDocumentLinks } from "@/extension-api";
 import { createDocumentExistence } from "./document-existence";
-import { preserveMarkdownSource } from "./preserve-markdown-source";
+import {
+	buildNormalizedMarkdownIncrementally,
+	createIncrementalMarkdownSource,
+	type IncrementalMarkdownSource,
+} from "./incremental-markdown-save";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
-	buildNormalizedMarkdownFromEditor,
-	buildNormalizedMarkdownFromTiptapDoc,
 	normalizePersistedMarkdown,
 	serializeTiptapDocToMarkdown,
 } from "./build-markdown-from-editor";
@@ -87,6 +89,8 @@ type MarkdownPersistenceBaseline = {
 	documentRevision: number;
 	acknowledgedRevision: number;
 	observationGeneration: number;
+	/** Keeps `expectedFileMarkdown`'s spelling without re-reading it per save. */
+	source: IncrementalMarkdownSource;
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
@@ -102,9 +106,12 @@ export function acknowledgeMarkdownEditorPersistence(
 	const baseline = persistenceBaselines.get(editor);
 	if (!baseline) return;
 	baseline.observationGeneration += 1;
-	baseline.lastAcknowledgedMarkdown = buildNormalizedMarkdownFromEditor(editor);
+	baseline.lastAcknowledgedMarkdown = buildNormalizedMarkdownIncrementally(
+		editor.state.doc,
+	);
 	baseline.expectedFileMarkdown = markdown;
 	baseline.acknowledgedRevision = baseline.documentRevision;
+	baseline.source.prime(markdown, editor.state.doc);
 }
 
 /**
@@ -371,6 +378,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		documentRevision: 0,
 		acknowledgedRevision: 0,
 		observationGeneration: 0,
+		source: createIncrementalMarkdownSource(),
 	};
 	const persistWindowMs = persistDebounceMs ?? 20;
 	const persistOnce = async (): Promise<number | undefined> => {
@@ -378,15 +386,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		if (!snapshot) return undefined;
 		const { revision, doc } = snapshot;
 		if (containsMarkdownReviewProjection(doc)) return revision;
-		const normalizedMarkdown = buildNormalizedMarkdownFromTiptapDoc(doc);
-		const markdown = preserveMarkdownSource(
-			persistenceBaseline.expectedFileMarkdown,
-			normalizedMarkdown,
-		);
 		if (revision === persistenceBaseline.acknowledgedRevision) {
 			pendingPersistenceSnapshot = null;
 			return revision;
 		}
+		const normalizedMarkdown = buildNormalizedMarkdownIncrementally(doc);
 		if (normalizedMarkdown === persistenceBaseline.lastAcknowledgedMarkdown) {
 			persistenceBaseline.acknowledgedRevision = revision;
 			if (pendingPersistenceSnapshot?.revision === revision) {
@@ -394,6 +398,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 			return revision;
 		}
+		const preserved = persistenceBaseline.source.preserve(
+			persistenceBaseline.expectedFileMarkdown,
+			doc,
+			normalizedMarkdown,
+		);
+		const markdown = preserved.markdown;
 		const observationGeneration = persistenceBaseline.observationGeneration;
 		const receipt = await upsertMarkdownFile({
 			lix,
@@ -411,6 +421,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			persistenceBaseline.lastAcknowledgedMarkdown = normalizedMarkdown;
 			persistenceBaseline.expectedFileMarkdown = markdown;
 			persistenceBaseline.acknowledgedRevision = revision;
+			preserved.accept();
 		}
 		if (pendingPersistenceSnapshot?.revision === revision) {
 			pendingPersistenceSnapshot = null;
@@ -555,7 +566,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			// must not become the acknowledged baseline before being persisted.
 			if (persistenceBaseline.documentRevision === 0) {
 				persistenceBaseline.lastAcknowledgedMarkdown =
-					buildNormalizedMarkdownFromEditor(editor);
+					buildNormalizedMarkdownIncrementally(editor.state.doc);
 			}
 			persistenceBaselines.set(editor, persistenceBaseline);
 			onCreate?.({ editor });
@@ -589,6 +600,8 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			cleanupExternalLinkClick?.();
 			cleanupExternalLinkClick = null;
 			documentExistence.close();
+			// A save still draining after this falls back to the whole document.
+			persistenceBaseline.source.dispose();
 			destroyed = true;
 			currentEditor = null;
 			// Destruction only releases TipTap. A save window or serialized drain already
@@ -702,6 +715,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		},
 	});
 	persistenceBaselines.set(editorInstance, persistenceBaseline);
+	// Align the file with the document before the first save needs it.
+	persistenceBaseline.source.prime(
+		initialFileMarkdown,
+		editorInstance.state.doc,
+	);
 	const editorDom = editorInstance.view.dom;
 	const cleanupDocumentLinks =
 		sourceFilePath && openWorkspaceFile
