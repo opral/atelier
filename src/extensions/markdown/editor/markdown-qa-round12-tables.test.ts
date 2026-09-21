@@ -250,3 +250,45 @@ describe("sort", () => {
 		expect(column(editor, 1)).toEqual(["2", "1", "4", "3"]);
 	});
 });
+
+/** Puts the caret at the end of the first textblock whose text is `text`. */
+function caretAtEndOf(editor: Editor, text: string) {
+	let found = -1;
+	editor.state.doc.descendants((node, pos) => {
+		if (found >= 0) return false;
+		if (node.isTextblock && node.textContent === text)
+			found = pos + 1 + node.content.size;
+		return found < 0;
+	});
+	if (found < 0) throw new Error(`no block ${text}`);
+	editor.commands.setTextSelection(found);
+}
+
+describe("Delete above an item that starts with a table", () => {
+	test("enters the table and changes nothing", async () => {
+		const source = "- item\n- | a | b |\n  |---|---|\n  | 1 | 2 |\n- next\n";
+		const { editor, saved } = await open(source);
+		caretAtEndOf(editor, "item");
+		expect(press(editor, "Delete")).toBe(true);
+		expect(editor.state.selection.$from.parent.type.name).toBe("tableCell");
+		expect(editor.state.selection.$from.parent.textContent).toBe("a");
+		expect(await saved()).toBeUndefined();
+	});
+
+	test("from a paragraph above the list, writes no <span>", async () => {
+		const { editor, saved } = await open(
+			"para\n\n- | a | b |\n  |---|---|\n  | 1 | 2 |\n",
+		);
+		caretAtEndOf(editor, "para");
+		expect(press(editor, "Delete")).toBe(true);
+		expect(editor.state.selection.$from.parent.textContent).toBe("a");
+		expect((await saved()) ?? "").not.toContain("<span>");
+	});
+
+	test("an item starting with a heading gives its text to the line, not its item", async () => {
+		const { editor, saved } = await open("- item\n- # h\n- next\n");
+		caretAtEndOf(editor, "item");
+		press(editor, "Delete");
+		expect(await saved()).toBe("- itemh\n- next\n");
+	});
+});
