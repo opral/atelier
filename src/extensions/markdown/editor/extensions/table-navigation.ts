@@ -1,5 +1,5 @@
 import { Extension } from "@tiptap/core";
-import { Plugin, TextSelection } from "@tiptap/pm/state";
+import { Plugin, Selection, TextSelection } from "@tiptap/pm/state";
 import { deleteSelectedTableText } from "./table-selection";
 
 /**
@@ -225,9 +225,48 @@ export const TableNavigationExtension = Extension.create({
 				return true;
 			const context = tableContext(editor);
 			if (!context || !editor.state.selection.empty) return false;
+			if (
+				direction < 0 &&
+				context.rowIndex === 0 &&
+				context.cellIndex === 0 &&
+				context.$from.parentOffset === 0
+			) {
+				return deleteEmptyTable(editor, context) || true;
+			}
 			return direction < 0
 				? context.$from.parentOffset === 0
 				: context.$from.parentOffset === context.$from.parent.content.size;
+		};
+
+		// A table whose cells are all empty goes with Backspace in its first
+		// cell, the way an empty line does; otherwise clearing every cell
+		// left a table no key could remove.
+		const deleteEmptyTable = (
+			editor: any,
+			context: NonNullable<ReturnType<typeof tableContext>>,
+		) => {
+			let empty = true;
+			context.table.descendants((node: any) => {
+				if (node.type.name === "tableCell" && node.content.size > 0)
+					empty = false;
+				return empty;
+			});
+			if (!empty) return false;
+			const { state, view } = editor;
+			const from = context.tablePos;
+			const to = from + context.table.nodeSize;
+			const parent = context.$from.node(context.tableDepth - 1);
+			const tr =
+				parent.childCount === 1
+					? state.tr.replaceWith(
+							from,
+							to,
+							state.schema.nodes.paragraph.create(),
+						)
+					: state.tr.delete(from, to);
+			tr.setSelection(Selection.near(tr.doc.resolve(from), -1));
+			view.dispatch(tr.scrollIntoView());
+			return true;
 		};
 
 		return {

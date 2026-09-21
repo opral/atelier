@@ -389,3 +389,23 @@ describe("a code block at the top of the document", () => {
 		expect(md(editor)).toBe("y\n\n```\nx\n```\n");
 	});
 });
+
+describe("a table deleted from inside", () => {
+	test("Backspace in the first cell of an emptied table removes it", () => {
+		const editor = editorFor(
+			"before\n\n| A | B |\n| - | - |\n| a1 | b1 |\n\nafter\n",
+		);
+		select(editor, "A", 0, "b1", 2);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("before\n\nafter\n");
+		expect(editor.state.selection.$from.parent.textContent).toBe("before");
+	});
+	test("a table with text left in a cell stays", () => {
+		const editor = editorFor("before\n\n| A | B |\n| - | - |\n| a1 | b1 |\n");
+		const original = md(editor);
+		caret(editor, "A", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe(original);
+	});
+});
