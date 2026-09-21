@@ -314,3 +314,44 @@ describe("task shortcut in an ordered list", () => {
 		expect(md(editor)).toBe("1. [x] done\n");
 	});
 });
+
+describe("divider in an empty list item", () => {
+	test("--- leaves the list and puts the rule after it", () => {
+		const editor = editorFor("- a\n");
+		caret(editor, "a", "end");
+		key(editor, "Enter");
+		type(editor, "---");
+		editor.state.doc.check();
+		expect(editor.state.doc.child(1).type.name).toBe("horizontalRule");
+		expect(editor.state.selection.$from.depth).toBe(1);
+		type(editor, "next");
+		expect(md(editor)).toBe("- a\n\n***\n\nnext\n");
+	});
+
+	test("between two items it splits the list", () => {
+		const editor = editorFor("- a\n- b\n");
+		caret(editor, "a", "end");
+		key(editor, "Enter");
+		type(editor, "---");
+		editor.state.doc.check();
+		expect(editor.state.doc.content.content.map((n) => n.type.name)).toEqual([
+			"bulletList",
+			"horizontalRule",
+			"paragraph",
+			"bulletList",
+		]);
+	});
+
+	test("in a nested item it leaves every list", () => {
+		const editor = editorFor("1. a\n   - b\n");
+		caret(editor, "b", "end");
+		key(editor, "Enter");
+		type(editor, "---");
+		editor.state.doc.check();
+		expect(editor.state.doc.content.content.map((n) => n.type.name)).toEqual([
+			"orderedList",
+			"horizontalRule",
+			"paragraph",
+		]);
+	});
+});
