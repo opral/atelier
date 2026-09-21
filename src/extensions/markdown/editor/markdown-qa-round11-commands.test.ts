@@ -289,6 +289,38 @@ describe("list commands convert the block", () => {
 	});
 });
 
+describe("list conversions join and keep what is there", () => {
+	test("a numbered paragraph after a numbered list continues it", () => {
+		const editor = load("1. alpha\n\nbeta\n");
+		caret(editor, "beta");
+		turnInto(editor, "ordered-list");
+		expect(md(editor)).toBe("1. alpha\n2. beta\n");
+	});
+
+	test("an item turned back into a number rejoins its list", () => {
+		const editor = load("1. alpha\n2. beta\n3. gamma\n");
+		caret(editor, "beta");
+		turnInto(editor, "bullet-list");
+		expect(md(editor)).toBe("1. alpha\n\n- beta\n\n1. gamma\n");
+		turnInto(editor, "ordered-list");
+		expect(md(editor)).toBe("1. alpha\n2. beta\n3. gamma\n");
+	});
+
+	test("To-do keeps a ticked item ticked", () => {
+		const editor = load("- [x] done\n- open\n");
+		select(editor, "done", "open");
+		turnInto(editor, "task-list");
+		expect(md(editor)).toBe("- [x] done\n- [ ] open\n");
+	});
+
+	test("only the items the selection reaches change", () => {
+		const editor = load("- alpha\n  - beta\n- gamma\n");
+		select(editor, "beta", "gamma");
+		turnInto(editor, "ordered-list");
+		expect(md(editor)).toBe("- alpha\n  1. beta\n\n1. gamma\n");
+	});
+});
+
 describe("a heading inside a list item", () => {
 	for (const [value, expected] of [
 		["paragraph", "alpha\n\n- beta\n"],

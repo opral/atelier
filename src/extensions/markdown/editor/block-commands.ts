@@ -45,8 +45,6 @@ function unquoted(editor: Editor) {
 	return editor.isActive("blockquote") ? chain.lift("blockquote") : chain;
 }
 
-const LIST_TYPES = new Set(["bulletList", "orderedList"]);
-
 /** The caret sits in a table cell, whose content is one line of inline text. */
 function inTableCell(editor: Editor): boolean {
 	return editor.state.selection.$from.parent.type.name === "tableCell";
@@ -114,12 +112,13 @@ function retypeItems(
  * Turns the selected blocks into items of the target list, the way Notion
  * converts blocks, in one transaction and so one undo step.
  *
- * - Items of one list are retyped on their own; the list splits around them,
- *   so their siblings keep their type and their place. Wrapping in place
- *   nested the item inside its predecessor, and lifting it first pulled the
- *   next sibling in under it.
- * - Across blocks, paragraphs, headings and code blocks become one item
- *   each and lists have their items retyped; the results form one list.
+ * - A selected item is retyped on its own: its list splits around it, so
+ *   its siblings keep their type and their place. Wrapping in place nested
+ *   the item inside its predecessor, and lifting it first pulled the next
+ *   sibling in under it.
+ * - A paragraph, heading or code block outside a list becomes one item.
+ * - The results join each other and any list of the target type they now
+ *   touch, so a numbered paragraph after a numbered list continues it.
  * - Items already of the target kind are left as they are, so Numbered on a
  *   numbered item changes nothing, as in the toolbar.
  */
@@ -142,87 +141,85 @@ function convertRange(
 	listTypeName: string,
 	checked: boolean | null,
 ): boolean {
-	const { schema } = tr.doc.type;
+	const { doc } = tr;
+	const { schema } = doc.type;
 	const listType = schema.nodes[listTypeName]!;
 	const itemType = schema.nodes.listItem!;
 	const paragraph = schema.nodes.paragraph!;
-	const { $from, $to } = tr.selection;
+	const { from, to } = tr.selection;
 
-	// The deepest list holding both ends: its items are what is converted.
-	for (let depth = Math.min($from.depth, $to.depth); depth > 0; depth -= 1) {
-		const node = $from.node(depth);
-		if (!LIST_TYPES.has(node.type.name) || $to.node(depth) !== node) continue;
-		retypeItems(
-			tr,
-			$from.before(depth),
-			$from.index(depth),
-			$to.index(depth),
-			listType,
-			checked,
-		);
-		syncTaskListFlags(tr);
-		return true;
-	}
-
-	const range = $from.blockRange($to);
-	if (!range) return false;
-	const container = range.parent;
-	const starts: number[] = [];
-	let at = range.start;
-	for (let index = range.startIndex; index <= range.endIndex; index += 1) {
-		starts.push(at);
-		if (index < range.endIndex) at += container.child(index).nodeSize;
-	}
-
-	// Each converted list, with the step count when it was placed, so its
-	// position can be carried through the conversions made before it.
-	const lists: { pos: number; steps: number }[] = [];
-	for (let index = range.endIndex - 1; index >= range.startIndex; index -= 1) {
-		const child = container.child(index);
-		const start = starts[index - range.startIndex]!;
-		const end = starts[index - range.startIndex + 1]!;
-		if (LIST_TYPES.has(child.type.name)) {
-			// Only the items the selection reaches, at either end.
-			const inside = (pos: number) => pos > start && pos < end;
-			const first = inside($from.pos) ? $from.index(range.depth + 1) : 0;
-			const last = inside($to.pos)
-				? $to.index(range.depth + 1)
-				: child.childCount - 1;
-			const pos = retypeItems(tr, start, first, last, listType, checked);
-			lists.push({ pos, steps: tr.steps.length });
-		} else if (child.isTextblock) {
-			if (child.type !== paragraph) tr.setBlockType(start, end, paragraph);
-			const blockRange = tr.doc
-				.resolve(start)
-				.blockRange(tr.doc.resolve(start + tr.doc.nodeAt(start)!.nodeSize));
-			if (!blockRange) continue;
-			tr.wrap(blockRange, [
-				{ type: listType },
-				{
-					type: itemType,
-					attrs: { checked: itemChecked(child, listTypeName, checked) },
-				},
-			]);
-			lists.push({ pos: start, steps: tr.steps.length });
+	// What the selection reaches: for each textblock in it, the innermost
+	// item holding it, or the textblock itself when no list holds it.
+	const itemIndices = new Map<number, number[]>();
+	const loose = new Set<number>();
+	doc.nodesBetween(from, to, (node, pos) => {
+		if (!node.isTextblock) return true;
+		if (node.type.name === "tableCell") return false;
+		const $inside = doc.resolve(pos + 1);
+		for (let depth = $inside.depth - 1; depth > 1; depth -= 1) {
+			if ($inside.node(depth).type !== itemType) continue;
+			const listPos = $inside.before(depth - 1);
+			const indices = itemIndices.get(listPos) ?? [];
+			indices.push($inside.index(depth - 1));
+			itemIndices.set(listPos, indices);
+			return false;
 		}
+		loose.add(pos);
+		return false;
+	});
+
+	// Last first: a change never moves what comes before it, so every
+	// position read from the untouched document still holds when its turn
+	// comes. A nested list sits after its parent list's position and so is
+	// retyped before it, without changing that list's item count.
+	const ops = [
+		...[...itemIndices].map(([pos, indices]) => ({ pos, indices })),
+		...[...loose].map((pos) => ({ pos, indices: null })),
+	].sort((a, b) => b.pos - a.pos);
+	const lists: { pos: number; steps: number }[] = [];
+	for (const { pos, indices } of ops) {
+		if (indices) {
+			const listPos = retypeItems(
+				tr,
+				pos,
+				Math.min(...indices),
+				Math.max(...indices),
+				listType,
+				checked,
+			);
+			lists.push({ pos: listPos, steps: tr.steps.length });
+			continue;
+		}
+		const block = tr.doc.nodeAt(pos)!;
+		if (block.type !== paragraph) {
+			tr.setBlockType(pos, pos + block.nodeSize, paragraph);
+		}
+		const range = tr.doc
+			.resolve(pos)
+			.blockRange(tr.doc.resolve(pos + tr.doc.nodeAt(pos)!.nodeSize));
+		if (!range) continue;
+		tr.wrap(range, [
+			{ type: listType },
+			{
+				type: itemType,
+				attrs: { checked: itemChecked(block, listTypeName, checked) },
+			},
+		]);
+		lists.push({ pos, steps: tr.steps.length });
 	}
 	if (lists.length === 0) return false;
 
-	// Lists that now touch are one list: join them, last boundary first so
-	// the earlier positions hold.
+	// Carry each list through the changes made before it, then join it with
+	// the list of the same type it touches on either side. Last first again.
 	const positions = lists
 		.map(({ pos, steps }) => tr.mapping.slice(steps).map(pos, 1))
-		.sort((a, b) => a - b);
-	for (let index = positions.length - 1; index > 0; index -= 1) {
-		const boundary = positions[index]!;
-		const $boundary = tr.doc.resolve(boundary);
-		if (
-			$boundary.nodeBefore?.type === listType &&
-			$boundary.nodeAfter?.type === listType &&
-			boundary - $boundary.nodeBefore.nodeSize === positions[index - 1]
-		) {
-			tr.join(boundary);
-		}
+		.sort((a, b) => b - a);
+	for (const pos of positions) {
+		const list = tr.doc.nodeAt(pos);
+		if (list?.type !== listType) continue;
+		const end = pos + list.nodeSize;
+		if (tr.doc.resolve(end).nodeAfter?.type === listType) tr.join(end);
+		if (tr.doc.resolve(pos).nodeBefore?.type === listType) tr.join(pos);
 	}
 	syncTaskListFlags(tr);
 	return true;
@@ -807,15 +804,6 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 		label: "Bulleted list",
 		icon: List,
 		apply: (editor) => {
-			if (computeTaskListActive(editor)) {
-				setTaskListState(editor, null);
-				editor.commands.focus();
-				return;
-			}
-			if (editor.isActive("bulletList")) {
-				editor.commands.focus();
-				return;
-			}
 			convertListItem(editor, "bulletList", { checked: null });
 		},
 	},
@@ -824,10 +812,6 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 		label: "Numbered list",
 		icon: ListOrdered,
 		apply: (editor) => {
-			if (editor.isActive("orderedList")) {
-				editor.commands.focus();
-				return;
-			}
 			convertListItem(editor, "orderedList", { checked: null });
 		},
 	},
@@ -836,15 +820,6 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 		label: "To-do list",
 		icon: CheckSquare,
 		apply: (editor) => {
-			if (computeTaskListActive(editor)) {
-				editor.commands.focus();
-				return;
-			}
-			if (editor.isActive("bulletList")) {
-				setTaskListState(editor, false);
-				editor.commands.focus();
-				return;
-			}
 			convertListItem(editor, "bulletList", { checked: false });
 		},
 	},
