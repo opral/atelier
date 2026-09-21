@@ -576,9 +576,11 @@ export const MarkdownWcShortcuts = Extension.create({
 			return exitCode(state, (transaction) => view.dispatch(transaction));
 		};
 
+		// A footnote's note is left by the same keys as a quote.
 		const blockquoteDepth = ($from: any): number => {
 			for (let depth = $from.depth - 1; depth > 0; depth--) {
-				if ($from.node(depth)?.type?.name === "blockquote") return depth;
+				const name = $from.node(depth)?.type?.name;
+				if (name === "blockquote" || name === "footnoteDef") return depth;
 			}
 			return -1;
 		};
@@ -595,12 +597,22 @@ export const MarkdownWcShortcuts = Extension.create({
 			const { $from } = selection as any;
 			if (
 				$from.parent?.type?.name !== "paragraph" ||
-				$from.parent.content.size !== 0 ||
-				$from.node($from.depth - 1)?.type?.name !== "blockquote"
+				$from.parent.content.size !== 0
 			) {
 				return false;
 			}
 			const index = $from.index($from.depth - 1);
+			const wrapper = $from.node($from.depth - 1);
+			// A footnote is left from an empty last line, below its note, by
+			// Enter only: its first line carries the label, and Backspace on
+			// an empty line in it takes the line back.
+			if (wrapper?.type?.name === "footnoteDef") {
+				if (edgesOnly || index === 0 || index !== wrapper.childCount - 1) {
+					return false;
+				}
+				return this.editor.commands.lift("footnoteDef");
+			}
+			if (wrapper?.type?.name !== "blockquote") return false;
 			if (
 				edgesOnly &&
 				index !== 0 &&

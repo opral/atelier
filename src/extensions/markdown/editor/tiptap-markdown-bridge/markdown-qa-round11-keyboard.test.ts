@@ -346,3 +346,29 @@ describe("Tab and Shift-Tab in a code block", () => {
 		expect(key(editor, "Tab", { shiftKey: true })).toBe(true);
 	});
 });
+
+describe("leaving a footnote definition from the keyboard", () => {
+	test("Enter on the empty last line of a definition exits it", () => {
+		const editor = editorFor("text[^1]\n\n[^1]: note one\n");
+		caret(editor, "note one", "end");
+		key(editor, "Enter");
+		key(editor, "Enter");
+		type(editor, "x");
+		expect(md(editor)).toBe("text[^1]\n\n[^1]: note one\n\nx\n");
+	});
+	test("Backspace on that empty line takes it back instead", () => {
+		const editor = editorFor("text[^1]\n\n[^1]: note one\n");
+		caret(editor, "note one", "end");
+		key(editor, "Enter");
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("text[^1]\n\n[^1]: note one\n");
+		expect(editor.state.selection.$from.parent.textContent).toBe("note one");
+	});
+	test("ArrowDown at the end of the last definition opens a line below", () => {
+		const editor = editorFor("text[^1]\n\n[^1]: note one\n");
+		caret(editor, "note one", "end");
+		expect(key(editor, "ArrowDown")).toBe(true);
+		type(editor, "x");
+		expect(md(editor)).toBe("text[^1]\n\n[^1]: note one\n\nx\n");
+	});
+});
