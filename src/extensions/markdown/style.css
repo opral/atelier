@@ -1018,12 +1018,42 @@
 			opacity: 0.6;
 			padding: 0.18rem 0.38rem;
 			pointer-events: none;
-			transition: opacity 120ms ease;
+			transition:
+				opacity 120ms ease,
+				background-color 120ms ease,
+				color 120ms ease;
 		}
 
 		.markdown-view .ProseMirror pre:hover .markdown-code-language,
 		.markdown-view .ProseMirror pre:focus-within .markdown-code-language {
 			opacity: 1;
+		}
+
+		/* While editing, the label is the button that sets the language. */
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			button.markdown-code-language {
+			cursor: pointer;
+			pointer-events: auto;
+		}
+
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			button.markdown-code-language:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		/* A block with no language says so only where it can be given one,
+		   and only while the pointer is over it. */
+		.markdown-view
+			.ProseMirror:not([contenteditable="true"])
+			.markdown-code-language[data-plain],
+		.markdown-view
+			.ProseMirror
+			pre:not(:hover)
+			.markdown-code-language[data-plain] {
+			display: none;
 		}
 
 		.markdown-view .ProseMirror .syntax-comment {
@@ -2018,6 +2048,31 @@
 
 		.markdown-embed-file-search input::placeholder {
 			color: var(--atelier-fg-subtle);
+		}
+
+		.markdown-code-language-option {
+			display: flex;
+			min-height: 2rem;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.5rem;
+			padding: 0.3rem 0.5rem;
+			border-radius: 7px;
+			cursor: pointer;
+			font-size: 0.8125rem;
+			user-select: none;
+		}
+
+		.markdown-code-language-option[data-selected="true"] {
+			background: var(--atelier-accent-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-accent-border);
+		}
+
+		.markdown-code-language-option svg {
+			width: 0.875rem;
+			height: 0.875rem;
+			flex-shrink: 0;
+			color: var(--atelier-link);
 		}
 
 		.markdown-embed-file-option-icon img {

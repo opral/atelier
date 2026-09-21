@@ -29,6 +29,7 @@ import { TableNavigationExtension } from "./extensions/table-navigation";
 import { FocusedControlGuardExtension } from "./extensions/focused-control-guard";
 import { ClickBelowDocumentExtension } from "./extensions/click-below-document";
 import { SelectionBlockHighlightExtension } from "./extensions/selection-block-highlight";
+import { CodeLanguageMenuExtension } from "./extensions/code-language-menu";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
 import type { AtelierDocumentLinks } from "@/extension-api";
@@ -546,6 +547,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			FocusedControlGuardExtension,
 			ClickBelowDocumentExtension,
 			SelectionBlockHighlightExtension,
+			CodeLanguageMenuExtension,
 		],
 		// Nothing listens for its "delete" events, and it re-maps every step of
 		// every transaction to emit them.
