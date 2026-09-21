@@ -106,6 +106,21 @@ type Caret = {
 	readonly offset: number;
 };
 
+/**
+ * The rows and columns an edit acts on: the target's own, or, when the
+ * selection runs across cells of its table, every row and column from the
+ * selection's first cell to its last, as a spreadsheet takes them.
+ */
+type Range = {
+	readonly top: number;
+	readonly bottom: number;
+	readonly left: number;
+	readonly right: number;
+};
+
+/** Where the selection's ends go: its cells moved by rows and columns. */
+type Shift = { readonly rows: number; readonly columns: number };
+
 type Edit =
 	| { readonly rows: readonly Row[]; readonly align: readonly TableAlign[] }
 	| { readonly deleteTable: true };
@@ -119,6 +134,7 @@ type Context = {
 	readonly width: number;
 	/** Where the caret is in the target cell, when it is in it. */
 	readonly offset: number;
+	readonly range: Range;
 	readonly emptyCell: (row: number, column: number) => ProseMirrorNode;
 };
 
@@ -160,7 +176,36 @@ function contextFor(
 		inTarget.column === target.column
 			? state.selection.$from.parentOffset
 			: Number.POSITIVE_INFINITY;
-	return { state, table, target, rows, align, width, offset, emptyCell };
+	const range = selectedRange(state, target);
+	return { state, table, target, rows, align, width, offset, range, emptyCell };
+}
+
+function selectedRange(state: EditorState, target: TableTarget): Range {
+	const single = {
+		top: target.row,
+		bottom: target.row,
+		left: target.column,
+		right: target.column,
+	};
+	const { selection } = state;
+	if (selection.empty) return single;
+	const from = tableTargetAt(state, selection.from);
+	const to = tableTargetAt(state, selection.to);
+	if (from?.tablePos !== target.tablePos || to?.tablePos !== target.tablePos)
+		return single;
+	const range = {
+		top: Math.min(from.row, to.row),
+		bottom: Math.max(from.row, to.row),
+		left: Math.min(from.column, to.column),
+		right: Math.max(from.column, to.column),
+	};
+	// A menu opened on a cell outside the selection acts on that cell.
+	const inside =
+		target.row >= range.top &&
+		target.row <= range.bottom &&
+		target.column >= range.left &&
+		target.column <= range.right;
+	return inside ? range : single;
 }
 
 /** Rows padded to the header's width, for an edit to a column. */
@@ -312,7 +357,9 @@ export function deleteTableTransaction(
 
 function tableCommand(
 	target: TableTarget | undefined,
-	edit: (context: Context) => { edit: Edit; caret?: Caret } | false,
+	edit: (
+		context: Context,
+	) => { edit: Edit; caret?: Caret; shift?: Shift } | false,
 ): Command {
 	return (state, dispatch) => {
 		const resolved = resolveTarget(state, target);
@@ -340,7 +387,11 @@ function tableCommand(
 		if (!next.eq(resolved.table))
 			tr.replaceWith(tablePos, tablePos + resolved.table.nodeSize, next);
 		const caret = result.caret;
-		if (caret) {
+		const shifted = result.shift
+			? shiftedSelection(state, tr.doc, tablePos, result.shift)
+			: null;
+		if (shifted) tr.setSelection(shifted);
+		else if (caret) {
 			const table = tr.doc.nodeAt(tablePos)!;
 			const row = Math.min(caret.row, table.childCount - 1);
 			const rowNode = table.child(row);
@@ -353,6 +404,37 @@ function tableCommand(
 		dispatch(tr.setMeta(TABLE_EDIT_META, true).scrollIntoView());
 		return true;
 	};
+}
+
+/**
+ * The selection with each end in the cell its cell moved to, at the same
+ * offset, when both ends are in the table at `tablePos`.
+ */
+function shiftedSelection(
+	state: EditorState,
+	doc: ProseMirrorNode,
+	tablePos: number,
+	shift: Shift,
+): Selection | null {
+	const table = doc.nodeAt(tablePos);
+	if (table?.type.name !== "table") return null;
+	const place = (pos: number) => {
+		const at = tableTargetAt(state, pos);
+		if (at?.tablePos !== tablePos) return null;
+		const cellPos = cellPosition(
+			table,
+			tablePos,
+			at.row + shift.rows,
+			at.column + shift.columns,
+		);
+		if (cellPos === null) return null;
+		const offset = state.doc.resolve(pos).parentOffset;
+		return cellPos + 1 + Math.min(offset, doc.nodeAt(cellPos)!.content.size);
+	};
+	const anchor = place(state.selection.anchor);
+	const head = place(state.selection.head);
+	if (anchor === null || head === null) return null;
+	return TextSelection.create(doc, anchor, head);
 }
 
 /**
@@ -381,20 +463,23 @@ export function addRow(
 }
 
 /**
- * Deletes the target's row. Deleting the header promotes the next row to
- * header; deleting the only row deletes the table.
+ * Deletes the target's row, or every row the selection spans. Deleting the
+ * header promotes the next row to header; deleting every row deletes the
+ * table.
  */
 export function deleteRow(target?: TableTarget): Command {
 	return tableCommand(target, (context) => {
-		if (context.rows.length <= 1) return { edit: { deleteTable: true } };
+		const { top, bottom } = context.range;
+		if (bottom - top + 1 >= context.rows.length)
+			return { edit: { deleteTable: true } };
 		const rows = context.rows.filter(
-			(_, index) => index !== context.target.row,
+			(_, index) => index < top || index > bottom,
 		);
 		return {
 			edit: { rows, align: context.align },
-			// The row that took its place, or the one above at the end.
+			// The row that took their place, or the one above at the end.
 			caret: {
-				row: Math.min(context.target.row, rows.length - 1),
+				row: Math.min(top, rows.length - 1),
 				column: context.target.column,
 				offset: Number.POSITIVE_INFINITY,
 			},
@@ -403,19 +488,27 @@ export function deleteRow(target?: TableTarget): Command {
 }
 
 /**
- * Swaps the target's row with its neighbour. The header stays first: it
- * cannot move down, and the first body row cannot move above it.
+ * Moves the target's row, or the rows the selection spans, one place past
+ * its neighbour. The header stays first: it cannot move down, and the
+ * first body row cannot move above it. The selection moves with the rows.
  */
 export function moveRow(direction: -1 | 1, target?: TableTarget): Command {
 	return tableCommand(target, (context) => {
-		const from = context.target.row;
-		const to = from + direction;
-		if (from === 0 || to < 1 || to >= context.rows.length) return false;
+		const { top, bottom } = context.range;
+		if (top === 0) return false;
+		if (direction < 0 ? top - 1 < 1 : bottom + 1 >= context.rows.length)
+			return false;
 		const rows = [...context.rows];
-		[rows[from], rows[to]] = [rows[to]!, rows[from]!];
+		const block = rows.splice(top, bottom - top + 1);
+		rows.splice(top + direction, 0, ...block);
 		return {
 			edit: { rows, align: context.align },
-			caret: { row: to, column: context.target.column, offset: context.offset },
+			caret: {
+				row: context.target.row + direction,
+				column: context.target.column,
+				offset: context.offset,
+			},
+			shift: { rows: direction, columns: 0 },
 		};
 	});
 }
@@ -446,58 +539,77 @@ export function addColumn(
 	});
 }
 
-/** Deletes the target's column; deleting the only column deletes the table. */
+/**
+ * Deletes the target's column, or every column the selection spans, with
+ * their alignment; deleting every column deletes the table.
+ */
 export function deleteColumn(target?: TableTarget): Command {
 	return tableCommand(target, (context) => {
-		if (context.width <= 1) return { edit: { deleteTable: true } };
-		const column = context.target.column;
-		const align = context.align.filter((_, index) => index !== column);
+		const { left, right } = context.range;
+		if (right - left + 1 >= context.width)
+			return { edit: { deleteTable: true } };
+		const kept = (_: unknown, index: number) => index < left || index > right;
+		const align = context.align.filter(kept);
 		const rows = paddedRows(context).map((row) => ({
 			node: row.node,
-			cells: row.cells.filter((_, index) => index !== column),
+			cells: row.cells.filter(kept),
 		}));
 		return {
 			edit: { rows, align },
-			// The column that took its place, or the one left of it at the end.
+			// The column that took their place, or the one left of it at the end.
 			caret: {
 				row: context.target.row,
-				column: Math.min(column, context.width - 2),
+				column: Math.min(left, align.length - 1),
 				offset: Number.POSITIVE_INFINITY,
 			},
 		};
 	});
 }
 
-/** Swaps the target's column, with its alignment, with its neighbour. */
+/**
+ * Moves the target's column, or the columns the selection spans, with
+ * their alignment, one place past its neighbour. The selection moves with
+ * them.
+ */
 export function moveColumn(direction: -1 | 1, target?: TableTarget): Command {
 	return tableCommand(target, (context) => {
-		const from = context.target.column;
-		const to = from + direction;
-		if (to < 0 || to >= context.width) return false;
-		const swap = <T>(items: readonly T[]) => {
+		const { left, right } = context.range;
+		if (direction < 0 ? left - 1 < 0 : right + 1 >= context.width) return false;
+		const move = <T>(items: readonly T[]) => {
 			const next = [...items];
-			[next[from], next[to]] = [next[to]!, next[from]!];
+			const block = next.splice(left, right - left + 1);
+			next.splice(left + direction, 0, ...block);
 			return next;
 		};
 		const rows = paddedRows(context).map((row) => ({
 			node: row.node,
-			cells: swap(row.cells),
+			cells: move(row.cells),
 		}));
 		return {
-			edit: { rows, align: swap(context.align) },
-			caret: { row: context.target.row, column: to, offset: context.offset },
+			edit: { rows, align: move(context.align) },
+			caret: {
+				row: context.target.row,
+				column: context.target.column + direction,
+				offset: context.offset,
+			},
+			shift: { rows: 0, columns: direction },
 		};
 	});
 }
 
-/** Aligns the target's column; null writes a plain `---` delimiter. */
+/**
+ * Aligns the target's column, or every column the selection spans; null
+ * writes a plain `---` delimiter.
+ */
 export function setColumnAlign(
 	align: TableAlign,
 	target?: TableTarget,
 ): Command {
 	return tableCommand(target, (context) => {
-		const next = [...context.align];
-		next[context.target.column] = align;
+		const { left, right } = context.range;
+		const next = context.align.map((current, column) =>
+			column >= left && column <= right ? align : current,
+		);
 		return {
 			edit: { rows: context.rows, align: next },
 			caret: {
@@ -505,6 +617,7 @@ export function setColumnAlign(
 				column: context.target.column,
 				offset: context.offset,
 			},
+			shift: { rows: 0, columns: 0 },
 		};
 	});
 }

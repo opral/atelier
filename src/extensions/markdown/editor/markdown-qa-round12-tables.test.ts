@@ -416,3 +416,102 @@ describe("the saved file keeps what the edit did not touch", () => {
 		expect(await saved()).toBe("x\r\n\r\ny\n\n| a |\n|---|\n| 1 |\n|  |\n");
 	});
 });
+
+/** The grid as text, with `|` between cells. */
+function grid(editor: Editor): string[] {
+	const rows: string[] = [];
+	editor.state.doc.descendants((node) => {
+		if (node.type.name !== "tableRow") return true;
+		const cells: string[] = [];
+		node.forEach((cell) => cells.push(cell.textContent));
+		rows.push(cells.join("|"));
+		return false;
+	});
+	return rows;
+}
+
+/** Selects from inside the cell `from` to inside the cell `to`. */
+function selectCells(editor: Editor, from: string, to: string) {
+	const positions = new Map<string, number>();
+	editor.state.doc.descendants((node, pos) => {
+		if (node.type.name === "tableCell") positions.set(node.textContent, pos);
+		return true;
+	});
+	editor.view.dispatch(
+		editor.state.tr.setSelection(
+			TextSelection.create(
+				editor.state.doc,
+				positions.get(from)! + 1,
+				positions.get(to)! + 2,
+			),
+		),
+	);
+}
+
+/** The texts of the cells the selection's two ends are in. */
+function selectedCells(editor: Editor) {
+	const { $anchor, $head } = editor.state.selection;
+	return [$anchor.parent.textContent, $head.parent.textContent];
+}
+
+describe("a selection across rows or columns", () => {
+	const TABLE =
+		"| h1 | h2 | h3 |\n|:--|---|--:|\n| a1 | a2 | a3 |\n| b1 | b2 | b3 |\n| c1 | c2 | c3 |\n";
+
+	test("deletes every row it spans, in one undo step", async () => {
+		const { editor, saved } = await open(TABLE);
+		selectCells(editor, "a2", "b1");
+		expect(editor.commands.deleteTableRow()).toBe(true);
+		expect(grid(editor)).toEqual(["h1|h2|h3", "c1|c2|c3"]);
+		expect(editor.state.selection.empty).toBe(true);
+		expect(await saved()).toBe(
+			"| h1 | h2 | h3 |\n|:--|---|--:|\n| c1 | c2 | c3 |\n",
+		);
+		undo(editor.state, editor.view.dispatch);
+		expect(await saved()).toBe(TABLE);
+	});
+
+	test("moves the rows it spans together, and stays on them", async () => {
+		const { editor } = await open(TABLE);
+		selectCells(editor, "b1", "c2");
+		expect(editor.commands.moveTableRowUp()).toBe(true);
+		expect(grid(editor).slice(1)).toEqual(["b1|b2|b3", "c1|c2|c3", "a1|a2|a3"]);
+		expect(selectedCells(editor)).toEqual(["b1", "c2"]);
+		// The first body row cannot go above the header.
+		expect(editor.commands.moveTableRowUp()).toBe(false);
+		expect(editor.commands.moveTableRowDown()).toBe(true);
+		expect(grid(editor).slice(1)).toEqual(["a1|a2|a3", "b1|b2|b3", "c1|c2|c3"]);
+		// The last rows cannot go further down.
+		expect(editor.commands.moveTableRowDown()).toBe(false);
+	});
+
+	test("deletes and moves every column it spans, alignment included", async () => {
+		const { editor, saved } = await open(TABLE);
+		selectCells(editor, "a1", "b2");
+		expect(editor.commands.moveTableColumnRight()).toBe(true);
+		expect(grid(editor)[1]).toBe("a3|a1|a2");
+		expect(selectedCells(editor)).toEqual(["a1", "b2"]);
+		expect(await saved()).toBe(
+			"| h3 | h1 | h2 |\n|--:|:--|---|\n| a3 | a1 | a2 |\n| b3 | b1 | b2 |\n| c3 | c1 | c2 |\n",
+		);
+		expect(editor.commands.moveTableColumnRight()).toBe(false);
+		expect(editor.commands.deleteTableColumn()).toBe(true);
+		expect(grid(editor)).toEqual(["h3", "a3", "b3", "c3"]);
+		expect(await saved()).toBe("| h3 |\n|--:|\n| a3 |\n| b3 |\n| c3 |\n");
+	});
+
+	test("aligns every column it spans", async () => {
+		const { editor, saved } = await open(TABLE);
+		selectCells(editor, "a2", "a3");
+		editor.commands.setTableColumnAlign("center");
+		expect(await saved()).toBe(TABLE.replace("|:--|---|--:|", "|:--|:-:|:-:|"));
+	});
+
+	test("a menu opened on a cell outside the selection acts on that cell", async () => {
+		const { editor } = await open(TABLE);
+		selectCells(editor, "a1", "b1");
+		// The row of c1; the table is the document's first block.
+		editor.commands.deleteTableRow({ tablePos: 0, row: 3, column: 0 });
+		expect(grid(editor).slice(1)).toEqual(["a1|a2|a3", "b1|b2|b3"]);
+	});
+});
