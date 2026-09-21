@@ -1,14 +1,29 @@
 import {
+	CommandManager,
+	type Editor,
 	Extension,
 	InputRule,
+	createChainableState,
+	getTextContentFromNodes,
 	markInputRule,
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
-import { closeHistory } from "@tiptap/pm/history";
-import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
+import { closeHistory, undo } from "@tiptap/pm/history";
+import type { Schema } from "@tiptap/pm/model";
+import {
+	type EditorState,
+	NodeSelection,
+	Plugin,
+	PluginKey,
+	type PluginSpec,
+	Selection,
+	TextSelection,
+	type Transaction,
+} from "@tiptap/pm/state";
 import { canSplit } from "@tiptap/pm/transform";
+import type { EditorView } from "@tiptap/pm/view";
 import { normalizeUrl } from "../normalize-url";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
@@ -19,10 +34,349 @@ const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
 const DIVIDER_PATTERN = /^---$/;
 
+// A URL may start after whitespace or an opening bracket or quote, as in
+// "(https://a.b)" or "see "www.c.d"".
+const TYPED_URL = String.raw`(?:^|[\s(\[{"'“‘])((?:https?:\/\/|www\.)[^\s<]+)`;
+
+/**
+ * The part of a typed URL that is the link, by GFM's autolink rules:
+ * sentence punctuation after it ("see https://a.b.") and a closing paren
+ * that has no opening one inside the URL ("(https://a.b)") are not part of
+ * it. Returns null when nothing but the scheme is left.
+ */
+function typedUrl(candidate: string): string | null {
+	let url = candidate;
+	for (;;) {
+		const last = url.at(-1);
+		if (last && `.,;:!?'"*_~”’`.includes(last)) {
+			url = url.slice(0, -1);
+			continue;
+		}
+		if (last === ")" && url.split(")").length > url.split("(").length) {
+			url = url.slice(0, -1);
+			continue;
+		}
+		break;
+	}
+	return /^(?:https?:\/\/|www\.)[^\s./?#:]/.test(url) ? url : null;
+}
+
+/**
+ * Links a URL that ends right at the caret, for Enter: a URL that ends the
+ * line never gets the space that links it as you type, yet GFM makes it a
+ * link when the file is read again, so the editor and the file disagreed.
+ */
+function linkTypedUrlBeforeCaret(state: EditorState): Transaction | null {
+	const { selection, schema } = state;
+	const linkType = schema.marks.link;
+	const $from = selection.$from;
+	if (!linkType || !selection.empty || !$from.parent.isTextblock) return null;
+	if ($from.parent.type.spec.code) return null;
+	const before = $from.nodeBefore;
+	if (!before?.isText || before.marks.some((mark) => mark.type.spec.code)) {
+		return null;
+	}
+	const match = new RegExp(`${TYPED_URL}$`).exec(
+		$from.parent.textBetween(0, $from.parentOffset, undefined, "\uFFFC"),
+	);
+	const typed = match?.[1] ?? "";
+	const url = typedUrl(typed);
+	const href = url && normalizeUrl(url);
+	if (!url || !href) return null;
+	const urlStart = $from.pos - typed.length;
+	if (state.doc.rangeHasMark(urlStart, $from.pos, linkType)) return null;
+	return state.tr.addMark(
+		urlStart,
+		urlStart + url.length,
+		linkType.create({ href }),
+	);
+}
+
 function codeFenceLanguage(value: string): string | null | undefined {
 	const match = value.match(CODE_FENCE_PATTERN);
 	if (!match) return undefined;
 	return match[2] || null;
+}
+
+/**
+ * Inline autoformats: emphasis, code, links. The character that completes
+ * one ("**b**", "`c`", the space after a URL) is typed first, as ordinary
+ * typing, and the format follows as its own undo step. Undo right after
+ * then gives back exactly what was typed, closing delimiter included, and
+ * redo formats it again. The rule runner in @tiptap/core formats instead
+ * of inserting that character, so undo lost it ("**b*").
+ */
+function inlineInputRules(schema: Schema): InputRule[] {
+	const rules: InputRule[] = [];
+
+	// Image: "![alt](src)". A line that is nothing but the image becomes an
+	// image block, the way the file reads it back; inside text it stays an
+	// inline image. The source is kept as typed: it is usually a path in
+	// the workspace, which normalizeUrl would turn into a web address.
+	if (schema.nodes.image) {
+		rules.push(
+			new InputRule({
+				find: /!\[([^\]]*)\]\(([^()\s]+)\)$/,
+				handler: ({ state, range, match }) => {
+					const src = String(match[2] ?? "");
+					const alt = match[1] || null;
+					const { tr } = state;
+					const $start = tr.doc.resolve(range.from);
+					const paragraph = $start.parent;
+					const imageBlock = schema.nodes.imageBlock;
+					const index = $start.index($start.depth - 1);
+					const wholeLine =
+						paragraph.type.name === "paragraph" &&
+						range.from === $start.start() &&
+						range.to === $start.end();
+					if (
+						imageBlock &&
+						wholeLine &&
+						$start
+							.node($start.depth - 1)
+							.canReplaceWith(index, index + 1, imageBlock)
+					) {
+						const blockFrom = $start.before();
+						const image = imageBlock.create({
+							src,
+							alt,
+							data: paragraph.attrs?.data ?? null,
+						});
+						tr.replaceWith(blockFrom, $start.after(), [
+							image,
+							schema.nodes.paragraph!.create(),
+						]);
+						tr.setSelection(
+							TextSelection.create(tr.doc, blockFrom + image.nodeSize + 1),
+						);
+						return;
+					}
+					tr.replaceWith(
+						range.from,
+						range.to,
+						schema.nodes.image!.create({ src, alt }),
+					);
+				},
+			}),
+		);
+	}
+
+	// Inline link: typing "[label](url)" converts to linked text; after "!"
+	// it is an image, handled above.
+	if ((schema.marks as any).link) {
+		rules.push(
+			new InputRule({
+				find: /(?<!!)\[([^\]]+)\]\(([^()\s]+)\)$/,
+				handler: ({ state, range, match }) => {
+					const linkType = (state.schema.marks as any).link;
+					if (!linkType) return null;
+					const label = String((match && match[1]) || "");
+					const href = normalizeUrl(String((match && match[2]) || ""));
+					if (!label || !href) return null;
+					const { tr } = state;
+					tr.insertText(label, range.from, range.to);
+					tr.addMark(
+						range.from,
+						range.from + label.length,
+						linkType.create({ href }),
+					);
+					// Don't carry the link mark into whatever is typed next.
+					tr.removeStoredMark(linkType);
+				},
+			}),
+		);
+	}
+
+	if ((schema.marks as any).bold) {
+		rules.push(
+			// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
+			// They open after a space or an opening bracket, quote or dash,
+			// as in "(**a**)", never inside a word: "2*3*4" stays text. The
+			// lookbehind keeps that character out of the match, so the rule
+			// never deletes it along with the delimiters.
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
+				type: (schema.marks as any).bold,
+			}),
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:__(\S(?:[^_]*\S)?)__)$/,
+				type: (schema.marks as any).bold,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).italic) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
+				type: (schema.marks as any).italic,
+			}),
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
+				type: (schema.marks as any).italic,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).strike) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:~~(\S(?:[^~]*\S)?)~~)$/,
+				type: (schema.marks as any).strike,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).code) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:`([^`]+)`)$/,
+				type: (schema.marks as any).code,
+			}),
+		);
+	}
+
+	// A URL followed by a space becomes a link, as in Notion; the space
+	// itself, and punctuation that ends the sentence, stay outside the link.
+	if ((schema.marks as any).link) {
+		rules.push(
+			new InputRule({
+				find: new RegExp(`${TYPED_URL}\\s$`),
+				handler: ({ state, range, match }) => {
+					const typed = String(match[1] ?? "");
+					const url = typedUrl(typed);
+					const href = url && normalizeUrl(url);
+					if (!url || !href) return null;
+					const linkType = (state.schema.marks as any).link;
+					const tr = state.tr;
+					// The typed space is already in the document, right before range.to.
+					const urlStart = range.to - 1 - typed.length;
+					const urlEnd = urlStart + url.length;
+					tr.addMark(urlStart, urlEnd, linkType.create({ href }));
+					tr.removeStoredMark(linkType);
+				},
+			}),
+		);
+	}
+
+	return rules;
+}
+
+function inlineInputRulesPlugin(editor: Editor, rules: InputRule[]) {
+	const plugin: Plugin = new Plugin({
+		// Backspace right after a format runs @tiptap/core's undoInputRule,
+		// which looks for plugins marked like this one and reverts the
+		// transaction kept in their state.
+		isInputRules: true,
+		state: {
+			init: () => null,
+			apply(tr, previous) {
+				const stored = tr.getMeta(plugin);
+				if (stored) return stored;
+				return tr.selectionSet || tr.docChanged ? null : previous;
+			},
+		},
+		props: {
+			handleTextInput(view, from, to, text) {
+				if (view.composing || to > view.state.doc.content.size) return false;
+				const $from = view.state.doc.resolve(from);
+				const inCode =
+					$from.parent.type.spec.code ||
+					($from.nodeBefore ?? $from.nodeAfter)?.marks.some(
+						(mark) => mark.type.spec.code,
+					);
+				if (inCode) return false;
+				const textBefore = getTextContentFromNodes($from) + text;
+				const matching = rules
+					.map((rule) => ({
+						rule,
+						match: (rule.find as RegExp).exec(textBefore),
+					}))
+					.filter(({ match }) => match);
+				if (matching.length === 0) return false;
+
+				view.dispatch(view.state.tr.insertText(text, from, to));
+				for (const { rule, match } of matching) {
+					const tr = view.state.tr;
+					const state = createChainableState({
+						state: view.state,
+						transaction: tr,
+					});
+					const range = {
+						from: from - (match![0].length - text.length),
+						to: from + text.length,
+					};
+					const { commands, chain, can } = new CommandManager({
+						editor,
+						state,
+					});
+					const result = rule.handler({
+						state,
+						range,
+						match: match!,
+						commands,
+						chain,
+						can,
+					});
+					if (result === null || !tr.steps.length) continue;
+					// Nothing is left to put back after the steps are inverted:
+					// the typed character is already in the document.
+					tr.setMeta(plugin, {
+						transform: tr,
+						from: range.to,
+						to: range.to,
+						text: "",
+					});
+					view.dispatch(closeHistory(tr));
+					// What is typed next starts another undo step.
+					view.dispatch(closeHistory(view.state.tr));
+					break;
+				}
+				return true;
+			},
+		},
+	} as PluginSpec<unknown>);
+	return plugin;
+}
+
+const blockAutoformatKey = new PluginKey<{ typed: string } | null>(
+	"markdownBlockAutoformat",
+);
+
+/**
+ * Remembers a block autoformat ("## ", "- ", "> ", "```js ") until anything
+ * else happens, so the Backspace right after it can take it back. The ids
+ * given to the new block arrive as an appended transaction; that one does
+ * not count. (@tiptap/core's own record of the rule is cleared by it, which
+ * is why Backspace there used to leave an empty paragraph.)
+ */
+function blockAutoformatPlugin() {
+	return new Plugin({
+		key: blockAutoformatKey,
+		state: {
+			init: () => null,
+			apply(tr, previous: { typed: string } | null) {
+				const autoformat = tr.getMeta(blockAutoformatKey);
+				if (autoformat) return autoformat;
+				if (tr.getMeta("appendedTransaction")) return previous;
+				return tr.docChanged || tr.selectionSet ? null : previous;
+			},
+		},
+	});
+}
+
+/**
+ * Backspace right after a block autoformat gives the typed marker back, as
+ * it already does after "---" and after inline autoformats: the conversion
+ * is its own undo step, so undoing it restores the marker, and the
+ * character that completed it is typed again.
+ */
+function restoreBlockMarker(view: EditorView): boolean {
+	const autoformat = blockAutoformatKey.getState(view.state);
+	if (!autoformat || !view.state.selection.empty) return false;
+	if (!undo(view.state, view.dispatch)) return false;
+	view.dispatch(view.state.tr.insertText(autoformat.typed).scrollIntoView());
+	return true;
 }
 
 // Markdown-like typing shortcuts and editor keybindings
@@ -74,11 +428,12 @@ export const MarkdownWcShortcuts = Extension.create({
 			rules.push(bullet("+"));
 		}
 
-		// Ordered list: 1. + space (captures custom start)
+		// Ordered list: 1. or 1) + space (captures custom start). The file
+		// writes it back with ".": the list keeps no delimiter of its own.
 		if ((schema.nodes as any).orderedList && (schema.nodes as any).listItem) {
 			rules.push(
 				wrappingInputRule({
-					find: /^(\d+)\.\s$/,
+					find: /^(\d+)[.)]\s$/,
 					type: (schema.nodes as any).orderedList,
 					getAttributes: (match) => ({ start: Number(match[1] || 1) }),
 				}),
@@ -113,24 +468,45 @@ export const MarkdownWcShortcuts = Extension.create({
 						if ($from.parentOffset !== paragraph.content.size) return null;
 						const horizontalRule = (state.schema.nodes as any).horizontalRule;
 						const trailingParagraph = (state.schema.nodes as any).paragraph;
-						return commands.command(({ state, tr, dispatch }: any) => {
-							const selectionFrom = state.selection.$from;
-							const blockFrom = selectionFrom.before(selectionFrom.depth);
-							const blockTo = selectionFrom.after(selectionFrom.depth);
-							const divider = horizontalRule.create({
-								autoInput: true,
-								data: paragraph.attrs?.data ?? null,
-							});
-							tr.replaceWith(blockFrom, blockTo, [
-								divider,
-								trailingParagraph.create(),
-							]);
-							tr.setSelection(
-								TextSelection.create(tr.doc, blockFrom + divider.nodeSize + 1),
-							);
-							if (dispatch) dispatch(tr.scrollIntoView());
-							return true;
-						});
+						return commands.command(
+							({ state, tr, dispatch, commands }: any) => {
+								// In an empty list item the dashes mean a rule under the list,
+								// as in Notion, not a rule inside the item: the item leaves
+								// every list it is in first, splitting a list around it.
+								const item = $from.node($from.depth - 1);
+								if (item?.type?.name === "listItem" && item.childCount === 1) {
+									const inItem = () =>
+										tr.selection.$from.node(tr.selection.$from.depth - 1)?.type
+											?.name === "listItem";
+									while (inItem()) {
+										// The command state refreshes its selection only when its
+										// `tr` is read; without that the next lift works from the
+										// selection before the previous one.
+										void state.tr;
+										if (!commands.liftListItem("listItem")) return false;
+									}
+								}
+								const selectionFrom = tr.selection.$from;
+								const blockFrom = selectionFrom.before(selectionFrom.depth);
+								const blockTo = selectionFrom.after(selectionFrom.depth);
+								const divider = horizontalRule.create({
+									autoInput: true,
+									data: paragraph.attrs?.data ?? null,
+								});
+								tr.replaceWith(blockFrom, blockTo, [
+									divider,
+									trailingParagraph.create(),
+								]);
+								tr.setSelection(
+									TextSelection.create(
+										tr.doc,
+										blockFrom + divider.nodeSize + 1,
+									),
+								);
+								if (dispatch) dispatch(tr.scrollIntoView());
+								return true;
+							},
+						);
 					},
 				}),
 			);
@@ -147,10 +523,15 @@ export const MarkdownWcShortcuts = Extension.create({
 						handler: ({ state, range, match, commands }) => {
 							const checked = /x/i.test(String((match && match[1]) || ""));
 							const $from: any = (state as any).selection.$from;
-							// Check if we're inside an existing bullet list
+							// Inside an existing list the item itself becomes the task.
+							// A numbered one too: GFM writes it "2. [ ] b", and wrapping
+							// it in a bullet list left an empty numbered item behind.
 							for (let d = $from.depth; d > 0; d--) {
 								const n = $from.node(d);
-								if (n?.type?.name === "bulletList") {
+								if (
+									n?.type?.name === "bulletList" ||
+									n?.type?.name === "orderedList"
+								) {
 									return commands.command(({ state, tr, dispatch }: any) => {
 										const selectionFrom = state.selection.$from;
 										let listItemDepth = -1;
@@ -222,114 +603,30 @@ export const MarkdownWcShortcuts = Extension.create({
 			}
 		}
 
-		// Inline link: typing "[label](url)" converts to linked text.
-		if ((schema.marks as any).link) {
-			rules.push(
-				new InputRule({
-					find: /\[([^\]]+)\]\(([^()\s]+)\)$/,
-					// @ts-expect-error - typings are outdated
-					handler: ({ state, range, match, commands }) => {
-						const linkType = (state.schema.marks as any).link;
-						if (!linkType) return null;
-						const label = String((match && match[1]) || "");
-						const href = normalizeUrl(String((match && match[2]) || ""));
-						if (!label || !href) return null;
-						return commands.command(({ tr, dispatch }: any) => {
-							tr.insertText(label, range.from, range.to);
-							tr.addMark(
-								range.from,
-								range.from + label.length,
-								linkType.create({ href }),
-							);
-							// Don't carry the link mark into whatever is typed next.
-							tr.removeStoredMark(linkType);
-							if (dispatch) dispatch(tr);
-							return true;
-						});
-					},
-				}),
-			);
-		}
-
-		if ((schema.marks as any).bold) {
-			rules.push(
-				// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
-				markInputRule({
-					find: /(?:^|\s)(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
-					type: (schema.marks as any).bold,
-				}),
-				markInputRule({
-					find: /(?:^|\s)(?:__(\S(?:[^_]*\S)?)__)$/,
-					type: (schema.marks as any).bold,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).italic) {
-			rules.push(
-				markInputRule({
-					find: /(?:^|\s)(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
-					type: (schema.marks as any).italic,
-				}),
-				markInputRule({
-					find: /(?:^|\s)(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
-					type: (schema.marks as any).italic,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).strike) {
-			rules.push(
-				markInputRule({
-					find: /(?:^|\s)(?:~~(\S(?:[^~]*\S)?)~~)$/,
-					type: (schema.marks as any).strike,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).code) {
-			rules.push(
-				markInputRule({
-					find: /(?:^|\s)(?:`([^`]+)`)$/,
-					type: (schema.marks as any).code,
-				}),
-			);
-		}
-
-		// A URL followed by a space becomes a link, as in Notion; the space
-		// itself stays outside the link.
-		if ((schema.marks as any).link) {
-			rules.push(
-				new InputRule({
-					find: /(?:^|\s)((?:https?:\/\/|www\.)[^\s<]+)\s$/,
-					handler: ({ state, range, match }) => {
-						const url = String(match[1] ?? "");
-						const href = normalizeUrl(url);
-						if (!href) return null;
-						const linkType = (state.schema.marks as any).link;
-						const tr = state.tr;
-						const urlEnd = range.to;
-						const urlStart = urlEnd - url.length;
-						tr.addMark(urlStart, urlEnd, linkType.create({ href }));
-						tr.insertText(" ", urlEnd);
-						tr.removeStoredMark(linkType);
-					},
-				}),
-			);
-		}
-
 		// Every conversion is its own undo step: Mod-Z after "# " gives the
-		// typed "#" back instead of erasing it with the heading.
+		// typed "#" back instead of erasing it with the heading. The
+		// conversion also notes what was typed to complete it, for Backspace.
 		return rules.map(
 			(rule) =>
 				new InputRule({
 					find: rule.find,
 					handler: (props) => {
-						closeHistory(props.state.tr);
+						const { tr } = props.state;
+						closeHistory(tr);
+						tr.setMeta(blockAutoformatKey, {
+							typed: props.match[0].slice(props.range.to - props.range.from),
+						});
 						return rule.handler(props);
 					},
 				}),
 		);
+	},
+
+	addProseMirrorPlugins() {
+		return [
+			inlineInputRulesPlugin(this.editor, inlineInputRules(this.editor.schema)),
+			blockAutoformatPlugin(),
+		];
 	},
 
 	addKeyboardShortcuts() {
@@ -1037,6 +1334,7 @@ export const MarkdownWcShortcuts = Extension.create({
 
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
+				if (restoreBlockMarker(this.editor.view)) return true;
 				if (escapeEmptyBlockquote(true)) return true;
 				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
@@ -1240,6 +1538,10 @@ export const MarkdownWcShortcuts = Extension.create({
 				// A new block is its own undo step: Mod-Z after typing into it
 				// takes back the typing, not the split as well. History is closed
 				// before the split here and after it below, where Enter returns.
+				// A URL at the caret becomes a link first, as its own undo step
+				// like every other autoformat.
+				const linkUrl = linkTypedUrlBeforeCaret(this.editor.state);
+				if (linkUrl) this.editor.view.dispatch(closeHistory(linkUrl));
 				this.editor.view.dispatch(closeHistory(this.editor.state.tr));
 				if (
 					this.editor.state.selection instanceof NodeSelection &&
