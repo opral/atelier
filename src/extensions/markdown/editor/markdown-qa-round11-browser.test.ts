@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
@@ -225,4 +225,104 @@ test("a click under a document that ends in a table opens a line after it, saved
 		editor.destroy();
 		await lix.close();
 	}
+});
+
+describe("arrow keys into a table keep the caret's column", () => {
+	const markdown =
+		"Above the table.\n\n| Name | Value | Third |\n| - | - | - |\n| a | 1 | x |\n| b | 2 | y |\n\nBelow the table.\n";
+
+	// Lays the three columns out side by side and puts the caret at `left`;
+	// the test DOM has no layout of its own.
+	function layOut(editor: ReturnType<typeof createEditor>, left: number) {
+		editor.view.coordsAtPos = () =>
+			({ left, right: left, top: 0, bottom: 0 }) as never;
+		for (const row of editor.view.dom.querySelectorAll("tr"))
+			row.querySelectorAll("td, th").forEach((cell, column) => {
+				cell.getBoundingClientRect = () =>
+					new DOMRect(100 * column, 0, 100, 20);
+			});
+	}
+
+	function cellText(editor: ReturnType<typeof createEditor>, side: "head") {
+		const $pos = editor.state.selection[`$${side}`];
+		return $pos.parent.type.name === "tableCell"
+			? $pos.parent.textContent
+			: null;
+	}
+
+	function press(
+		editor: ReturnType<typeof createEditor>,
+		key: string,
+		shiftKey = false,
+	) {
+		editor.view.dom.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key,
+				shiftKey,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	}
+
+	test("down from above lands in the column under the caret, up from below too", async () => {
+		const lix = await openLix();
+		const editor = createEditor({
+			lix,
+			initialMarkdown: markdown,
+			persistState: false,
+		});
+		document.body.appendChild(editor.view.dom);
+		try {
+			layOut(editor, 250);
+			editor.commands.setTextSelection(
+				textPosition(editor, "Above the table.") + 16,
+			);
+			press(editor, "ArrowDown");
+			expect(cellText(editor, "head")).toBe("Third");
+
+			editor.commands.setTextSelection(
+				textPosition(editor, "Below the table.") + 16,
+			);
+			press(editor, "ArrowUp");
+			expect(cellText(editor, "head")).toBe("y");
+
+			layOut(editor, 150);
+			editor.commands.setTextSelection(
+				textPosition(editor, "Below the table."),
+			);
+			press(editor, "ArrowUp");
+			expect(cellText(editor, "head")).toBe("2");
+		} finally {
+			editor.view.dom.remove();
+			editor.destroy();
+			await lix.close();
+		}
+	});
+
+	test("Shift+ArrowDown grows the selection a row at a time", async () => {
+		const lix = await openLix();
+		const editor = createEditor({
+			lix,
+			initialMarkdown: markdown,
+			persistState: false,
+		});
+		document.body.appendChild(editor.view.dom);
+		try {
+			layOut(editor, 150);
+			const anchor = textPosition(editor, "Above the table.") + 16;
+			editor.commands.setTextSelection(anchor);
+			press(editor, "ArrowDown", true);
+			expect(cellText(editor, "head")).toBe("Value");
+			press(editor, "ArrowDown", true);
+			expect(cellText(editor, "head")).toBe("1");
+			press(editor, "ArrowDown", true);
+			expect(cellText(editor, "head")).toBe("2");
+			expect(editor.state.selection.anchor).toBe(anchor);
+		} finally {
+			editor.view.dom.remove();
+			editor.destroy();
+			await lix.close();
+		}
+	});
 });
