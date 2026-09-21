@@ -388,6 +388,38 @@
 				0 0 0 9px var(--atelier-ring);
 		}
 
+		/* A text selection that runs over a block with no text of its own — an
+		   image, a rule, an embed — takes it along, so it is tinted the colour
+		   the browser paints selected text. */
+		.markdown-view
+			.ProseMirror
+			.markdown-in-selection:not(
+				.markdown-image-embed,
+				[data-markdown-image-block],
+				.markdown-video-embed
+			),
+		.markdown-view
+			.ProseMirror
+			.markdown-image-embed.markdown-in-selection
+			> .markdown-image-block-content,
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block].markdown-in-selection:is(
+				img,
+				.markdown-pdf-embed
+			),
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed.markdown-in-selection
+			> .markdown-video-frame {
+			border-radius: var(--markdown-radius);
+			box-shadow: 0 0 0 4px var(--atelier-bg-selection);
+		}
+
+		.markdown-view .ProseMirror hr.markdown-in-selection {
+			box-shadow: 0 0 0 7px var(--atelier-bg-selection);
+		}
+
 		.markdown-frontmatter-header {
 			display: flex;
 			min-height: 2.125rem;

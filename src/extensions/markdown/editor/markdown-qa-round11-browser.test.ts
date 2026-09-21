@@ -326,3 +326,38 @@ describe("arrow keys into a table keep the caret's column", () => {
 		}
 	});
 });
+
+test("a text selection over an image and a rule marks them as selected too", async () => {
+	const lix = await openLix();
+	const editor = createEditor({
+		lix,
+		initialMarkdown:
+			"Before.\n\n![Alt](https://example.com/a.png)\n\nBetween.\n\n---\n\nAfter.\n",
+		persistState: false,
+	});
+	try {
+		const marked = () =>
+			[...editor.view.dom.querySelectorAll(".markdown-in-selection")].map(
+				(element) => element.nodeName,
+			);
+		const from = textPosition(editor, "Before.") + 3;
+		const to = textPosition(editor, "After.") + 2;
+		editor.commands.setTextSelection({ from, to });
+		expect(marked()).toHaveLength(2);
+		expect(marked()).toContain("HR");
+
+		// Only blocks the selection covers whole.
+		editor.commands.setTextSelection({
+			from,
+			to: textPosition(editor, "Between.") + 2,
+		});
+		expect(marked()).toHaveLength(1);
+		expect(marked()).not.toContain("HR");
+
+		editor.commands.setTextSelection(from);
+		expect(marked()).toHaveLength(0);
+	} finally {
+		editor.destroy();
+		await lix.close();
+	}
+});
