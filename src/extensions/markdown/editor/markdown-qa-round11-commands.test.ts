@@ -9,7 +9,11 @@ import { buildMarkdownFromEditor } from "./build-markdown-from-editor";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
-import { BLOCK_COMMANDS, SELECTION_BLOCK_OPTIONS } from "./block-commands";
+import {
+	BLOCK_COMMANDS,
+	SELECTION_BLOCK_OPTIONS,
+	getActiveBlock,
+} from "./block-commands";
 import { normalizeUrl } from "./normalize-url";
 
 const editors: Editor[] = [];
@@ -303,5 +307,21 @@ describe("a heading inside a list item", () => {
 		caret(editor, "alpha");
 		turnInto(editor, "ordered-list");
 		expect(md(editor)).not.toContain("<span");
+	});
+});
+
+describe("the block type the toolbar names", () => {
+	test("headings 4 to 6 are not Text", () => {
+		for (const level of [4, 5, 6]) {
+			const editor = load(`${"#".repeat(level)} alpha\n`);
+			caret(editor, "alpha");
+			expect(getActiveBlock(editor)).toBe(`heading-${level}`);
+		}
+	});
+
+	test("a heading and a paragraph together are mixed", () => {
+		const editor = load("## alpha\n\nbeta\n");
+		select(editor, "alpha", "beta");
+		expect(getActiveBlock(editor)).toBe("mixed");
 	});
 });

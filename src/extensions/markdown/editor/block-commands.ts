@@ -4,6 +4,10 @@ import {
 	Heading1,
 	Heading2,
 	Heading3,
+	Heading4,
+	Heading5,
+	Heading6,
+	Layers,
 	List,
 	ListOrdered,
 	Minus,
@@ -541,6 +545,29 @@ export type ToolbarBlockType =
 	| "code"
 	| "blockquote";
 
+/**
+ * What the dropdown shows: one of its entries, a heading level it does not
+ * offer (4–6, which Markdown has and the file may carry), or `mixed` when the
+ * selection spans blocks of different kinds. The last two check no entry.
+ */
+export type ActiveBlockType =
+	| ToolbarBlockType
+	| "heading-4"
+	| "heading-5"
+	| "heading-6"
+	| "mixed";
+
+/** How the dropdown shows a block kind no entry names, or `null`. */
+export function unlistedBlock(
+	block: string,
+): { label: string; icon: ComponentType<{ className?: string }> } | null {
+	if (block === "heading-4") return { label: "Heading 4", icon: Heading4 };
+	if (block === "heading-5") return { label: "Heading 5", icon: Heading5 };
+	if (block === "heading-6") return { label: "Heading 6", icon: Heading6 };
+	if (block === "mixed") return { label: "Mixed", icon: Layers };
+	return null;
+}
+
 /** Block option format for toolbar dropdown */
 export type ToolbarBlockOption = {
 	value: ToolbarBlockType;
@@ -581,14 +608,29 @@ export const TOOLBAR_BLOCK_OPTIONS: ToolbarBlockOption[] =
 		}),
 	);
 
-/** The block type currently under the caret, as the toolbar dropdown names it. */
-export function getActiveBlock(editor: Editor): ToolbarBlockType {
-	if (editor.isActive("heading", { level: 1 })) return "heading-1";
-	if (editor.isActive("heading", { level: 2 })) return "heading-2";
-	if (editor.isActive("heading", { level: 3 })) return "heading-3";
-	if (editor.isActive("codeBlock")) return "code";
-	if (editor.isActive("blockquote")) return "blockquote";
+/** The kind of one textblock, as the toolbar dropdown names it. */
+function textblockKind(node: ProseMirrorNode): ActiveBlockType {
+	if (node.type.name === "heading") {
+		return `heading-${Math.min(6, Math.max(1, Number(node.attrs.level) || 1))}` as ActiveBlockType;
+	}
+	if (node.type.name === "codeBlock") return "code";
 	return "paragraph";
+}
+
+/** The block type currently under the selection, as the toolbar dropdown names it. */
+export function getActiveBlock(editor: Editor): ActiveBlockType {
+	const { from, to, $from } = editor.state.selection;
+	const kinds = new Set<ActiveBlockType>();
+	editor.state.doc.nodesBetween(from, to, (node) => {
+		if (!node.isTextblock) return true;
+		kinds.add(textblockKind(node));
+		return false;
+	});
+	if (kinds.size > 1) return "mixed";
+	const kind = kinds.values().next().value ?? textblockKind($from.parent);
+	if (kind === "paragraph" && editor.isActive("blockquote"))
+		return "blockquote";
+	return kind;
 }
 
 /**
@@ -682,7 +724,7 @@ export function setTaskListState(editor: Editor, checked: boolean | null) {
 
 /** Block kinds offered by the selection toolbar's "Turn into" list. */
 export type SelectionBlockType =
-	| ToolbarBlockType
+	| ActiveBlockType
 	| "bullet-list"
 	| "ordered-list"
 	| "task-list";
