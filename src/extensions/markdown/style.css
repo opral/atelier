@@ -1853,7 +1853,32 @@
 		/* Table row and column controls. The grips sit on the table's left and
 		   top borders, over the hovered row and column; the "+" bars run along
 		   its bottom and right edges. They are portaled out of the table, whose
-		   element is a scroll room that clips anything drawn outside it. */
+		   element is a scroll room that clips anything drawn outside it.
+
+		   An editable table keeps a strip below its grid for the bottom bar, so
+		   the bar never lies over the next block's first line, where a click
+		   meant for that line would add a row. It is kept whether the bar shows
+		   or not: the text below does not jump as the pointer comes and goes. */
+		.markdown-view .ProseMirror[contenteditable="true"] table {
+			padding-bottom: 1rem;
+		}
+
+		/* A table in a list or a quote is laid out as a table, which draws no
+		   padding of its own around the grid inside it; as a block it keeps
+		   the strip, and its grid is the same table as before. */
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			:not(.ProseMirror)
+			> table {
+			display: flow-root;
+		}
+
+		@media (pointer: coarse) {
+			.markdown-view .ProseMirror[contenteditable="true"] table {
+				padding-bottom: 2rem;
+			}
+		}
+
 		.markdown-table-grip,
 		.markdown-table-add {
 			position: fixed;
@@ -1907,6 +1932,41 @@
 			width: 12px;
 			height: 12px;
 			stroke-width: 2;
+		}
+
+		/* The right bar is a thin strip: its "+" shows once it is pointed at. */
+		.markdown-table-add[data-edge="right"] {
+			background: color-mix(in srgb, var(--atelier-bg-subtle) 70%, transparent);
+		}
+
+		.markdown-table-add[data-edge="right"] svg {
+			width: 10px;
+			height: 10px;
+			opacity: 0;
+		}
+
+		.markdown-table-add[data-edge="right"]:hover svg {
+			opacity: 1;
+		}
+
+		/* A finger needs more than the grips' 14 by 24 pixels. The grip stays
+		   the size it is drawn; what answers the touch reaches past it. */
+		@media (pointer: coarse) {
+			.markdown-table-grip::after {
+				position: absolute;
+				inset: -10px;
+				content: "";
+			}
+
+			.markdown-table-add[data-edge="right"]::after {
+				position: absolute;
+				inset: 0 -12px;
+				content: "";
+			}
+
+			.markdown-table-add[data-edge="right"] svg {
+				opacity: 1;
+			}
 		}
 
 		.markdown-table-add:hover {
@@ -2041,17 +2101,29 @@
 			stroke-width: 1.8;
 		}
 
+		/* The column's alignment is the one filled in; the one the keys are on
+		   has the focus ring, so the two never read as two chosen values. */
 		.markdown-table-menu-align-option[data-active="true"] {
-			background: var(--atelier-bg-hover);
 			color: var(--atelier-fg);
+		}
+
+		.markdown-table-menu:not([data-keyboard="true"])
+			.markdown-table-menu-align-option[data-active="true"]:not(
+				[data-checked="true"]
+			) {
+			background: var(--atelier-bg-hover);
 		}
 
 		.markdown-table-menu-align-option[data-checked="true"] {
 			background: var(--atelier-panel);
 			color: var(--atelier-link);
-			box-shadow:
-				var(--atelier-shadow-sm),
-				inset 0 0 0 1px var(--atelier-accent-border);
+			box-shadow: var(--atelier-shadow-sm);
+		}
+
+		.markdown-table-menu[data-keyboard="true"]
+			.markdown-table-menu-align-option[data-active="true"] {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: -2px;
 		}
 
 		/* Slash command palette. It is portaled into .atelier-root so it keeps the

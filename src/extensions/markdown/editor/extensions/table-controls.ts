@@ -6,6 +6,8 @@ import {
 	type Command,
 	type EditorState,
 } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Mappable } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { isMacPlatform } from "@/lib/platform";
 import {
@@ -104,6 +106,11 @@ declare module "@tiptap/core" {
 				target: TableTarget,
 				point?: { x: number; y: number } | null,
 			) => ReturnType;
+			/**
+			 * Opens the row-and-column menu for the caret's cell, below the
+			 * caret: the keyboard's way to the menus the grips open.
+			 */
+			openTableMenuAtCaret: () => ReturnType;
 			closeTableMenu: () => ReturnType;
 		};
 	}
@@ -119,6 +126,32 @@ function stillACell(
 	if (target.row >= table.childCount) return null;
 	if (target.column >= tableWidth(table)) return null;
 	return target;
+}
+
+/**
+ * The cell `target` named in `before`, where an edit put it: the same cell,
+ * whatever row and column it is now in, or null once it is gone. The cell
+ * itself is followed, not its table's position, so a row inserted above it
+ * or a column moved past it by someone else leaves a menu on the cell it
+ * was opened for rather than on whatever took its place.
+ */
+export function mapTableTarget(
+	before: ProseMirrorNode,
+	target: TableTarget,
+	mapping: Mappable,
+	after: EditorState,
+): TableTarget | null {
+	const table = before.nodeAt(target.tablePos);
+	if (table?.type.name !== "table") return null;
+	const cell = cellPosition(table, target.tablePos, target.row, target.column);
+	if (cell === null) return null;
+	// The start of the cell's text, held to the cell's opening edge: text
+	// typed at the start of the cell does not carry it off. Only an edit that
+	// took both sides of it took the cell; one that rewrote the cell's own
+	// attributes (its id, its alignment) replaced just the edge.
+	const mapped = mapping.mapResult(cell + 1, -1);
+	if (mapped.deletedAcross) return null;
+	return tableTargetAt(after, mapped.pos);
 }
 
 /** The row or column a grip's menu is about, tinted like a selection. */
@@ -197,15 +230,27 @@ export const TableControlsExtension = Extension.create({
 						if (tr.getMeta(TABLE_EDIT_META)) return CLOSED;
 						const menu = previous.menu;
 						if (!menu || !tr.docChanged) return previous;
-						const mapped = tr.mapping.mapResult(menu.target.tablePos, 1);
-						if (mapped.deleted) return CLOSED;
-						const target = stillACell(newState, {
-							...menu.target,
-							tablePos: mapped.pos,
-						});
+						const target = mapTableTarget(
+							tr.before,
+							menu.target,
+							tr.mapping,
+							newState,
+						);
 						return target ? { menu: { ...menu, target } } : CLOSED;
 					},
 				},
+				// A document that stops being editable (read-only, a review)
+				// has no menu: one kept open in the state would keep its tint
+				// and come back, taking focus, once it is editable again.
+				view: () => ({
+					update(view) {
+						if (view.editable) return;
+						if (!tableControlsPluginKey.getState(view.state)?.menu) return;
+						view.dispatch(
+							view.state.tr.setMeta(tableControlsPluginKey, CLOSED),
+						);
+					},
+				}),
 				props: {
 					decorations(state) {
 						return highlight(
@@ -251,6 +296,29 @@ export const TableControlsExtension = Extension.create({
 					);
 					return true;
 				},
+			openTableMenuAtCaret:
+				() =>
+				({ state, view, tr, dispatch }) => {
+					if (!view.editable || !state.selection.empty) return false;
+					const target = tableTargetAt(state);
+					if (!target) return false;
+					let coords: { left: number; bottom: number };
+					try {
+						coords = view.coordsAtPos(state.selection.head);
+					} catch {
+						return false;
+					}
+					dispatch?.(
+						tr.setMeta(tableControlsPluginKey, {
+							menu: {
+								axis: "cell",
+								target,
+								point: { x: coords.left, y: coords.bottom },
+							},
+						}),
+					);
+					return true;
+				},
 			closeTableMenu:
 				() =>
 				({ state, tr, dispatch }) => {
@@ -281,6 +349,9 @@ export const TableControlsExtension = Extension.create({
 				commands().moveTableColumnLeft() || inTable(),
 			[keys.moveColumnRight]: () =>
 				commands().moveTableColumnRight() || inTable(),
+			// The platforms' key for a context menu. The menu key itself
+			// arrives as a `contextmenu` event, which `TableControls` handles.
+			"Shift-F10": () => commands().openTableMenuAtCaret(),
 		};
 	},
 });
