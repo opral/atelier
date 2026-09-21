@@ -17,9 +17,9 @@ function editorFor(markdown: string) {
 	editors.push(editor);
 	return editor;
 }
-function key(editor: Editor, key: string, init: KeyboardEventInit = {}) {
+function key(editor: Editor, name: string, init: KeyboardEventInit = {}) {
 	const event = new KeyboardEvent("keydown", {
-		key,
+		key: name,
 		bubbles: true,
 		cancelable: true,
 		...init,

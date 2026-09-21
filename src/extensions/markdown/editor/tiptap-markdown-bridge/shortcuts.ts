@@ -469,7 +469,7 @@ export const MarkdownWcShortcuts = Extension.create({
 						const horizontalRule = (state.schema.nodes as any).horizontalRule;
 						const trailingParagraph = (state.schema.nodes as any).paragraph;
 						return commands.command(
-							({ state, tr, dispatch, commands }: any) => {
+							({ state: chained, tr, dispatch, commands: chain }: any) => {
 								// In an empty list item the dashes mean a rule under the list,
 								// as in Notion, not a rule inside the item: the item leaves
 								// every list it is in first, splitting a list around it.
@@ -482,8 +482,8 @@ export const MarkdownWcShortcuts = Extension.create({
 										// The command state refreshes its selection only when its
 										// `tr` is read; without that the next lift works from the
 										// selection before the previous one.
-										void state.tr;
-										if (!commands.liftListItem("listItem")) return false;
+										void chained.tr;
+										if (!chain.liftListItem("listItem")) return false;
 									}
 								}
 								const selectionFrom = tr.selection.$from;
