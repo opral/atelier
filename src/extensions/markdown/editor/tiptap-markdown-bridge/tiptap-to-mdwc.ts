@@ -97,7 +97,11 @@ function anchorHardBreakOnlyParagraph(children: any[]): any[] {
 
 function pmBlockToAst(
 	node: PMNode,
-	options: { preserveEmptyParagraph?: boolean } = {},
+	options: {
+		preserveEmptyParagraph?: boolean;
+		/** A list that directly follows a paragraph line in a tight item. */
+		followsParagraph?: boolean;
+	} = {},
 ): any {
 	switch (node.type) {
 		case "paragraph":
@@ -150,7 +154,11 @@ function pmBlockToAst(
 				type: "list",
 				ordered,
 				data: listData.data,
-				children: (node.content || []).map((child) => pmBlockToAst(child)),
+				children: (node.content || []).map((child, index) =>
+					pmBlockToAst(child, {
+						followsParagraph: index === 0 && options.followsParagraph,
+					}),
+				),
 			};
 			if (spread !== undefined) base.spread = spread;
 			if (ordered && node.attrs?.start != null && node.attrs.start !== 1)
@@ -171,14 +179,24 @@ function pmBlockToAst(
 				// An item whose own line is empty but that still has children
 				// keeps that empty line: without it the marker and the nested
 				// list collapse into one another.
+				// An empty item that opens a list right under a paragraph line
+				// keeps its placeholder too: a bare "-" there reads back as a
+				// setext underline that turns the paragraph into a heading, and
+				// an empty "1." as more paragraph text.
 				children: (omitLeadingScaffold ? content.slice(1) : content).map(
 					(child, index, items) =>
 						pmBlockToAst(child, {
 							preserveEmptyParagraph:
 								index === 0 &&
-								items.length > 1 &&
+								(items.length > 1 ||
+									(options.followsParagraph === true &&
+										typeof node.attrs?.checked !== "boolean")) &&
 								child.type === "paragraph" &&
 								!pmInlineToMd(child.content || []).length,
+							followsParagraph:
+								listItemData.spread !== true &&
+								index > 0 &&
+								items[index - 1]?.type === "paragraph",
 						}),
 				),
 			};

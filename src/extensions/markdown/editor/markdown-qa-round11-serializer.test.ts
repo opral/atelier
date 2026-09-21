@@ -446,3 +446,64 @@ test("cells past the header's width are kept, and the header is not widened", as
 		await typeAfter("| a | b |\n|---|---|\n| 1 | 2 | 3 |\n| x | y |\n", "1"),
 	).toBe("| a  | b |\n| -- | - |\n| 1Z | 2 | 3 |\n| x  | y |\n");
 });
+
+describe("an empty nested item right under its parent's text", () => {
+	const nested = (list: "bulletList" | "orderedList", checked?: boolean) =>
+		editorFor({
+			type: "doc",
+			content: [
+				{
+					type: "bulletList",
+					content: [
+						{
+							type: "listItem",
+							content: [
+								{
+									type: "paragraph",
+									content: [{ type: "text", text: "parent" }],
+								},
+								{
+									type: list,
+									content: [
+										{
+											type: "listItem",
+											...(checked === undefined ? {} : { attrs: { checked } }),
+											content: [{ type: "paragraph" }],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+
+	test.each([["bulletList"], ["orderedList"]] as const)(
+		"a %s child round-trips without changing the parent",
+		(list) => {
+			const editor = nested(list);
+			const markdown = buildMarkdownFromEditor(editor);
+			const reloaded = editorFor(
+				astToTiptapDoc(parseMarkdown(markdown)) as JSONContent,
+			);
+			expect(reloaded.getJSON().content?.[0]?.type, markdown).toBe(
+				"bulletList",
+			);
+			expect(buildMarkdownFromEditor(reloaded)).toBe(markdown);
+			expect(reloaded.state.doc.toString()).toBe(editor.state.doc.toString());
+		},
+	);
+
+	test("pressing Enter then Tab under a parent saves a list, not a heading", () => {
+		const editor = editorFor(
+			astToTiptapDoc(parseMarkdown("- parent")) as JSONContent,
+		);
+		editor.commands.setTextSelection(textPosition(editor, "parent") + 6);
+		editor.commands.splitListItem("listItem");
+		editor.commands.sinkListItem("listItem");
+		const markdown = buildMarkdownFromEditor(editor);
+		expect(parseMarkdown(markdown).children[0]?.type, markdown).toBe("list");
+		expect(throughEditor(markdown)).toBe(markdown);
+	});
+});
