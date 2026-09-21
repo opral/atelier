@@ -311,3 +311,38 @@ describe("undo after Enter and typing", () => {
 		expect(md(editor)).toBe("- a\n-\n");
 	});
 });
+describe("Tab and Shift-Tab in a code block", () => {
+	test("Tab over selected lines indents them instead of replacing them", () => {
+		const editor = editorFor("```js\nif (a) {\nfoo();\n}\n```\n");
+		const start = 1 + "if (a) {\n".length;
+		editor.view.dispatch(
+			editor.state.tr.setSelection(
+				TextSelection.create(editor.state.doc, 1, start + 6),
+			),
+		);
+		expect(key(editor, "Tab")).toBe(true);
+		expect(md(editor)).toBe("```js\n\tif (a) {\n\tfoo();\n}\n```\n");
+	});
+	test("Shift-Tab outdents the line and keeps focus in the document", () => {
+		const editor = editorFor("```js\n\tfoo();\n```\n");
+		caret(editor, "\tfoo();", 3);
+		expect(key(editor, "Tab", { shiftKey: true })).toBe(true);
+		expect(md(editor)).toBe("```js\nfoo();\n```\n");
+	});
+	test("Shift-Tab over selected lines outdents each of them", () => {
+		const editor = editorFor("```js\n\ta();\n  b();\nc();\n```\n");
+		const code = "\ta();\n  b();\nc();";
+		editor.view.dispatch(
+			editor.state.tr.setSelection(
+				TextSelection.create(editor.state.doc, 2, 1 + code.length),
+			),
+		);
+		expect(key(editor, "Tab", { shiftKey: true })).toBe(true);
+		expect(md(editor)).toBe("```js\na();\nb();\nc();\n```\n");
+	});
+	test("Shift-Tab in a plain paragraph is consumed like Tab", () => {
+		const editor = editorFor("para\n");
+		caret(editor, "para", 0);
+		expect(key(editor, "Tab", { shiftKey: true })).toBe(true);
+	});
+});

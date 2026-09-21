@@ -887,6 +887,47 @@ export const MarkdownWcShortcuts = Extension.create({
 			}
 			return false;
 		};
+		/**
+		 * Tab over several lines of code indents each of them, the way a code
+		 * editor does, instead of replacing them with one tab; Shift-Tab takes
+		 * one indent off each line the selection touches, the caret's line
+		 * when it is collapsed. The indent is the tab Tab types; two spaces
+		 * (the view's tab size) count as one on the way out.
+		 */
+		const indentCodeLines = (direction: -1 | 1) => {
+			const { state, view } = this.editor;
+			const { $from, $to } = state.selection;
+			if ($from.parent.type.name !== "codeBlock" || !$from.sameParent($to)) {
+				return false;
+			}
+			const text = $from.parent.textContent;
+			const fromOffset = $from.parentOffset;
+			const toOffset = $to.parentOffset;
+			if (direction > 0 && !text.slice(fromOffset, toOffset).includes("\n")) {
+				return false;
+			}
+			const lineStarts: number[] = [];
+			let lineStart = text.lastIndexOf("\n", fromOffset - 1) + 1;
+			for (;;) {
+				lineStarts.push(lineStart);
+				const lineEnd = text.indexOf("\n", lineStart);
+				// A selection that ends at the start of a line leaves that line.
+				if (lineEnd < 0 || lineEnd + 1 >= toOffset) break;
+				lineStart = lineEnd + 1;
+			}
+			const start = $from.start();
+			const tr = state.tr;
+			for (const offset of lineStarts.reverse()) {
+				if (direction > 0) {
+					tr.insertText("\t", start + offset);
+					continue;
+				}
+				const indent = /^(\t| {1,2})/.exec(text.slice(offset))?.[0];
+				if (indent) tr.delete(start + offset, start + offset + indent.length);
+			}
+			if (tr.docChanged) view.dispatch(tr.scrollIntoView());
+			return true;
+		};
 		const keys: Record<string, () => boolean> = {
 			// Bold / Italic / Strike
 			"Mod-b": () => this.editor.chain().focus().toggleMark("bold").run(),
@@ -925,6 +966,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				const { state } = this.editor;
 				const $from: any = state.selection.$from;
 				// A code block indents, as in Notion (tab-size 2 in the view).
+				if (indentCodeLines(1)) return true;
 				if ($from.parent?.type?.name === "codeBlock") {
 					return this.editor.chain().focus().insertContent("\t").run();
 				}
@@ -954,7 +996,12 @@ export const MarkdownWcShortcuts = Extension.create({
 			},
 
 			"Shift-Tab": () => {
-				return outdentListItem();
+				if (focusIsOnEditorControl(this.editor.view)) return false;
+				if (indentCodeLines(-1)) return true;
+				// Like Tab, the key stays in the document when there is nothing
+				// to outdent; focus leaving backwards is no better than forwards.
+				outdentListItem();
+				return true;
 			},
 
 			"Shift-Enter": insertHardBreak,
