@@ -642,8 +642,12 @@ function delimiterLike(
 	return spaced ? `| ${inner} |` : `|${inner}|`;
 }
 
-/** Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. */
+/**
+ * Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. A file that
+ * mixes the two keeps what each reused line had, rather than become CRLF
+ * throughout because one block was edited.
+ */
 function matchLineEndings(original: string, text: string): string {
-	if (!original.includes("\r\n")) return text;
+	if (!original.includes("\r\n") || /(^|[^\r])\n/.test(original)) return text;
 	return text.replace(/\r?\n/g, "\r\n");
 }

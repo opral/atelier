@@ -408,4 +408,11 @@ describe("the saved file keeps what the edit did not touch", () => {
 			"x\n\n   | a | b |\n   |---|---|\n   | 1 | 2 |\n   |  |  |\n\ny\n",
 		);
 	});
+
+	test("a file mixing line endings keeps each untouched line's", async () => {
+		const { editor, saved } = await open("x\r\n\r\ny\n\n| a |\n|---|\n| 1 |\n");
+		caretIn(editor, "1");
+		editor.commands.addTableRowAfter();
+		expect(await saved()).toBe("x\r\n\r\ny\n\n| a |\n|---|\n| 1 |\n|  |\n");
+	});
 });
