@@ -109,7 +109,7 @@ describe("marks nest by span, not in a fixed order", () => {
 
 	test("a line break inside a link does not split it", async () => {
 		const saved = await typeAfter("[a  \nb](u) end", "end");
-		expect(saved).toBe("[a\\\nb](u) endZ\n");
+		expect(saved).toBe("[a  \nb](u) endZ\n");
 	});
 
 	test("random mark toggles always round-trip", () => {
@@ -444,7 +444,7 @@ describe("characters keep their spelling in an edited block", () => {
 test("cells past the header's width are kept, and the header is not widened", async () => {
 	expect(
 		await typeAfter("| a | b |\n|---|---|\n| 1 | 2 | 3 |\n| x | y |\n", "1"),
-	).toBe("| a  | b |\n| -- | - |\n| 1Z | 2 | 3 |\n| x  | y |\n");
+	).toBe("| a | b |\n|---|---|\n| 1Z | 2 | 3 |\n| x | y |\n");
 });
 
 describe("an empty nested item right under its parent's text", () => {
@@ -505,5 +505,48 @@ describe("an empty nested item right under its parent's text", () => {
 		const markdown = buildMarkdownFromEditor(editor);
 		expect(parseMarkdown(markdown).children[0]?.type, markdown).toBe("list");
 		expect(throughEditor(markdown)).toBe(markdown);
+	});
+});
+
+describe("an edited block keeps its author's syntax choices", () => {
+	test.each([
+		["* a\n* b text", "* a\n* b textZ\n"],
+		["+ a\n+ b text", "+ a\n+ b textZ\n"],
+		["1. a\n1. b\n1. c text", "1. a\n1. b\n1. c textZ\n"],
+		["1) a\n2) b text", "1) a\n2) b textZ\n"],
+		["-   a\n-   b text", "-   a\n-   b textZ\n"],
+		["* a\n  - n\n* b text", "* a\n  - n\n* b textZ\n"],
+		["~~~js\ncode\n~~~\n\nPara text", "~~~js\ncode\n~~~\n\nPara textZ\n"],
+		["line one  \nline two text", "line one  \nline two textZ\n"],
+		["Para text\n\n---\n\nx\n", "Para textZ\n\n---\n\nx\n"],
+	])("%j", async (markdown, expected) => {
+		expect(await typeAfter(markdown, "text")).toBe(expected);
+	});
+
+	test("a setext heading stays setext", async () => {
+		expect(await typeAfter("Title text\n=====\n\nx\n", "text")).toBe(
+			"Title textZ\n===========\n\nx\n",
+		);
+	});
+
+	test("a rule first in the file is not written as a frontmatter fence", () => {
+		// "---" there, with another "---" below, would open YAML frontmatter.
+		expect(throughEditor("---\n\nx\n")).toBe("***\n\nx\n");
+		expect(throughEditor("x\n\n---\n")).toBe("x\n\n---\n");
+	});
+
+	test("editing one cell of an unaligned table leaves the other rows", async () => {
+		expect(
+			await typeAfter(
+				"| a | b |\n|:--|---|\n| 1 | 2 |\n| long cell | y |\n",
+				"1",
+			),
+		).toBe("| a | b |\n|:--|---|\n| 1Z | 2 |\n| long cell | y |\n");
+	});
+
+	test("an aligned table is re-aligned when a cell grows", async () => {
+		expect(
+			await typeAfter("| a   | b |\n| --- | - |\n| 1   | 2 |\n", "1", "Zzzz"),
+		).toBe("| a     | b |\n| ----- | - |\n| 1Zzzz | 2 |\n");
 	});
 });

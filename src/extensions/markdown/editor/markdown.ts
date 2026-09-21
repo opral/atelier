@@ -30,7 +30,157 @@ export function parseMarkdownSourceRaw(markdown: string): AstRoot {
 	});
 	restoreEmptyTaskItems(ast, markdown);
 	markLiteralAutolinks(ast, markdown);
+	recordSourceStyle(ast, markdown);
 	return ast;
+}
+
+/**
+ * How a block was spelled where Markdown offers a choice: the bullet, the
+ * ordered delimiter and numbering, a setext heading, a `~~~` fence, the
+ * thematic break, a two-space line break. It rides along in the node's data
+ * so an edited block is written the way its author wrote it rather than in
+ * the serializer's house style (`* a` became `- a`, `1) 1) 1)` became
+ * `1. 2. 3.`).
+ */
+export const SOURCE_STYLE_DATA_KEY = "__atelier_style";
+
+type SourceStyle = {
+	bullet?: string;
+	bulletOrdered?: string;
+	incrementListMarker?: boolean;
+	listItemIndent?: "tab";
+	setext?: boolean;
+	fence?: string;
+	rule?: string;
+	ruleRepetition?: number;
+	ruleSpaces?: boolean;
+	breakSpelling?: string;
+};
+
+function recordSourceStyle(node: any, source: string): void {
+	if (!node || typeof node !== "object") return;
+	const style = node.position ? sourceStyle(node, source) : null;
+	if (style && Object.keys(style).length > 0)
+		node.data = { ...node.data, [SOURCE_STYLE_DATA_KEY]: style };
+	for (const child of Array.isArray(node.children) ? node.children : [])
+		recordSourceStyle(child, source);
+}
+
+function sourceStyle(node: any, source: string): SourceStyle | null {
+	const text = source.slice(
+		node.position.start.offset,
+		node.position.end.offset,
+	);
+	switch (node.type) {
+		case "list": {
+			const items = node.children ?? [];
+			const marker = (item: any) =>
+				item?.position
+					? /^(?:([*+-])|(\d{1,9})([.)]))([ \t]*)/.exec(
+							source.slice(
+								item.position.start.offset,
+								item.position.end.offset,
+							),
+						)
+					: null;
+			const first = marker(items[0]);
+			if (!first) return null;
+			const style: SourceStyle = {};
+			// Recorded even when it is the default, so a nested "-" list is
+			// not written with its parent's "*".
+			if (first[1]) style.bullet = first[1];
+			if (first[3] === ")") style.bulletOrdered = ")";
+			const second = marker(items[1]);
+			if (first[2] && second?.[2] && Number(second[2]) === Number(first[2]))
+				style.incrementListMarker = false;
+			// `-   item`: the content starts at the next tab stop.
+			const width = first[0].length;
+			if (first[4]!.length > 1 && width % 4 === 0 && !first[4]!.includes("\t"))
+				style.listItemIndent = "tab";
+			return style;
+		}
+		case "heading":
+			return node.position.end.line > node.position.start.line
+				? { setext: true }
+				: null;
+		case "code":
+			return /^[ \t]*~/.test(text) ? { fence: "~" } : null;
+		case "thematicBreak": {
+			const marks = text.replace(/[ \t]/g, "");
+			return {
+				rule: marks[0],
+				ruleRepetition: marks.length,
+				ruleSpaces: /[*_-][ \t]+[*_-]/.test(text),
+			};
+		}
+		case "break":
+			return text.startsWith("\\") ? null : { breakSpelling: text };
+		default:
+			return null;
+	}
+}
+
+function styleOf(node: any): SourceStyle {
+	return node?.data?.[SOURCE_STYLE_DATA_KEY] ?? {};
+}
+
+/** Runs a default handler with the node's source style as its options. */
+function withSourceStyle(
+	handler: (node: any, parent: any, state: any, info: any) => string,
+	options: (node: any, parent: any) => Record<string, unknown>,
+) {
+	return (node: any, parent: any, state: any, info: any): string => {
+		const overrides = options(node, parent);
+		const saved = { ...state.options };
+		Object.assign(state.options, overrides);
+		try {
+			return handler(node, parent, state, info);
+		} finally {
+			state.options = Object.assign(state.options, saved);
+			for (const key of Object.keys(overrides))
+				if (!(key in saved)) delete state.options[key];
+		}
+	};
+}
+
+function sourceStyleToMarkdown(): any {
+	return {
+		handlers: {
+			list: withSourceStyle(defaultHandlers.list, (node) => {
+				const { bullet, bulletOrdered, incrementListMarker, listItemIndent } =
+					styleOf(node);
+				return Object.fromEntries(
+					Object.entries({
+						bullet,
+						bulletOrdered,
+						incrementListMarker,
+						listItemIndent,
+					}).filter(([, value]) => value !== undefined),
+				);
+			}),
+			heading: withSourceStyle(defaultHandlers.heading, (node) =>
+				styleOf(node).setext ? { setext: true } : {},
+			),
+			code: withSourceStyle(defaultHandlers.code, (node) =>
+				styleOf(node).fence ? { fence: styleOf(node).fence } : {},
+			),
+			thematicBreak: withSourceStyle(
+				defaultHandlers.thematicBreak,
+				(node, parent) => {
+					const { rule, ruleRepetition, ruleSpaces } = styleOf(node);
+					// A "---" first line would open a frontmatter block.
+					if (!rule || (rule === "-" && parent?.children?.[0] === node))
+						return {};
+					return { rule, ruleRepetition, ruleSpaces };
+				},
+			),
+			break: (node: any, parent: any, state: any, info: any): string => {
+				const spelling = styleOf(node).breakSpelling;
+				const value = defaultHandlers.break(node, parent, state, info);
+				return spelling && value === "\\\n" ? spelling : value;
+			},
+		},
+	};
 }
 
 /** Marks a link written as a bare URL, `www.` domain or email address. */
@@ -195,6 +345,7 @@ function serializeOptions(): any {
 			gfmToMarkdown(),
 			taskListItemToMarkdown(),
 			frontmatterToMarkdown(["yaml"]),
+			sourceStyleToMarkdown(),
 		],
 		bullet: "-",
 		listItemIndent: "one",

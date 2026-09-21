@@ -96,7 +96,8 @@ describe("markdown parser", () => {
 
 		expect(inline).toContainEqual({ type: "html", value: "<kbd>" });
 		expect(inline).toContainEqual({ type: "html", value: "</kbd>" });
-		expect(inline).toContainEqual({ type: "break" });
+		// The break also carries its source spelling (two spaces) in data.
+		expect(inline).toContainEqual(expect.objectContaining({ type: "break" }));
 	});
 
 	test("parses block HTML", () => {

@@ -2,6 +2,7 @@ import {
 	minimizeEscapes,
 	parseMarkdownSource,
 	parseMarkdownSourceRaw,
+	normalizeAst,
 	restoreCharacterReferences,
 	serializeAst,
 } from "./markdown";
@@ -138,7 +139,7 @@ export function preserveMarkdownSource(
 			return (
 				(pair === undefined
 					? written
-					: restoreExcessTableCells(
+					: restoreTableSource(
 							restoreCharacterReferences(written, originals[pair]!.text),
 							originals[pair]!.text,
 						)) + (between ? originals[pair]!.gap : segment.gap)
@@ -211,34 +212,80 @@ function segments(text: string, nodes: readonly any[]): Segment[] {
 }
 
 /**
+ * An edited table keeps the source of every row the edit did not touch.
  * Cells past the header's width are not part of a GFM table and the editor
- * drops them, but they are still the author's text. Put each row's extra
- * cells back after the edited row, as long as the table has the same rows.
+ * drops them, but they are the author's text: they come back after their
+ * row. A table whose source is not column-aligned stays unaligned, so
+ * editing one cell no longer re-pads every row.
  */
-function restoreExcessTableCells(markdown: string, source: string): string {
+function restoreTableSource(markdown: string, source: string): string {
 	const sourceTable = parseMarkdownSourceRaw(source).children[0];
-	if (sourceTable?.type !== "table") return markdown;
-	const width = sourceTable.children[0]?.children.length ?? 0;
-	const excess = sourceTable.children.map((row: any) =>
-		row.children.length > width
-			? source.slice(
-					row.children[width].position.start.offset,
-					row.position.end.offset,
-				)
-			: "",
-	);
-	if (excess.every((cells: string) => cells === "")) return markdown;
 	const table = parseMarkdownSourceRaw(markdown).children[0];
-	if (table?.type !== "table" || table.children.length !== excess.length)
+	if (sourceTable?.type !== "table" || table?.type !== "table") return markdown;
+	const width = sourceTable.children[0]?.children.length ?? 0;
+	if (
+		table.children.length !== sourceTable.children.length ||
+		table.children[0]?.children.length !== width
+	)
 		return markdown;
-	let out = markdown;
-	for (let index = table.children.length - 1; index >= 0; index--) {
-		if (!excess[index]) continue;
-		const end = table.children[index].position.end.offset;
-		const row = out.slice(0, end).replace(/\|[\t ]*$/, "");
-		out = row + excess[index] + out.slice(end);
-	}
-	return out;
+	const slice = (text: string, node: any) =>
+		text.slice(node.position.start.offset, node.position.end.offset);
+	const lines = (text: string, node: any) => slice(text, node).split("\n");
+	const sourceLines = lines(source, sourceTable);
+	// A table padded so its columns line up is re-aligned as a whole when a
+	// cell changes, as before; any other table keeps its untouched rows.
+	const aligned =
+		new Set(sourceLines.map((line) => line.trimEnd().length)).size === 1 &&
+		sourceLines.some((line) => /\S {2,}\||\| {2,}\S/.test(line));
+	const meaning = (row: any) =>
+		JSON.stringify(
+			normalizeAst({ type: "root", children: row.children.slice(0, width) })
+				.children,
+		);
+	const rows = table.children.map((row: any, index: number) => {
+		const sourceRow = sourceTable.children[index];
+		if (!aligned && meaning(row) === meaning(sourceRow))
+			return slice(source, sourceRow);
+		const written = aligned
+			? slice(markdown, row)
+			: `| ${row.children
+					.map((cell: any) =>
+						slice(markdown, cell).replace(/^\|/, "").replace(/\|$/, "").trim(),
+					)
+					.join(" | ")} |`;
+		const excess =
+			sourceRow.children.length > width
+				? source.slice(
+						sourceRow.children[width].position.start.offset,
+						sourceRow.position.end.offset,
+					)
+				: "";
+		return excess ? written.replace(/\|[\t ]*$/, "") + excess : written;
+	});
+	const sameAlign =
+		JSON.stringify(table.align ?? []) ===
+		JSON.stringify(sourceTable.align ?? []);
+	const delimiter = aligned
+		? lines(markdown, table)[1]
+		: sameAlign
+			? sourceLines[1]
+			: `| ${(table.align ?? [])
+					.map((align: string | null) =>
+						align === "left"
+							? ":--"
+							: align === "right"
+								? "--:"
+								: align === "center"
+									? ":-:"
+									: "---",
+					)
+					.join(" | ")} |`;
+	if (delimiter === undefined) return markdown;
+	return (
+		markdown.slice(0, table.position.start.offset) +
+		[rows[0], delimiter, ...rows.slice(1)].join("\n") +
+		markdown.slice(table.position.end.offset)
+	);
 }
 
 /** Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. */
