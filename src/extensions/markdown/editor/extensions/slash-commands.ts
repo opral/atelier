@@ -65,6 +65,18 @@ export const SlashCommandsExtension = Extension.create<SlashCommandsOptions>({
 							};
 						}
 
+						// The dismissed slash moves with the text around it, and is
+						// forgotten once it is gone: a position left behind blocked
+						// every slash later typed there, even on an emptied line.
+						if (prev.dismissedAt != null && tr.docChanged) {
+							const mapped = tr.mapping.mapResult(prev.dismissedAt);
+							const stillSlash =
+								!mapped.deleted &&
+								mapped.pos < newState.doc.content.size &&
+								newState.doc.textBetween(mapped.pos, mapped.pos + 1) === "/";
+							prev = { ...prev, dismissedAt: stillSlash ? mapped.pos : null };
+						}
+
 						// If not active and no text input, keep inactive
 						if (!prev.active && !tr.docChanged) {
 							return prev;

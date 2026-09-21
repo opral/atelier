@@ -7,7 +7,10 @@ import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
 import { buildMarkdownFromEditor } from "./build-markdown-from-editor";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
-import { SlashCommandsExtension } from "./extensions/slash-commands";
+import {
+	SlashCommandsExtension,
+	slashCommandsPluginKey,
+} from "./extensions/slash-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import {
 	BLOCK_COMMANDS,
@@ -323,5 +326,41 @@ describe("the block type the toolbar names", () => {
 		const editor = load("## alpha\n\nbeta\n");
 		select(editor, "alpha", "beta");
 		expect(getActiveBlock(editor)).toBe("mixed");
+	});
+});
+
+describe("the slash menu after Escape", () => {
+	const menuOpen = (editor: Editor) =>
+		slashCommandsPluginKey.getState(editor.state)?.active;
+
+	test("a new slash on the same line opens it again", () => {
+		const editor = load("alpha\n");
+		const end = editor.state.doc.content.size;
+		editor.commands.insertContentAt(end, { type: "paragraph" });
+		editor.commands.setTextSelection(end + 1);
+		type(editor, "/");
+		expect(menuOpen(editor)).toBe(true);
+		key(editor, "Escape");
+		expect(menuOpen(editor)).toBe(false);
+		// Typing on after Escape keeps it closed.
+		type(editor, "x");
+		expect(menuOpen(editor)).toBe(false);
+		// Backspace twice, as the browser does it natively.
+		const { from } = editor.state.selection;
+		editor.view.dispatch(editor.state.tr.delete(from - 2, from));
+		expect(editor.state.selection.$from.parent.textContent).toBe("");
+		type(editor, "/");
+		expect(menuOpen(editor)).toBe(true);
+	});
+
+	test("the dismissed slash stays dismissed when text before it changes", () => {
+		const editor = load("alpha\n");
+		editor.commands.setTextSelection(pos(editor, "alpha", true));
+		type(editor, " /");
+		key(editor, "Escape");
+		editor.view.dispatch(editor.state.tr.insertText("A", 1));
+		expect(menuOpen(editor)).toBe(false);
+		type(editor, "q");
+		expect(menuOpen(editor)).toBe(false);
 	});
 });
