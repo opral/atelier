@@ -476,13 +476,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 			return node.type.name === "paragraph" ? "Press ‘/’ for commands" : "";
 		},
+		// When it shows is the stylesheet's call (src/index.css): on the empty
+		// line under a focused caret, and in an empty document even unfocused.
 		showOnlyWhenEditable: true,
 		showOnlyCurrent: true,
 		includeChildren: false,
-		shouldShow: ({ editor, node }: { editor: Editor; node: any }) =>
-			editor.isFocused &&
-			(node.type.name === "paragraph" || node.type.name === "heading") &&
-			node.childCount === 0,
 	};
 
 	const markdownExtensions = MarkdownWc({
