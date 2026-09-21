@@ -409,3 +409,16 @@ describe("a table deleted from inside", () => {
 		expect(md(editor)).toBe(original);
 	});
 });
+
+describe("Enter at the start of an item's continuation line", () => {
+	test("gives the line an item of its own and loses nothing on reload", () => {
+		const editor = editorFor("- a\n\n  b\n");
+		caret(editor, "b", 0);
+		expect(key(editor, "Enter")).toBe(true);
+		const out = md(editor);
+		expect(out).toBe("- a\n- b\n");
+		expect(md(editorFor(out))).toBe(out);
+		expect(editor.state.selection.$from.parent.textContent).toBe("b");
+		expect(editor.state.selection.$from.parentOffset).toBe(0);
+	});
+});

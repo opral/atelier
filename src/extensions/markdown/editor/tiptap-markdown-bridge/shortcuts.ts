@@ -1379,6 +1379,24 @@ export const MarkdownWcShortcuts = Extension.create({
 					: item.attrs;
 				if (
 					state.selection.empty &&
+					paragraphIndex > 0 &&
+					$from.parentOffset === 0 &&
+					$from.depth === itemDepth + 1
+				) {
+					// Enter at the start of a continuation line gives the line an
+					// item of its own. A split there would leave an empty line at
+					// the end of the item above, which Markdown cannot keep.
+					const types = [{ type: item.type, attrs: newItemAttrs }];
+					const at = $from.before();
+					if (canSplit(state.doc, at, 1, types)) {
+						this.editor.view.dispatch(
+							state.tr.split(at, 1, types).scrollIntoView(),
+						);
+						return true;
+					}
+				}
+				if (
+					state.selection.empty &&
 					paragraphIndex === 0 &&
 					$from.parentOffset === 0
 				) {
