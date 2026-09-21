@@ -3,6 +3,7 @@ import { deleteSelectedTableText } from "./extensions/table-selection";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
+import { markdownFromClipboardHtml } from "./clipboard-html";
 import type { StoredPastedMarkdownImage } from "./store-pasted-image";
 import { closeHistory } from "@tiptap/pm/history";
 
@@ -92,8 +93,10 @@ export function handlePaste(args: {
 		});
 	}
 
-	const text: string = event?.clipboardData?.getData?.("text/plain") ?? "";
-	if (!text) return false;
+	const plainText: string = event?.clipboardData?.getData?.("text/plain") ?? "";
+	const html: string = event?.clipboardData?.getData?.("text/html") ?? "";
+	if (!plainText && !html.trim()) return false;
+	let text = plainText;
 
 	// A URL pasted over selected text links that text instead of replacing it.
 	const pastedUrl = /^https?:\/\/\S+$/.test(text.trim()) ? text.trim() : null;
@@ -142,6 +145,11 @@ export function handlePaste(args: {
 			editor.view.dispatch(editor.state.tr.insertText(text));
 			return true;
 		}
+		// Rich text from other apps: its formatting lives in the HTML, and its
+		// plain text is not Markdown.
+		const htmlMarkdown = markdownFromClipboardHtml(html);
+		if (htmlMarkdown !== null) text = pastedHtmlMarkdown(htmlMarkdown, text);
+		if (!text) return false;
 		const ast = parseMarkdown(text);
 		const tiptapDoc = astToTiptapDoc(ast) as any;
 		const blocks = tiptapDoc?.content ?? [];
@@ -233,6 +241,19 @@ export function handlePaste(args: {
 	} finally {
 		editor.view?.dispatch(closeHistory(editor.state.tr));
 	}
+}
+
+/**
+ * A single line of converted HTML is an inline fragment: drop the block's
+ * newline and keep the spaces the plain text had around it, which HTML
+ * whitespace rules and Markdown both trim.
+ */
+function pastedHtmlMarkdown(markdown: string, plainText: string): string {
+	const line = markdown.replace(/\n$/, "");
+	if (line.includes("\n")) return markdown;
+	const leading = plainText.match(/^[ \t]+/)?.[0] ?? "";
+	const trailing = plainText.match(/[ \t]+$/)?.[0] ?? "";
+	return leading + line + trailing;
 }
 
 /**
