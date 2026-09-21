@@ -224,11 +224,25 @@ function TipTapEditorFileContent({
 		(lix) => selectMarkdownFileDelivery(lix, activeBranchId, activeFileId),
 		{ evictOnUnmount: true },
 	);
+	const sourceRow =
+		sourceFileResult.status === "success"
+			? sourceFileResult.rows[0]
+			: undefined;
+	// Decoded once, here. Every save delivers a new row, and the development
+	// build's render logging walks a byte array handed down as a prop one
+	// index at a time, in each component it passes through.
+	const sourceFile = useMemo<MarkdownFileDelivery | undefined>(
+		() =>
+			sourceRow && {
+				...sourceRow,
+				content: decodeMarkdownData(sourceRow.content),
+			},
+		[sourceRow],
+	);
 	if (sourceFileResult.status === "pending") {
 		return <TipTapEditorLoadingState className={props.className} />;
 	}
 	if (sourceFileResult.status === "error") throw sourceFileResult.error;
-	const sourceFile = sourceFileResult.rows[0];
 
 	return (
 		<TipTapEditorSourceBoundary
