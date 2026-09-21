@@ -9,11 +9,11 @@ import { serializeAst } from "./markdown";
  * lossy rendering, and reading it as Markdown both drops the formatting and
  * misreads prose ("1986. A great year." is not a list). The walker keeps what
  * Markdown can express and drops the rest, so the pasted result is exactly
- * what the file saves. Our own copies (and other ProseMirror editors') carry
- * `data-pm-slice`; their text/plain is already Markdown and stays the source.
+ * what the file saves. Our own copies carry OWN_CLIPBOARD_ATTRIBUTE; their
+ * text/plain is already Markdown and stays the source.
  */
 export function markdownFromClipboardHtml(html: string): string | null {
-	if (!html.trim() || /\sdata-pm-slice=/.test(html)) return null;
+	if (!html.trim() || html.includes(OWN_CLIPBOARD_ATTRIBUTE)) return null;
 	if (typeof DOMParser === "undefined") return null;
 	const document = new DOMParser().parseFromString(html, "text/html");
 	const blocks = flowContent(Array.from(document.body.childNodes), NO_MARKS);
@@ -21,6 +21,9 @@ export function markdownFromClipboardHtml(html: string): string | null {
 	const markdown = serializeAst({ type: "root", children: blocks });
 	return markdown.trim() ? markdown : null;
 }
+
+/** Marks the HTML of a copy from this editor (see create-editor.ts). */
+export const OWN_CLIPBOARD_ATTRIBUTE = "data-atelier-markdown";
 
 /**
  * How far a copy from this editor was open at each edge, counted from the
@@ -32,7 +35,10 @@ export function markdownFromClipboardHtml(html: string): string | null {
 export function ownClipboardSliceDepth(
 	html: string,
 ): { readonly openStart: number; readonly openEnd: number } | null {
-	if (!/\sdata-pm-slice=/.test(html) || typeof DOMParser === "undefined")
+	if (
+		!html.includes(OWN_CLIPBOARD_ATTRIBUTE) ||
+		typeof DOMParser === "undefined"
+	)
 		return null;
 	const value = new DOMParser()
 		.parseFromString(html, "text/html")

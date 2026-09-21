@@ -201,12 +201,22 @@ describe("rich HTML paste", () => {
 	});
 
 	test("our own copies keep using their Markdown text", () => {
+		const editor = setup("- [ ] task");
+		select(editor, 0, editor.state.doc.content.size);
+		const data = clip("copy", editor);
+		expect(data["text/html"]).toContain("data-atelier-markdown");
+		const target = setup("");
+		paste(target, data);
+		expect(md(target)).toBe("- [ ] task\n");
+	});
+
+	test("other ProseMirror editors' HTML is converted, not their plain text", () => {
 		const editor = setup("");
 		paste(editor, {
-			"text/html": `<meta charset="utf-8"><p data-pm-slice="1 1 []">hello</p>`,
-			"text/plain": "- [ ] task",
+			"text/html": `<meta charset="utf-8"><p data-pm-slice="1 1 []"><strong>1.</strong> plain</p>`,
+			"text/plain": "1. plain",
 		});
-		expect(md(editor)).toBe("- [ ] task\n");
+		expect(md(editor)).toBe("**1.** plain\n");
 	});
 
 	test("a rich paste is one undo step", () => {
