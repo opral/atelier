@@ -6,6 +6,10 @@ import {
 	type EditorState,
 	type Transaction,
 } from "@tiptap/pm/state";
+import {
+	EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY,
+	LIST_LEADING_PARAGRAPH_DATA_KEY,
+} from "./tiptap-markdown-bridge/mdwc-to-tiptap";
 
 /**
  * Row and column edits for the editor's GFM table.
@@ -214,21 +218,96 @@ function buildTable(
 	);
 }
 
-/** Removes the table, the way Backspace removes an emptied one. */
-function deleteTable(
+/** Containers that exist only for what they hold: emptied, they go too. */
+const HOLLOW_CONTAINERS = new Set([
+	"blockquote",
+	"listItem",
+	"bulletList",
+	"orderedList",
+]);
+
+/** The empty paragraph that opens an item starting with another block. */
+function isListScaffold(node: ProseMirrorNode): boolean {
+	return (
+		node.type.name === "paragraph" &&
+		node.childCount === 0 &&
+		Boolean(node.attrs.data?.[LIST_LEADING_PARAGRAPH_DATA_KEY])
+	);
+}
+
+/**
+ * Where the caret goes once the block at `pos` is gone: the end of the
+ * nearest line of text above, else the start of the one below. Never a
+ * rule, an image or a table selected whole, and never a code block, where
+ * the next key would delete, or type into, something the user did not
+ * point at.
+ */
+function textCaretNear(doc: ProseMirrorNode, pos: number): Selection | null {
+	const takes = (node: ProseMirrorNode) =>
+		node.isTextblock && !node.type.spec.code;
+	let before: number | null = null;
+	doc.nodesBetween(0, pos, (node, nodePos) => {
+		if (!node.isTextblock) return true;
+		if (takes(node) && nodePos + node.nodeSize <= pos)
+			before = nodePos + node.nodeSize - 1;
+		return false;
+	});
+	if (before !== null) return TextSelection.create(doc, before);
+	let after: number | null = null;
+	doc.nodesBetween(pos, doc.content.size, (node, nodePos) => {
+		if (after !== null) return false;
+		if (!node.isTextblock) return true;
+		if (takes(node) && nodePos >= pos) after = nodePos + 1;
+		return false;
+	});
+	return after === null ? null : TextSelection.create(doc, after);
+}
+
+/**
+ * Removes the table at `tablePos`, the way Backspace removes an emptied
+ * one. A quote or list item the table was all of goes with it, rather than
+ * stay behind as a bare `>` or `-`. The caret goes to the nearest line of
+ * text; with none left, to an empty line where the table was.
+ */
+export function deleteTableTransaction(
 	state: EditorState,
 	tablePos: number,
-	table: ProseMirrorNode,
 ): Transaction {
-	const from = tablePos;
-	const to = from + table.nodeSize;
-	const parent = state.doc.resolve(from).parent;
-	const tr =
-		parent.childCount === 1
-			? state.tr.replaceWith(from, to, state.schema.nodes.paragraph!.create())
-			: state.tr.delete(from, to);
-	tr.setSelection(Selection.near(tr.doc.resolve(from), -1));
-	return tr;
+	const table = state.doc.nodeAt(tablePos)!;
+	const $table = state.doc.resolve(tablePos);
+	let from = tablePos;
+	let to = tablePos + table.nodeSize;
+	for (let depth = $table.depth; depth > 0; depth--) {
+		const parent = $table.node(depth);
+		if (!HOLLOW_CONTAINERS.has(parent.type.name)) break;
+		const start = $table.start(depth);
+		let rest = false;
+		parent.forEach((child, offset) => {
+			const childPos = start + offset;
+			if (childPos >= from && childPos < to) return;
+			if (!isListScaffold(child)) rest = true;
+		});
+		if (rest) break;
+		from = $table.before(depth);
+		to = $table.after(depth);
+	}
+	const tr = state.tr.delete(from, to);
+	const container = tr.doc.resolve(from).parent;
+	// A document, or a footnote, cannot be empty: the empty line stands in.
+	const caret = container.childCount > 0 ? textCaretNear(tr.doc, from) : null;
+	if (caret) return tr.setSelection(caret);
+	// With nothing but rules, images and code around, an empty line where
+	// the table was, as Notion leaves one; at the top level it is kept out
+	// of the file until it is typed into.
+	tr.insert(
+		from,
+		state.schema.nodes.paragraph!.create(
+			container.type === tr.doc.type
+				? { data: { [EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY]: true } }
+				: null,
+		),
+	);
+	return tr.setSelection(TextSelection.create(tr.doc, from + 1));
 }
 
 function tableCommand(
@@ -245,7 +324,7 @@ function tableCommand(
 		const { tablePos } = resolved.target;
 		if ("deleteTable" in result.edit) {
 			dispatch(
-				deleteTable(state, tablePos, resolved.table)
+				deleteTableTransaction(state, tablePos)
 					.setMeta(TABLE_EDIT_META, true)
 					.scrollIntoView(),
 			);

@@ -1,6 +1,6 @@
 import { Extension } from "@tiptap/core";
-import { Plugin, Selection, TextSelection } from "@tiptap/pm/state";
-import { isBlankLine } from "../table-commands";
+import { Plugin, TextSelection } from "@tiptap/pm/state";
+import { deleteTableTransaction, isBlankLine } from "../table-commands";
 import { deleteSelectedTableText } from "./table-selection";
 
 /**
@@ -273,20 +273,9 @@ export const TableNavigationExtension = Extension.create({
 				return empty;
 			});
 			if (!empty) return false;
-			const { state, view } = editor;
-			const from = context.tablePos;
-			const to = from + context.table.nodeSize;
-			const parent = context.$from.node(context.tableDepth - 1);
-			const tr =
-				parent.childCount === 1
-					? state.tr.replaceWith(
-							from,
-							to,
-							state.schema.nodes.paragraph.create(),
-						)
-					: state.tr.delete(from, to);
-			tr.setSelection(Selection.near(tr.doc.resolve(from), -1));
-			view.dispatch(tr.scrollIntoView());
+			editor.view.dispatch(
+				deleteTableTransaction(editor.state, context.tablePos).scrollIntoView(),
+			);
 			return true;
 		};
 
