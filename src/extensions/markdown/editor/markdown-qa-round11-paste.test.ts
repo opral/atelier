@@ -549,3 +549,9 @@ describe("footnotes", () => {
 		);
 	});
 });
+
+test("copying from a nested item into the next item gives plain list Markdown", () => {
+	const editor = setup("- parent\n  - child\n- two");
+	select(editor, find(editor, "child").from, find(editor, "two").to);
+	expect(clip("copy", editor)["text/plain"]).toBe("- child\n- two\n");
+});

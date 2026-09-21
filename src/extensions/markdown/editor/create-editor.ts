@@ -220,7 +220,10 @@ function markdownClipboardText(slice: Slice): string {
 	}
 	let markdown = serializeTiptapDocToMarkdown({
 		type: "doc",
-		content: slice.content.toJSON(),
+		content:
+			slice.openStart > 0
+				? liftOpenNestedItems(slice.content.toJSON())
+				: slice.content.toJSON(),
 	});
 	// Blocks cut from the middle of a paragraph keep the spaces at the cut,
 	// so pasting them back rejoins "Body| text" instead of "Bodytext". The
@@ -236,6 +239,30 @@ function markdownClipboardText(slice: Slice): string {
 	if (leading) markdown = leading + markdown;
 	if (trailing) markdown = markdown.replace(/\n$/, "") + trailing;
 	return markdown;
+}
+
+/**
+ * A selection that starts inside a nested list item opens its parent item
+ * without that item's own text, which would serialize as "- - child".
+ * Lift the nested items into the outer list instead.
+ */
+function liftOpenNestedItems(content: JSONContent[]): JSONContent[] {
+	const [list, ...rest] = content;
+	const [item, ...items] = list?.content ?? [];
+	const nested = item?.content?.length === 1 ? item.content[0] : null;
+	if (
+		!list ||
+		!/^(bulletList|orderedList)$/.test(list.type ?? "") ||
+		item?.type !== "listItem" ||
+		!nested ||
+		!/^(bulletList|orderedList)$/.test(nested.type ?? "")
+	)
+		return content;
+	const [lifted] = liftOpenNestedItems([nested]);
+	return [
+		{ ...list, content: [...(lifted?.content ?? []), ...items] },
+		...rest,
+	];
 }
 
 /** The textblock an open slice edge ends in, if the slice is open that far. */
