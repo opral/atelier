@@ -229,3 +229,70 @@ describe("emphasis after opening punctuation", () => {
 		},
 	);
 });
+
+describe("undo right after an inline autoformat", () => {
+	test.each([
+		[
+			"hello **b**",
+			[
+				["hello ", ""],
+				["b", "bold"],
+			],
+		],
+		[
+			"run `c`",
+			[
+				["run ", ""],
+				["c", "code"],
+			],
+		],
+		[
+			"go [a](b.com)",
+			[
+				["go ", ""],
+				["a", "link:https://b.com"],
+			],
+		],
+		[
+			"x https://a.b ",
+			[
+				["x ", ""],
+				["https://a.b", "link:https://a.b"],
+				[" ", ""],
+			],
+		],
+	])(
+		"%s: undo gives the literal text back, redo the format",
+		(text, formatted) => {
+			const editor = editorFor("");
+			type(editor, text);
+			expect(runs(editor)).toEqual(formatted);
+			editor.commands.undo();
+			expect(runs(editor)).toEqual([[text, ""]]);
+			editor.commands.redo();
+			expect(runs(editor)).toEqual(formatted);
+			editor.commands.undo();
+			editor.commands.undo();
+			expect(editor.state.doc.textContent).toBe("");
+		},
+	);
+
+	test("text typed after the format is its own undo step", () => {
+		const editor = editorFor("");
+		type(editor, "hello **b** more");
+		editor.commands.undo();
+		expect(runs(editor)).toEqual([
+			["hello ", ""],
+			["b", "bold"],
+		]);
+		editor.commands.undo();
+		expect(runs(editor)).toEqual([["hello **b**", ""]]);
+	});
+
+	test("Backspace right after the format still gives the literal back", () => {
+		const editor = editorFor("");
+		type(editor, "hello **b**");
+		key(editor, "Backspace");
+		expect(runs(editor)).toEqual([["hello **b**", ""]]);
+	});
+});

@@ -1,15 +1,22 @@
 import {
+	CommandManager,
+	type Editor,
 	Extension,
 	InputRule,
+	createChainableState,
+	getTextContentFromNodes,
 	markInputRule,
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
+import type { Schema } from "@tiptap/pm/model";
 import {
 	type EditorState,
 	NodeSelection,
+	Plugin,
+	type PluginSpec,
 	Selection,
 	TextSelection,
 	type Transaction,
@@ -86,6 +93,194 @@ function codeFenceLanguage(value: string): string | null | undefined {
 	const match = value.match(CODE_FENCE_PATTERN);
 	if (!match) return undefined;
 	return match[2] || null;
+}
+
+/**
+ * Inline autoformats: emphasis, code, links. The character that completes
+ * one ("**b**", "`c`", the space after a URL) is typed first, as ordinary
+ * typing, and the format follows as its own undo step. Undo right after
+ * then gives back exactly what was typed, closing delimiter included, and
+ * redo formats it again. The rule runner in @tiptap/core formats instead
+ * of inserting that character, so undo lost it ("**b*").
+ */
+function inlineInputRules(schema: Schema): InputRule[] {
+	const rules: InputRule[] = [];
+
+	// Inline link: typing "[label](url)" converts to linked text.
+	if ((schema.marks as any).link) {
+		rules.push(
+			new InputRule({
+				find: /\[([^\]]+)\]\(([^()\s]+)\)$/,
+				handler: ({ state, range, match }) => {
+					const linkType = (state.schema.marks as any).link;
+					if (!linkType) return null;
+					const label = String((match && match[1]) || "");
+					const href = normalizeUrl(String((match && match[2]) || ""));
+					if (!label || !href) return null;
+					const { tr } = state;
+					tr.insertText(label, range.from, range.to);
+					tr.addMark(
+						range.from,
+						range.from + label.length,
+						linkType.create({ href }),
+					);
+					// Don't carry the link mark into whatever is typed next.
+					tr.removeStoredMark(linkType);
+				},
+			}),
+		);
+	}
+
+	if ((schema.marks as any).bold) {
+		rules.push(
+			// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
+			// They open after a space or an opening bracket, quote or dash,
+			// as in "(**a**)", never inside a word: "2*3*4" stays text. The
+			// lookbehind keeps that character out of the match, so the rule
+			// never deletes it along with the delimiters.
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
+				type: (schema.marks as any).bold,
+			}),
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:__(\S(?:[^_]*\S)?)__)$/,
+				type: (schema.marks as any).bold,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).italic) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
+				type: (schema.marks as any).italic,
+			}),
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
+				type: (schema.marks as any).italic,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).strike) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:~~(\S(?:[^~]*\S)?)~~)$/,
+				type: (schema.marks as any).strike,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).code) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:`([^`]+)`)$/,
+				type: (schema.marks as any).code,
+			}),
+		);
+	}
+
+	// A URL followed by a space becomes a link, as in Notion; the space
+	// itself, and punctuation that ends the sentence, stay outside the link.
+	if ((schema.marks as any).link) {
+		rules.push(
+			new InputRule({
+				find: new RegExp(`${TYPED_URL}\\s$`),
+				handler: ({ state, range, match }) => {
+					const typed = String(match[1] ?? "");
+					const url = typedUrl(typed);
+					const href = url && normalizeUrl(url);
+					if (!url || !href) return null;
+					const linkType = (state.schema.marks as any).link;
+					const tr = state.tr;
+					// The typed space is already in the document, right before range.to.
+					const urlStart = range.to - 1 - typed.length;
+					const urlEnd = urlStart + url.length;
+					tr.addMark(urlStart, urlEnd, linkType.create({ href }));
+					tr.removeStoredMark(linkType);
+				},
+			}),
+		);
+	}
+
+	return rules;
+}
+
+function inlineInputRulesPlugin(editor: Editor, rules: InputRule[]) {
+	const plugin: Plugin = new Plugin({
+		// Backspace right after a format runs @tiptap/core's undoInputRule,
+		// which looks for plugins marked like this one and reverts the
+		// transaction kept in their state.
+		isInputRules: true,
+		state: {
+			init: () => null,
+			apply(tr, previous) {
+				const stored = tr.getMeta(plugin);
+				if (stored) return stored;
+				return tr.selectionSet || tr.docChanged ? null : previous;
+			},
+		},
+		props: {
+			handleTextInput(view, from, to, text) {
+				if (view.composing || to > view.state.doc.content.size) return false;
+				const $from = view.state.doc.resolve(from);
+				const inCode =
+					$from.parent.type.spec.code ||
+					($from.nodeBefore ?? $from.nodeAfter)?.marks.some(
+						(mark) => mark.type.spec.code,
+					);
+				if (inCode) return false;
+				const textBefore = getTextContentFromNodes($from) + text;
+				const matching = rules
+					.map((rule) => ({
+						rule,
+						match: (rule.find as RegExp).exec(textBefore),
+					}))
+					.filter(({ match }) => match);
+				if (matching.length === 0) return false;
+
+				view.dispatch(view.state.tr.insertText(text, from, to));
+				for (const { rule, match } of matching) {
+					const tr = view.state.tr;
+					const state = createChainableState({
+						state: view.state,
+						transaction: tr,
+					});
+					const range = {
+						from: from - (match![0].length - text.length),
+						to: from + text.length,
+					};
+					const { commands, chain, can } = new CommandManager({
+						editor,
+						state,
+					});
+					const result = rule.handler({
+						state,
+						range,
+						match: match!,
+						commands,
+						chain,
+						can,
+					});
+					if (result === null || !tr.steps.length) continue;
+					// Nothing is left to put back after the steps are inverted:
+					// the typed character is already in the document.
+					tr.setMeta(plugin, {
+						transform: tr,
+						from: range.to,
+						to: range.to,
+						text: "",
+					});
+					view.dispatch(closeHistory(tr));
+					// What is typed next starts another undo step.
+					view.dispatch(closeHistory(view.state.tr));
+					break;
+				}
+				return true;
+			},
+		},
+	} as PluginSpec<unknown>);
+	return plugin;
 }
 
 // Markdown-like typing shortcuts and editor keybindings
@@ -285,107 +480,6 @@ export const MarkdownWcShortcuts = Extension.create({
 			}
 		}
 
-		// Inline link: typing "[label](url)" converts to linked text.
-		if ((schema.marks as any).link) {
-			rules.push(
-				new InputRule({
-					find: /\[([^\]]+)\]\(([^()\s]+)\)$/,
-					// @ts-expect-error - typings are outdated
-					handler: ({ state, range, match, commands }) => {
-						const linkType = (state.schema.marks as any).link;
-						if (!linkType) return null;
-						const label = String((match && match[1]) || "");
-						const href = normalizeUrl(String((match && match[2]) || ""));
-						if (!label || !href) return null;
-						return commands.command(({ tr, dispatch }: any) => {
-							tr.insertText(label, range.from, range.to);
-							tr.addMark(
-								range.from,
-								range.from + label.length,
-								linkType.create({ href }),
-							);
-							// Don't carry the link mark into whatever is typed next.
-							tr.removeStoredMark(linkType);
-							if (dispatch) dispatch(tr);
-							return true;
-						});
-					},
-				}),
-			);
-		}
-
-		if ((schema.marks as any).bold) {
-			rules.push(
-				// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
-				// They open after a space or an opening bracket, quote or dash,
-				// as in "(**a**)", never inside a word: "2*3*4" stays text. The
-				// lookbehind keeps that character out of the match, so the rule
-				// never deletes it along with the delimiters.
-				markInputRule({
-					find: /(?<=^|[\s([{"'“‘—–-])(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
-					type: (schema.marks as any).bold,
-				}),
-				markInputRule({
-					find: /(?<=^|[\s([{"'“‘—–-])(?:__(\S(?:[^_]*\S)?)__)$/,
-					type: (schema.marks as any).bold,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).italic) {
-			rules.push(
-				markInputRule({
-					find: /(?<=^|[\s([{"'“‘—–-])(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
-					type: (schema.marks as any).italic,
-				}),
-				markInputRule({
-					find: /(?<=^|[\s([{"'“‘—–-])(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
-					type: (schema.marks as any).italic,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).strike) {
-			rules.push(
-				markInputRule({
-					find: /(?<=^|[\s([{"'“‘—–-])(?:~~(\S(?:[^~]*\S)?)~~)$/,
-					type: (schema.marks as any).strike,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).code) {
-			rules.push(
-				markInputRule({
-					find: /(?<=^|[\s([{"'“‘—–-])(?:`([^`]+)`)$/,
-					type: (schema.marks as any).code,
-				}),
-			);
-		}
-
-		// A URL followed by a space becomes a link, as in Notion; the space
-		// itself, and punctuation that ends the sentence, stay outside the link.
-		if ((schema.marks as any).link) {
-			rules.push(
-				new InputRule({
-					find: new RegExp(`${TYPED_URL}\\s$`),
-					handler: ({ state, range, match }) => {
-						const typed = String(match[1] ?? "");
-						const url = typedUrl(typed);
-						const href = url && normalizeUrl(url);
-						if (!url || !href) return null;
-						const linkType = (state.schema.marks as any).link;
-						const tr = state.tr;
-						const urlStart = range.to - typed.length;
-						const urlEnd = urlStart + url.length;
-						tr.addMark(urlStart, urlEnd, linkType.create({ href }));
-						tr.insertText(" ", range.to);
-						tr.removeStoredMark(linkType);
-					},
-				}),
-			);
-		}
-
 		// Every conversion is its own undo step: Mod-Z after "# " gives the
 		// typed "#" back instead of erasing it with the heading.
 		return rules.map(
@@ -398,6 +492,12 @@ export const MarkdownWcShortcuts = Extension.create({
 					},
 				}),
 		);
+	},
+
+	addProseMirrorPlugins() {
+		return [
+			inlineInputRulesPlugin(this.editor, inlineInputRules(this.editor.schema)),
+		];
 	},
 
 	addKeyboardShortcuts() {
