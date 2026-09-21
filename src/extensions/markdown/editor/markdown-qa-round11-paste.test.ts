@@ -525,3 +525,27 @@ describe("tables", () => {
 		);
 	});
 });
+
+describe("footnotes", () => {
+	const doc = "Claim[^1] here.\n\nOther text.\n\n[^1]: The source.";
+
+	test("a copied marker stays a footnote where the label is defined", () => {
+		const editor = setup(doc);
+		select(editor, find(editor, "Claim").from, find(editor, " here").from);
+		const data = clip("copy", editor);
+		editor.commands.setTextSelection(find(editor, "Other text.").to);
+		paste(editor, data);
+		expect(md(editor)).toBe(
+			"Claim[^1] here.\n\nOther text.Claim[^1]\n\n[^1]: The source.\n",
+		);
+	});
+
+	test("a pasted definition with a taken label is renumbered with its marker", () => {
+		const editor = setup(doc);
+		editor.commands.setTextSelection(find(editor, "Other text.").to);
+		paste(editor, { "text/plain": "New[^1] claim.\n\n[^1]: Another source." });
+		expect(md(editor)).toBe(
+			"Claim[^1] here.\n\nOther text.New[^2] claim.\n\n[^2]: Another source.\n\n[^1]: The source.\n",
+		);
+	});
+});

@@ -174,9 +174,18 @@ export function handlePaste(args: {
 		const htmlMarkdown = markdownFromClipboardHtml(html);
 		if (htmlMarkdown !== null) text = pastedHtmlMarkdown(htmlMarkdown, text);
 		if (!text) return false;
-		const ast = parseMarkdown(text);
+		const footnotes =
+			htmlMarkdown === null
+				? reconcileFootnotes(text, editor.state.doc)
+				: { text, borrowed: new Set<string>() };
+		const ast = parseMarkdown(footnotes.text);
 		const tiptapDoc = astToTiptapDoc(ast) as any;
-		const blocks = tiptapDoc?.content ?? [];
+		const blocks = (tiptapDoc?.content ?? []).filter(
+			(block: any) =>
+				block.type !== "footnoteDef" ||
+				!footnotes.borrowed.has(footnoteKey(block.attrs?.label)),
+		);
+		if (blocks.length === 0) return true;
 		if (
 			blocks[0]?.type === "markdownFrontmatter" &&
 			!replacesDocumentStart(editor.state)
@@ -363,6 +372,70 @@ function pasteTableIntoTable(
 	);
 	editor.view.dispatch(tr.scrollIntoView());
 	return true;
+}
+
+const FOOTNOTE_LABEL = /(?<!\\)\[\^([^\]\s]+)\]/g;
+const FOOTNOTE_DEFINITION = /^ {0,3}\[\^([^\]\s]+)\]:/gm;
+
+function footnoteKey(label: unknown): string {
+	return String(label ?? "").toLowerCase();
+}
+
+/**
+ * Footnotes in a copy refer to the document it came from. A marker copied
+ * without its definition is only a footnote where the target defines that
+ * label, and Markdown parses a marker with no definition as literal text, so
+ * the target's definitions are lent to the parse and dropped again
+ * (`borrowed`). A pasted definition whose label the target already uses is
+ * renumbered, with its markers, to the next free number.
+ */
+function reconcileFootnotes(
+	text: string,
+	doc: any,
+): { text: string; borrowed: Set<string> } {
+	const borrowed = new Set<string>();
+	if (!text.includes("[^")) return { text, borrowed };
+	const defined = new Set<string>();
+	const used = new Set<string>();
+	doc.descendants((node: any) => {
+		if (node.type.name !== "footnoteDef" && node.type.name !== "footnoteRef")
+			return true;
+		const key = footnoteKey(node.attrs?.label || node.attrs?.identifier);
+		used.add(key);
+		if (node.type.name === "footnoteDef") defined.add(key);
+		return true;
+	});
+	const pastedDefinitions = new Set(
+		Array.from(text.matchAll(FOOTNOTE_DEFINITION), (match) =>
+			footnoteKey(match[1]),
+		),
+	);
+	for (const match of text.matchAll(FOOTNOTE_LABEL))
+		used.add(footnoteKey(match[1]));
+	const renamed = new Map<string, string>();
+	let next = 1;
+	for (const key of pastedDefinitions) {
+		if (!defined.has(key)) continue;
+		while (used.has(String(next))) next += 1;
+		renamed.set(key, String(next));
+		used.add(String(next));
+	}
+	let out = renamed.size
+		? text.replace(FOOTNOTE_LABEL, (whole, label: string) => {
+				const renamedLabel = renamed.get(footnoteKey(label));
+				return renamedLabel ? `[^${renamedLabel}]` : whole;
+			})
+		: text;
+	const lent: string[] = [];
+	for (const match of out.matchAll(FOOTNOTE_LABEL)) {
+		const key = footnoteKey(match[1]);
+		if (pastedDefinitions.has(key) || !defined.has(key) || borrowed.has(key))
+			continue;
+		borrowed.add(key);
+		lent.push(`[^${match[1]}]: _`);
+	}
+	if (lent.length) out = `${out}\n\n${lent.join("\n\n")}\n`;
+	return { text: out, borrowed };
 }
 
 /**
