@@ -355,3 +355,26 @@ describe("divider in an empty list item", () => {
 		]);
 	});
 });
+
+describe("typed image syntax", () => {
+	test("![alt](src) in a line of text becomes an inline image", () => {
+		const editor = editorFor("");
+		type(editor, "see ![a cat](./img.png) here");
+		const image = editor.state.doc.firstChild?.child(1);
+		expect(image?.type.name).toBe("image");
+		expect(image?.attrs).toMatchObject({ src: "./img.png", alt: "a cat" });
+		expect(md(editor)).toBe("see ![a cat](./img.png) here\n");
+	});
+
+	test("on a line of its own it becomes an image block, and undo gives the text back", () => {
+		const editor = editorFor("");
+		type(editor, "![](assets/a.png)");
+		expect(editor.state.doc.firstChild?.type.name).toBe("imageBlock");
+		expect(editor.state.doc.firstChild?.attrs.src).toBe("assets/a.png");
+		type(editor, "next");
+		expect(md(editor)).toBe("![](assets/a.png)\n\nnext\n");
+		editor.commands.undo();
+		editor.commands.undo();
+		expect(runs(editor)).toEqual([["![](assets/a.png)", ""]]);
+	});
+});

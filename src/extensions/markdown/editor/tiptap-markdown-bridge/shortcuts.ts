@@ -106,11 +106,64 @@ function codeFenceLanguage(value: string): string | null | undefined {
 function inlineInputRules(schema: Schema): InputRule[] {
 	const rules: InputRule[] = [];
 
-	// Inline link: typing "[label](url)" converts to linked text.
+	// Image: "![alt](src)". A line that is nothing but the image becomes an
+	// image block, the way the file reads it back; inside text it stays an
+	// inline image. The source is kept as typed: it is usually a path in
+	// the workspace, which normalizeUrl would turn into a web address.
+	if (schema.nodes.image) {
+		rules.push(
+			new InputRule({
+				find: /!\[([^\]]*)\]\(([^()\s]+)\)$/,
+				handler: ({ state, range, match }) => {
+					const src = String(match[2] ?? "");
+					const alt = match[1] || null;
+					const { tr } = state;
+					const $start = tr.doc.resolve(range.from);
+					const paragraph = $start.parent;
+					const imageBlock = schema.nodes.imageBlock;
+					const index = $start.index($start.depth - 1);
+					const wholeLine =
+						paragraph.type.name === "paragraph" &&
+						range.from === $start.start() &&
+						range.to === $start.end();
+					if (
+						imageBlock &&
+						wholeLine &&
+						$start
+							.node($start.depth - 1)
+							.canReplaceWith(index, index + 1, imageBlock)
+					) {
+						const blockFrom = $start.before();
+						const image = imageBlock.create({
+							src,
+							alt,
+							data: paragraph.attrs?.data ?? null,
+						});
+						tr.replaceWith(blockFrom, $start.after(), [
+							image,
+							schema.nodes.paragraph!.create(),
+						]);
+						tr.setSelection(
+							TextSelection.create(tr.doc, blockFrom + image.nodeSize + 1),
+						);
+						return;
+					}
+					tr.replaceWith(
+						range.from,
+						range.to,
+						schema.nodes.image!.create({ src, alt }),
+					);
+				},
+			}),
+		);
+	}
+
+	// Inline link: typing "[label](url)" converts to linked text; after "!"
+	// it is an image, handled above.
 	if ((schema.marks as any).link) {
 		rules.push(
 			new InputRule({
-				find: /\[([^\]]+)\]\(([^()\s]+)\)$/,
+				find: /(?<!!)\[([^\]]+)\]\(([^()\s]+)\)$/,
 				handler: ({ state, range, match }) => {
 					const linkType = (state.schema.marks as any).link;
 					if (!linkType) return null;
