@@ -55,6 +55,7 @@ type SourceStyle = {
 	ruleRepetition?: number;
 	ruleSpaces?: boolean;
 	breakSpelling?: string;
+	tightBefore?: boolean;
 };
 
 function recordSourceStyle(node: any, source: string): void {
@@ -93,6 +94,22 @@ function sourceStyle(node: any, source: string): SourceStyle | null {
 			const second = marker(items[1]);
 			if (first[2] && second?.[2] && Number(second[2]) === Number(first[2]))
 				style.incrementListMarker = false;
+			// In a loose list, remember which items the source still wrote
+			// without a blank line before them.
+			if (node.spread)
+				items.forEach((item: any, index: number) => {
+					const previous = items[index - 1];
+					if (!previous?.position || !item.position) return;
+					const between = source.slice(
+						previous.position.end.offset,
+						item.position.start.offset,
+					);
+					if (!/\n[ \t>]*\n/.test(between))
+						item.data = {
+							...item.data,
+							[SOURCE_STYLE_DATA_KEY]: { tightBefore: true },
+						};
+				});
 			// `-   item`: the content starts at the next tab stop.
 			const width = first[0].length;
 			if (first[4]!.length > 1 && width % 4 === 0 && !first[4]!.includes("\t"))
@@ -143,8 +160,26 @@ function withSourceStyle(
 	};
 }
 
+/**
+ * One blank line between two items makes a whole list loose, and the
+ * serializer then separates every item. Items the source wrote without one
+ * keep that, as long as some other blank line still makes the list loose
+ * when it is read back.
+ */
+function joinTightItems(left: any, right: any, parent: any): number | void {
+	if (parent?.type !== "list" || !parent.spread || !styleOf(right).tightBefore)
+		return;
+	const staysLoose = parent.children.some(
+		(item: any, index: number) =>
+			(index > 0 && !styleOf(item).tightBefore) ||
+			(item.spread && (item.children?.length ?? 0) > 1),
+	);
+	if (staysLoose && left.type === "listItem") return 0;
+}
+
 function sourceStyleToMarkdown(): any {
 	return {
+		join: [joinTightItems],
 		handlers: {
 			list: withSourceStyle(defaultHandlers.list, (node) => {
 				const { bullet, bulletOrdered, incrementListMarker, listItemIndent } =

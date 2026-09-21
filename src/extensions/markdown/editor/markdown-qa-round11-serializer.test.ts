@@ -518,6 +518,9 @@ describe("an edited block keeps its author's syntax choices", () => {
 		["* a\n  - n\n* b text", "* a\n  - n\n* b textZ\n"],
 		["~~~js\ncode\n~~~\n\nPara text", "~~~js\ncode\n~~~\n\nPara textZ\n"],
 		["line one  \nline two text", "line one  \nline two textZ\n"],
+		// One blank line makes the list loose; the others stay as written.
+		["- a\n- b\n\n- c text", "- a\n- b\n\n- c textZ\n"],
+		["1. a\n2. b\n\n   more\n3. c text", "1. a\n2. b\n\n   more\n3. c textZ\n"],
 		["Para text\n\n---\n\nx\n", "Para textZ\n\n---\n\nx\n"],
 	])("%j", async (markdown, expected) => {
 		expect(await typeAfter(markdown, "text")).toBe(expected);
