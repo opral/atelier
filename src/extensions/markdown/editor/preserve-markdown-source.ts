@@ -138,8 +138,10 @@ export function preserveMarkdownSource(
 			return (
 				(pair === undefined
 					? written
-					: restoreCharacterReferences(written, originals[pair]!.text)) +
-				(between ? originals[pair]!.gap : segment.gap)
+					: restoreExcessTableCells(
+							restoreCharacterReferences(written, originals[pair]!.text),
+							originals[pair]!.text,
+						)) + (between ? originals[pair]!.gap : segment.gap)
 			);
 		});
 	const withSourceDefinitions = (texts: readonly string[]) =>
@@ -206,6 +208,37 @@ function segments(text: string, nodes: readonly any[]): Segment[] {
 			gap: text.slice(contentEnd, end),
 		};
 	});
+}
+
+/**
+ * Cells past the header's width are not part of a GFM table and the editor
+ * drops them, but they are still the author's text. Put each row's extra
+ * cells back after the edited row, as long as the table has the same rows.
+ */
+function restoreExcessTableCells(markdown: string, source: string): string {
+	const sourceTable = parseMarkdownSourceRaw(source).children[0];
+	if (sourceTable?.type !== "table") return markdown;
+	const width = sourceTable.children[0]?.children.length ?? 0;
+	const excess = sourceTable.children.map((row: any) =>
+		row.children.length > width
+			? source.slice(
+					row.children[width].position.start.offset,
+					row.position.end.offset,
+				)
+			: "",
+	);
+	if (excess.every((cells: string) => cells === "")) return markdown;
+	const table = parseMarkdownSourceRaw(markdown).children[0];
+	if (table?.type !== "table" || table.children.length !== excess.length)
+		return markdown;
+	let out = markdown;
+	for (let index = table.children.length - 1; index >= 0; index--) {
+		if (!excess[index]) continue;
+		const end = table.children[index].position.end.offset;
+		const row = out.slice(0, end).replace(/\|[\t ]*$/, "");
+		out = row + excess[index] + out.slice(end);
+	}
+	return out;
 }
 
 /** Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. */

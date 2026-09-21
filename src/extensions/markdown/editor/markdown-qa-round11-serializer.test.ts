@@ -440,3 +440,9 @@ describe("characters keep their spelling in an edited block", () => {
 		);
 	});
 });
+
+test("cells past the header's width are kept, and the header is not widened", async () => {
+	expect(
+		await typeAfter("| a | b |\n|---|---|\n| 1 | 2 | 3 |\n| x | y |\n", "1"),
+	).toBe("| a  | b |\n| -- | - |\n| 1Z | 2 | 3 |\n| x  | y |\n");
+});

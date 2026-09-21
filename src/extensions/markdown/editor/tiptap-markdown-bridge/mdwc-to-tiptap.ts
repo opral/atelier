@@ -210,6 +210,10 @@ function astBlockToPM(
 		case "table": {
 			const n = node as any;
 			const align = Array.isArray(n.align) ? n.align : [];
+			// GFM ignores cells past the header's width, so the editor does not
+			// show them either; the table would otherwise gain a header column.
+			// preserveMarkdownSource keeps their source when the table is saved.
+			const width = n.children?.[0]?.children?.length ?? 0;
 			return {
 				type: "table",
 				attrs: {
@@ -219,8 +223,9 @@ function astBlockToPM(
 				content: (n.children || []).map((row: any, rowIndex: number) => ({
 					type: "tableRow",
 					attrs: { data: buildNodeData(row.data) },
-					content: (row.children || []).map(
-						(cell: any, columnIndex: number) => ({
+					content: (row.children || [])
+						.slice(0, width)
+						.map((cell: any, columnIndex: number) => ({
 							type: "tableCell",
 							attrs: {
 								isHeader: rowIndex === 0,
@@ -228,8 +233,7 @@ function astBlockToPM(
 								data: buildNodeData(cell.data),
 							},
 							content: flattenInline((cell.children || []) as any, []),
-						}),
-					),
+						})),
 				})),
 			};
 		}
