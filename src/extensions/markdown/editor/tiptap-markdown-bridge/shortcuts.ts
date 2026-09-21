@@ -18,6 +18,33 @@ const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
 const DIVIDER_PATTERN = /^---$/;
 
+// A URL may start after whitespace or an opening bracket or quote, as in
+// "(https://a.b)" or "see "www.c.d"".
+const TYPED_URL = String.raw`(?:^|[\s(\[{"'“‘])((?:https?:\/\/|www\.)[^\s<]+)`;
+
+/**
+ * The part of a typed URL that is the link, by GFM's autolink rules:
+ * sentence punctuation after it ("see https://a.b.") and a closing paren
+ * that has no opening one inside the URL ("(https://a.b)") are not part of
+ * it. Returns null when nothing but the scheme is left.
+ */
+function typedUrl(candidate: string): string | null {
+	let url = candidate;
+	for (;;) {
+		const last = url.at(-1);
+		if (last && `.,;:!?'"*_~”’`.includes(last)) {
+			url = url.slice(0, -1);
+			continue;
+		}
+		if (last === ")" && url.split(")").length > url.split("(").length) {
+			url = url.slice(0, -1);
+			continue;
+		}
+		break;
+	}
+	return /^(?:https?:\/\/|www\.)[^\s./?#:]/.test(url) ? url : null;
+}
+
 function codeFenceLanguage(value: string): string | null | undefined {
 	const match = value.match(CODE_FENCE_PATTERN);
 	if (!match) return undefined;
@@ -296,21 +323,22 @@ export const MarkdownWcShortcuts = Extension.create({
 		}
 
 		// A URL followed by a space becomes a link, as in Notion; the space
-		// itself stays outside the link.
+		// itself, and punctuation that ends the sentence, stay outside the link.
 		if ((schema.marks as any).link) {
 			rules.push(
 				new InputRule({
-					find: /(?:^|\s)((?:https?:\/\/|www\.)[^\s<]+)\s$/,
+					find: new RegExp(`${TYPED_URL}\\s$`),
 					handler: ({ state, range, match }) => {
-						const url = String(match[1] ?? "");
-						const href = normalizeUrl(url);
-						if (!href) return null;
+						const typed = String(match[1] ?? "");
+						const url = typedUrl(typed);
+						const href = url && normalizeUrl(url);
+						if (!url || !href) return null;
 						const linkType = (state.schema.marks as any).link;
 						const tr = state.tr;
-						const urlEnd = range.to;
-						const urlStart = urlEnd - url.length;
+						const urlStart = range.to - typed.length;
+						const urlEnd = urlStart + url.length;
 						tr.addMark(urlStart, urlEnd, linkType.create({ href }));
-						tr.insertText(" ", urlEnd);
+						tr.insertText(" ", range.to);
 						tr.removeStoredMark(linkType);
 					},
 				}),
