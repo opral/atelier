@@ -515,9 +515,60 @@ const collator = new Intl.Collator(undefined, {
 });
 
 /**
- * Orders the body rows by the target column's text, naturally ("item 2"
- * before "item 10"). Empty cells go last either way; the header stays first.
- * The caret stays in its row, wherever that row goes.
+ * A cell's value as a number when all it says is one: a sign, a currency
+ * symbol, thousands separated by commas, a decimal point, a percent sign
+ * ("-5", "1,000", "$1,000.50", "12 %", "€ 3"). The collator's numeric
+ * option compares runs of digits only, so it read "-10" as more than "-5",
+ * "1.25" as more than "1.5" and "$30" as more than "$1,000".
+ */
+const NUMBER =
+	/^([-+\u2212]?)\s*[$€£¥]?\s*([-+\u2212]?)(\d{1,3}(?:,\d{3})+|\d*)(\.\d+)?\s*(?:%|[$€£¥])?$/;
+
+function numericValue(text: string): number | null {
+	const match = NUMBER.exec(text);
+	if (!match) return null;
+	const [, before = "", after = "", whole = "", fraction = ""] = match;
+	if (!whole && !fraction) return null;
+	if (before && after) return null;
+	const value = Number(whole.replace(/,/g, "") + fraction);
+	return /[-\u2212]/.test(before + after) ? -value : value;
+}
+
+/**
+ * What a cell is sorted by: its text, or for a cell holding only an image,
+ * the image's alt text or address, so it is not taken for an empty cell.
+ */
+function sortText(cell: ProseMirrorNode | undefined): string {
+	if (!cell) return "";
+	const text = cell.textContent.trim();
+	if (text) return text;
+	const images: string[] = [];
+	cell.descendants((node) => {
+		if (node.type.name === "image")
+			images.push(String(node.attrs.alt || node.attrs.src || ""));
+		return true;
+	});
+	return images.join(" ").trim();
+}
+
+type SortKey = { readonly text: string; readonly number: number | null };
+
+/**
+ * Ascending order: numbers by value, then text naturally ("item 2" before
+ * "item 10"). Empty cells are left to the caller, which puts them last.
+ */
+function compareKeys(a: SortKey, b: SortKey): number {
+	if (a.number !== null && b.number !== null) return a.number - b.number;
+	if (a.number !== null) return -1;
+	if (b.number !== null) return 1;
+	return collator.compare(a.text, b.text);
+}
+
+/**
+ * Orders the body rows by the target column: numbers by value before text,
+ * text naturally, Z → A exactly reversed. Empty cells go last either way;
+ * the header stays first. The caret stays in its row, wherever that row
+ * goes.
  */
 export function sortColumn(
 	direction: SortDirection,
@@ -527,13 +578,16 @@ export function sortColumn(
 		const column = context.target.column;
 		const [header, ...body] = context.rows;
 		if (!header) return false;
-		const text = (row: Row) => row.cells[column]?.textContent.trim() ?? "";
 		const sign = direction === "asc" ? 1 : -1;
 		const sorted = body
-			.map((row, index) => ({ row, index, text: text(row) }))
+			.map((row, index) => {
+				const text = sortText(row.cells[column]);
+				return { row, index, key: { text, number: numericValue(text) } };
+			})
 			.sort((a, b) => {
-				if (!a.text || !b.text) return (a.text ? 0 : 1) - (b.text ? 0 : 1);
-				return sign * collator.compare(a.text, b.text);
+				if (!a.key.text || !b.key.text)
+					return (a.key.text ? 0 : 1) - (b.key.text ? 0 : 1);
+				return sign * compareKeys(a.key, b.key);
 			});
 		const rows = [header, ...sorted.map((entry) => entry.row)];
 		const caretRow =

@@ -172,3 +172,81 @@ describe("deleting the table a quote or item was", () => {
 		expect(await saved()).toBe("> x\n");
 	});
 });
+
+/** The body cells of column `c` of the first table. */
+function column(editor: Editor, c: number) {
+	const cells: string[] = [];
+	editor.state.doc.descendants((node) => {
+		if (node.type.name !== "tableRow") return true;
+		cells.push(node.child(c).textContent);
+		return false;
+	});
+	return cells.slice(1);
+}
+
+describe("sort", () => {
+	test("decimals, negatives and thousands by value", async () => {
+		const { editor } = await open(
+			"| n |\n|---|\n| 1.5 |\n| -10 |\n| 1.25 |\n| -5 |\n| 1,000 |\n| 200 |\n| 0.9 |\n",
+		);
+		caretIn(editor, "n");
+		editor.commands.sortTableColumn("asc");
+		expect(column(editor, 0)).toEqual([
+			"-10",
+			"-5",
+			"0.9",
+			"1.25",
+			"1.5",
+			"200",
+			"1,000",
+		]);
+		editor.commands.sortTableColumn("desc");
+		expect(column(editor, 0)).toEqual([
+			"1,000",
+			"200",
+			"1.5",
+			"1.25",
+			"0.9",
+			"-5",
+			"-10",
+		]);
+	});
+
+	test("currency and percentages by value, numbers before text, empty last", async () => {
+		const { editor } = await open(
+			"| p |\n|---|\n| $1,000 |\n| n/a |\n| $30 |\n|  |\n| -$5 |\n| $200.50 |\n| 12 % |\n| 3€ |\n",
+		);
+		caretIn(editor, "p");
+		editor.commands.sortTableColumn("asc");
+		expect(column(editor, 0)).toEqual([
+			"-$5",
+			"3€",
+			"12 %",
+			"$30",
+			"$200.50",
+			"$1,000",
+			"n/a",
+			"",
+		]);
+		editor.commands.sortTableColumn("desc");
+		expect(column(editor, 0)).toEqual([
+			"n/a",
+			"$1,000",
+			"$200.50",
+			"$30",
+			"12 %",
+			"3€",
+			"-$5",
+			"",
+		]);
+	});
+
+	test("a cell holding only an image sorts by its alt text", async () => {
+		const { editor } = await open(
+			"| k | v |\n|---|---|\n| ![banana](b.png) | 1 |\n| apple | 2 |\n|  | 3 |\n| mango | 4 |\n",
+		);
+		caretIn(editor, "k");
+		editor.commands.sortTableColumn("asc");
+		expect(column(editor, 1)).toEqual(["2", "1", "4", "3"]);
+	});
+});
