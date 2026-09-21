@@ -335,6 +335,59 @@
 			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
+		/* Backspace or Delete beside a table, rule or embed, an arrow key onto
+		   one, or a click selects the whole block, and the next key removes or
+		   replaces it. Nothing showed that, so a second Backspace deleted a
+		   table nobody saw selected. Blocks with their own selected look
+		   (frontmatter above, tables and rules just below, images and videos
+		   further down) keep it. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			:is(
+				.markdown-wc-unsupported-block,
+				.ProseMirror
+					> *:not(
+						hr,
+						table,
+						.markdown-frontmatter,
+						.markdown-image-embed,
+						[data-markdown-image-block],
+						.markdown-video-embed
+					)
+			).ProseMirror-selectednode {
+			border-radius: var(--markdown-radius);
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 2px;
+		}
+
+		/* A table's element is the scroll room around the grid, and clips
+		   anything drawn outside it: the grid itself shows the selection, its
+		   edge in the ring colour and its cells tinted like selected text. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			table.ProseMirror-selectednode
+			> tbody {
+			border-color: var(--atelier-ring);
+		}
+
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			table.ProseMirror-selectednode
+			tr {
+			background-color: var(--atelier-bg-selection);
+		}
+
+		/* A rule is one line: it is shown selected as a band around the line,
+		   tinted like selected text, with the ring at its edge. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			hr.ProseMirror-selectednode {
+			border-radius: 1px;
+			box-shadow:
+				0 0 0 7px var(--atelier-bg-selection),
+				0 0 0 9px var(--atelier-ring);
+		}
+
 		.markdown-frontmatter-header {
 			display: flex;
 			min-height: 2.125rem;
@@ -1055,6 +1108,8 @@
 			outline: none;
 		}
 
+		/* The image has no border to colour, so the selection is a ring, the
+		   same one a selected video gets. */
 		.markdown-view
 			.ProseMirror
 			[data-markdown-image-block].ProseMirror-selectednode:is(
@@ -1062,6 +1117,7 @@
 				.markdown-pdf-embed
 			) {
 			border-color: var(--atelier-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view
@@ -1069,6 +1125,7 @@
 			.markdown-image-embed.ProseMirror-selectednode
 			> .markdown-image-block-content {
 			border-color: var(--atelier-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view
