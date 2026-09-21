@@ -109,6 +109,36 @@ function mockHistoryWidth() {
 describe("HistoryView", () => {
 	afterEach(() => vi.unstubAllGlobals());
 
+	test("shows ten checkpoints, then ten more on request", async () => {
+		const lix = await openLix();
+		for (let index = 0; index < 24; index++) await createCheckpoint(lix);
+		const view = render(
+			<LixProvider lix={lix}>
+				<Suspense fallback={<div>Loading</div>}>
+					<HistoryView atelier={atelierStub({ activeFile: null })} />
+				</Suspense>
+			</LixProvider>,
+		);
+		try {
+			const rows = () =>
+				within(screen.getByRole("list", { name: "Checkpoints" })).getAllByRole(
+					"listitem",
+				);
+			await waitFor(() => expect(rows()).toHaveLength(10));
+			const more = () =>
+				screen.queryByRole("button", { name: "Load older checkpoints" });
+			fireEvent.click(more()!);
+			await waitFor(() => expect(rows()).toHaveLength(20));
+			fireEvent.click(more()!);
+			await waitFor(() => expect(rows()).toHaveLength(24));
+			// Nothing older is left to ask for.
+			expect(more()).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
 	test("loads older sparse file history only on request", async () => {
 		const lix = await openLix();
 		const id = fakeUuid("paged-history");
@@ -117,7 +147,9 @@ describe("HistoryView", () => {
 			[id, "/old.txt", new TextEncoder().encode("old")],
 		);
 		await createCheckpoint(lix);
-		for (let index = 0; index < 22; index++) await createCheckpoint(lix);
+		// One page of checkpoints the file is absent from, and one older one
+		// holding its only change: the panel shows nothing until it is asked.
+		for (let index = 0; index < 11; index++) await createCheckpoint(lix);
 		const view = render(
 			<LixProvider lix={lix}>
 				<Suspense fallback={<div>Loading</div>}>

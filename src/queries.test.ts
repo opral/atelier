@@ -2,13 +2,15 @@ import { describe, test, expect } from "vitest";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
-import { createCheckpoint } from "@/lib/lix-diff-commands";
+import { createCheckpoint, undoCheckpoint } from "@/lib/lix-diff-commands";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviewPage,
+	selectCommitCreatedAt,
 	selectFilesystemEntries,
 	selectFileCheckpointChanges,
 	selectLatestCheckpoint,
+	selectLatestCheckpointWithWorkingBase,
 	selectWorkingChangeCount,
 	selectWorkingFileDiffContent,
 	selectWorkingFileDiffSnapshot,
@@ -233,8 +235,100 @@ describe("checkpoint queries", () => {
 		expect(await selectLatestCheckpoint(lix).execute()).toEqual([
 			checkpoints[0],
 		]);
+		expect(await selectLatestCheckpointWithWorkingBase(lix).execute()).toEqual([
+			{
+				...checkpoints[0],
+				working_base_commit_id: checkpoint.commitId,
+			},
+		]);
 
 		await lix.close();
+	});
+
+	test("keeps a retired checkpoint hidden after a newer checkpoint", async () => {
+		const lix = await openLix();
+		try {
+			await lix.execute(
+				"INSERT INTO lix_file (id, path, content) VALUES ($1, $2, $3)",
+				[
+					fakeUuid("retired-checkpoint-file"),
+					"/retired-checkpoint.txt",
+					new TextEncoder().encode("checkpointed"),
+				],
+			);
+			const baseline = await createCheckpoint(lix);
+			await lix.execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+				new TextEncoder().encode("changed"),
+				fakeUuid("retired-checkpoint-file"),
+			]);
+			const retired = await createCheckpoint(lix);
+			const undo = await undoCheckpoint(lix, retired.commitId);
+			expect(undo.commitId).toEqual(expect.any(String));
+			await lix.execute("UPDATE lix_file SET content = $1 WHERE id = $2", [
+				new TextEncoder().encode("recreated"),
+				fakeUuid("retired-checkpoint-file"),
+			]);
+			const next = await createCheckpoint(lix);
+
+			const checkpoints = await selectCheckpoints(lix).execute();
+			expect(checkpoints.map((row) => row.commit_id)).toContain(
+				baseline.commitId,
+			);
+			expect(checkpoints.map((row) => row.commit_id)).not.toContain(
+				retired.commitId,
+			);
+			expect(checkpoints.map((row) => row.commit_id)).toContain(next.commitId);
+			expect((await selectLatestCheckpoint(lix).execute())[0]?.commit_id).toBe(
+				next.commitId,
+			);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("reads retired and off-branch checkpoint timestamps globally", async () => {
+		const lix = await openLix();
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values({
+					id: fakeUuid("global-commit-time-file"),
+					path: "/global-commit-time.txt",
+					content: new TextEncoder().encode("before"),
+				})
+				.execute();
+			const retired = await createCheckpoint(lix);
+			const retiredLog = await lix.execute(
+				"SELECT created_at FROM lix_log($1) WHERE commit_id = $1",
+				[retired.commitId],
+			);
+			await undoCheckpoint(lix, retired.commitId);
+			const retiredTimestamp = await selectCommitCreatedAt(
+				lix,
+				retired.commitId,
+			).execute();
+			expect(retiredTimestamp).toEqual([
+				{ created_at: retiredLog.rows[0]?.created_at },
+			]);
+
+			const mainBranchId = await lix.activeBranchId();
+			const offBranch = await lix.createBranch({ name: "Timestamp archive" });
+			await lix.switchBranch({ branchId: offBranch.id });
+			const offBranchCheckpoint = await createCheckpoint(lix);
+			const offBranchLog = await lix.execute(
+				"SELECT created_at FROM lix_log($1) WHERE commit_id = $1",
+				[offBranchCheckpoint.commitId],
+			);
+			await lix.switchBranch({ branchId: mainBranchId });
+			expect(
+				await selectCommitCreatedAt(
+					lix,
+					offBranchCheckpoint.commitId,
+				).execute(),
+			).toEqual([{ created_at: offBranchLog.rows[0]?.created_at }]);
+		} finally {
+			await lix.close();
+		}
 	});
 
 	test("returns composed working files and clears them at a checkpoint", async () => {
@@ -387,5 +481,19 @@ describe("selectCheckpointFilePreviewPage", () => {
 		);
 
 		await lix.close();
+	});
+
+	test("keeps previews anchored to explicit history without a log status join", async () => {
+		const lix = await openLix();
+		try {
+			const sql = selectCheckpointFilePreviewPage(lix, [
+				fakeUuid("preview-query-shape"),
+			]).compile().sql;
+			expect(sql).toContain("lix_history('lix_file'");
+			expect(sql).toContain("lixcol_to_commit_id");
+			expect(sql).not.toContain("lix_log");
+		} finally {
+			await lix.close();
+		}
 	});
 });

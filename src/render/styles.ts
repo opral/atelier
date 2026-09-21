@@ -104,6 +104,14 @@ const CSV_CSS = `
 	font-weight: 600;
 }
 .csv-diff tbody tr:last-child > td { border-bottom: 0; }
+/* The rows the trim left out, named where they were — the table's own
+   version of a document's pruned run. */
+.csv-diff tr.csv-diff-gap > td {
+	background: var(--atelier-bg-subtle);
+	color: var(--atelier-fg-subtle);
+	font-size: 12px;
+	max-width: none;
+}
 .csv-diff [data-diff-status="added"] {
 	background: var(--atelier-diff-added-subtle);
 	color: var(--atelier-diff-added);
@@ -137,6 +145,17 @@ const CSV_CSS = `
 	color: var(--atelier-fg-subtle);
 	font-size: 12px;
 	text-align: center;
+}
+/* The columns the trim left out, named once in the header and held open by a
+   cell of its own in every row, so the table keeps its shape. */
+.csv-diff .csv-diff-gap-column {
+	background: var(--atelier-bg-subtle);
+	color: var(--atelier-fg-subtle);
+	font-size: 12px;
+	font-weight: 400;
+	white-space: nowrap;
+	text-align: center;
+	max-width: none;
 }
 `;
 

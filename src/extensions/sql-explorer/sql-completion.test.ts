@@ -27,7 +27,6 @@ const history: TableFunction = {
 				{ name: "to_path", type: "text" },
 				{ name: "diff_type", type: "text" },
 				{ name: "lixcol_position", type: "int" },
-				{ name: "lixcol_commit_is_checkpoint", type: "bool" },
 			],
 		],
 	]),

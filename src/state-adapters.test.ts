@@ -118,8 +118,11 @@ describe("createLixBranchSession", () => {
 
 	test("stops observing when its last listener unsubscribes", () => {
 		const events = {
-			next: () => new Promise<undefined>(() => {}),
-			close: vi.fn(),
+			[Symbol.asyncIterator]() {
+				return this;
+			},
+			next: () => new Promise<IteratorResult<never>>(() => {}),
+			return: vi.fn(async () => ({ done: true, value: undefined })),
 		} as unknown as ReturnType<Lix["observe"]>;
 		const lix = {
 			activeBranchId: async () => "main",
@@ -131,6 +134,6 @@ describe("createLixBranchSession", () => {
 		expect(lix.observe).toHaveBeenCalledOnce();
 		unsubscribe();
 
-		expect(events.close).toHaveBeenCalledOnce();
+		expect(events.return).toHaveBeenCalledOnce();
 	});
 });

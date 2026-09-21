@@ -528,6 +528,94 @@ describe("PanelV2", () => {
 		expect(
 			screen.getByRole("button", { name: /panel view menu$/ }),
 		).toBeVisible();
+
+		rendered.rerender(
+			<ExtensionHostRegistryProvider>
+				{panel(false)}
+			</ExtensionHostRegistryProvider>,
+		);
+		// Collapsed again with a view mounted in it: the view stays, because a
+		// sidebar that comes back keeps its state, and Tab must not walk into
+		// it while it is off screen.
+		const view = document.querySelector(
+			'[data-testid="atelier-view:search-1"]',
+		);
+		expect(view).not.toBeNull();
+		expect(view?.closest("[inert]")).not.toBeNull();
+	});
+
+	test("a refused rename keeps the keyboard in the field", async () => {
+		let settleRename: ((renamed: boolean) => void) | null = null;
+		const area: AreaState = {
+			views: [
+				{
+					instance: "search-1",
+					kind: TEST_SEARCH_EXTENSION_KIND,
+					state: { filePath: "/one.md" },
+				},
+			],
+			activeInstance: "search-1",
+		};
+		renderWithinProvider(
+			<PanelV2
+				side="main"
+				area={area}
+				isFocused={true}
+				onFocusArea={vi.fn()}
+				onSelectView={vi.fn()}
+				onRemoveView={vi.fn()}
+				onRenameTab={() =>
+					new Promise<boolean>((resolve) => {
+						settleRename = resolve;
+					})
+				}
+				viewContext={createViewContext()}
+				viewOverrides={[searchViewOverride]}
+			/>,
+		);
+
+		// Stands in for wherever a browser sends the keyboard when the field
+		// disables itself mid-rename: anywhere but the field.
+		const elsewhere = document.createElement("button");
+		document.body.append(elsewhere);
+
+		const tab = screen.getByRole("button", { name: "Search" });
+		tab.focus();
+		fireEvent.keyDown(tab, { key: "F2" });
+		const field = () =>
+			document.querySelector<HTMLInputElement>(
+				"[data-attr='panel-tab-rename-input']",
+			);
+		await waitFor(() => expect(field()).toHaveFocus());
+
+		// The field disables itself while the workspace answers, and a browser
+		// blurs a disabled input and refuses to focus one. The test DOM does
+		// neither, so both are staged here.
+		const input = field()!;
+		const focusInput = input.focus.bind(input);
+		const selectInput = input.select.bind(input);
+		input.focus = () => {
+			if (!input.disabled) focusInput();
+		};
+		input.select = () => {
+			if (!input.disabled) selectInput();
+		};
+		fireEvent.change(input, { target: { value: "taken.md" } });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await waitFor(() => expect(field()).toBeDisabled());
+		elsewhere.focus();
+		await act(async () => settleRename?.(false));
+
+		// The field stays open on the name that was refused, so it is the field
+		// the reader carries on typing in. Left blurred, the tab was a field
+		// that answered neither what was typed into it nor the Escape meant to
+		// leave it.
+		await waitFor(() => expect(field()).toHaveFocus());
+		expect(field()).toHaveAttribute("aria-invalid", "true");
+		fireEvent.keyDown(field()!, { key: "Escape" });
+		await waitFor(() => expect(field()).toBeNull());
+		expect(screen.getByRole("button", { name: "Search" })).toHaveFocus();
+		elsewhere.remove();
 	});
 
 	test("registers the panel container as a droppable target", () => {

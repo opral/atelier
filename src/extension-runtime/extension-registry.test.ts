@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { Puzzle } from "lucide-react";
 import {
+	fileViewExtension,
 	findFileHandlerExtension,
 	isMarkdownFilePath,
 	normalizeFileExtensions,
@@ -133,4 +134,45 @@ test("ordinary CSV files resolve to exactly one built-in CSV handler", () => {
 			definition.fileExtensions?.includes("csv"),
 		),
 	).toEqual([csv]);
+});
+
+describe("fileViewExtension", () => {
+	test("a path no extension claims opens in the text view", () => {
+		const { extensionMap } = buildExtensionRegistry([], []);
+		const definitions = [...extensionMap.values()];
+		const text = extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.text);
+		expect(text).toBeDefined();
+		// The files a repository is full of and no manifest names: they are
+		// files to type into, not file types to apologise for.
+		for (const path of [
+			"/Dockerfile",
+			"/LICENSE",
+			"/Makefile",
+			"/.gitignore",
+			"/.env",
+			"/notes.unknown",
+		]) {
+			expect(fileViewExtension(definitions, path)).toBe(text);
+		}
+	});
+
+	test("a declared handler still wins over the text view", () => {
+		const { extensionMap } = buildExtensionRegistry([], []);
+		const definitions = [...extensionMap.values()];
+		expect(fileViewExtension(definitions, "/data.csv")).toBe(
+			extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.csv),
+		);
+		expect(fileViewExtension(definitions, "/readme.md")).toBe(
+			extensionMap.get(ATELIER_BUILTIN_EXTENSION_IDS.markdown),
+		);
+	});
+
+	test("without a text view the caller's own fallback stands", () => {
+		const markdown = {
+			...baseExtension,
+			kind: "markdown",
+			fileExtensions: ["md"],
+		};
+		expect(fileViewExtension([markdown], "/Dockerfile")).toBeUndefined();
+	});
 });

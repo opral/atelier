@@ -18,7 +18,7 @@ import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
 import { PathLabel, splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
-import { useQuery, useQueryResult } from "@/lib/lix-react";
+import { useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviewPage,

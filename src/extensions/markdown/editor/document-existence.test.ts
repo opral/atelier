@@ -19,14 +19,18 @@ function stubLix(initial: string[]) {
 			rows: files.has(String(params[0])) ? [{ id: "f" }] : [],
 		}),
 		observe: () => ({
+			[Symbol.asyncIterator]() {
+				return this;
+			},
 			next: () =>
 				new Promise<unknown>((resolve) => {
 					if (closed) resolve(null);
 					else waiting.push(resolve);
-				}),
-			close: () => {
+				}).then((value) => ({ done: value == null, value })),
+			return: async () => {
 				closed = true;
 				for (const resolve of waiting.splice(0)) resolve(null);
+				return { done: true, value: undefined };
 			},
 		}),
 	};

@@ -22,6 +22,7 @@ import {
 } from "@/extension-runtime/editor-revision-state";
 import { useSyncedTextFile } from "@/extension-runtime/use-synced-text-file";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
+import { fileNameFromPath } from "@/extension-runtime/extension-instance-helpers";
 import { decodeFileDataToText, fileText } from "@/lib/decode-file-data";
 import { FileSnapshotsAtCommits } from "@/hooks/use-file-snapshots-at-commits";
 import { useLix, useQueryResult } from "@/lib/lix-react";
@@ -631,6 +632,19 @@ function LiveTextDocument({
 			return <TextMessage>File not found in the workspace.</TextMessage>;
 		}
 		if (reviewState.status === "loading") return null;
+	}
+	// This view takes every file no extension claims, so it is the one that
+	// meets bytes nobody promised were text. `fileText` is the strict reader:
+	// a file it refuses is said so plainly, because the alternative is a
+	// screen of replacement characters the editor would save back over it.
+	// Only the live document declines — a review's read-only editor already
+	// shows the side that exists and can write nothing.
+	if (!reviewState && fileRow && fileText(fileRow.content) === null) {
+		return (
+			<TextMessage role="alert">
+				{`${fileNameFromPath(path) ?? "This file"} is not a text file — its bytes are not UTF-8.`}
+			</TextMessage>
+		);
 	}
 	return (
 		<EditableTextDocument

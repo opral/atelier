@@ -12,21 +12,26 @@ afterEach(() => {
 
 function createObserveStream() {
 	const pending: Array<{
-		resolve: (event: ObserveEvent | undefined) => void;
+		resolve: (event: IteratorResult<ObserveEvent>) => void;
 		reject: (error: unknown) => void;
 	}> = [];
 	return {
 		next: vi.fn(
 			() =>
-				new Promise<ObserveEvent | undefined>((resolve, reject) => {
+				new Promise<IteratorResult<ObserveEvent>>((resolve, reject) => {
 					pending.push({ resolve, reject });
 				}),
 		),
-		close: vi.fn(),
+		[Symbol.asyncIterator]() {
+			return this;
+		},
+		return: vi.fn(async () => {
+			return { done: true as const, value: undefined };
+		}),
 		emit(event: ObserveEvent) {
 			const next = pending.shift();
 			if (!next) throw new Error("observe stream has no pending next call");
-			next.resolve(event);
+			next.resolve({ value: event, done: false });
 		},
 		fail(error: unknown) {
 			const next = pending.shift();
@@ -83,7 +88,19 @@ test("useQuery accepts the initial observe snapshot as authoritative", async () 
 		.mockImplementation(() => new Promise<ObserveEvent | undefined>(() => {}));
 	const close = vi.fn();
 	const lix = {
-		observe: vi.fn(() => ({ next, close })),
+		observe: vi.fn(() => ({
+			[Symbol.asyncIterator]() {
+				return this;
+			},
+			next: async () => {
+				const value = await next();
+				return { value, done: value === undefined };
+			},
+			return: async () => {
+				close();
+				return { done: true, value: undefined };
+			},
+		})),
 	} as unknown as Lix;
 	const execute = vi.fn().mockResolvedValue([{ value: "initial" }]);
 
@@ -295,10 +312,10 @@ test("useQueryResult keeps one observer across the StrictMode effect reconnect",
 		</StrictMode>,
 	);
 	await waitFor(() => expect(lix.observe).toHaveBeenCalledTimes(1));
-	expect(stream.close).not.toHaveBeenCalled();
+	expect(stream.return).not.toHaveBeenCalled();
 
 	rendered.unmount();
-	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(stream.return).toHaveBeenCalledTimes(1));
 });
 
 test("useQuery publishes observed rows to every consumer of the cached query", async () => {
@@ -362,7 +379,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 		);
 	});
 	expect(screen.queryByTestId("first-value")).toBeNull();
-	expect(stream.close).not.toHaveBeenCalled();
+	expect(stream.return).not.toHaveBeenCalled();
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	await waitFor(() => expect(stream.next).toHaveBeenCalledTimes(2));
@@ -375,7 +392,7 @@ test("useQuery publishes observed rows to every consumer of the cached query", a
 	expect(execute).not.toHaveBeenCalled();
 
 	view?.unmount();
-	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(stream.return).toHaveBeenCalledTimes(1));
 });
 
 test("stopped observers cannot overwrite a restarted cache entry with queued events", async () => {
@@ -434,7 +451,7 @@ test("stopped observers cannot overwrite a restarted cache entry with queued eve
 	);
 	await waitFor(() => expect(firstStream.next).toHaveBeenCalledTimes(3));
 	await act(async () => first?.unmount());
-	expect(firstStream.close).toHaveBeenCalledTimes(1);
+	expect(firstStream.return).toHaveBeenCalledTimes(1);
 
 	let restarted: ReturnType<typeof render> | undefined;
 	await act(async () => {
@@ -668,7 +685,7 @@ test("useQuery starts a query when it becomes enabled", async () => {
 	expect(lix.observe).toHaveBeenCalledTimes(1);
 
 	view.unmount();
-	await waitFor(() => expect(stream.close).toHaveBeenCalledTimes(1));
+	await waitFor(() => expect(stream.return).toHaveBeenCalledTimes(1));
 });
 
 test("useQuery retains an initial query error across remounts without HTTP classification", async () => {
@@ -807,8 +824,11 @@ test("useQuery does not throw when the initial read hits a gone protocol session
 	const execute = vi.fn().mockRejectedValue(error);
 	const lix = {
 		observe: vi.fn(() => ({
-			next: () => new Promise<ObserveEvent | undefined>(() => {}),
-			close: vi.fn(),
+			[Symbol.asyncIterator]() {
+				return this;
+			},
+			next: () => new Promise<IteratorResult<ObserveEvent>>(() => {}),
+			return: vi.fn(async () => ({ done: true, value: undefined })),
 		})),
 	} as unknown as Lix;
 
@@ -990,8 +1010,11 @@ test("useQuery can evict component-scoped results on unmount", async () => {
 	]);
 	const lix = {
 		observe: vi.fn(() => ({
-			next: () => new Promise<ObserveEvent | undefined>(() => {}),
-			close: vi.fn(),
+			[Symbol.asyncIterator]() {
+				return this;
+			},
+			next: () => new Promise<IteratorResult<ObserveEvent>>(() => {}),
+			return: vi.fn(async () => ({ done: true, value: undefined })),
 		})),
 	} as unknown as Lix;
 

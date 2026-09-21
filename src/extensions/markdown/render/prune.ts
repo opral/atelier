@@ -44,7 +44,13 @@ export function pruneToChanges(
 
 	const prune = (node: JSONContent): JSONContent => {
 		const children = node.content ?? [];
-		if (!PRUNABLE.has(node.type ?? "") || children.length === 0) return node;
+		if (children.length === 0) return node;
+		// A list item is not a container the trim can shorten, but the list
+		// nested under it is: the walk goes through the one to reach the other.
+		// Stopping here left a release note's six hundred sub-items whole, and
+		// the card refused a document the trim could have cut in half.
+		if (!PRUNABLE.has(node.type ?? ""))
+			return { ...node, content: children.map(prune) };
 
 		// Trimming is a budget, not a habit: a container that already fits is
 		// shown whole, context and all.
@@ -141,6 +147,133 @@ export function pruneToChanges(
 	};
 
 	return { doc: prune(doc), hidden };
+}
+
+/**
+ * Blocks whose children are text, and so the places a cut can land.
+ *
+ * A gap inside a row would be foster-parented out of its table, and one
+ * inside a list item would sit beside the item's paragraph rather than in
+ * it: the marker belongs where the words it replaces were.
+ */
+const CAPPABLE = new Set([
+	"paragraph",
+	"heading",
+	"codeBlock",
+	"tableCell",
+	"tableHeader",
+	"markdownUnsupported",
+	"markdownFrontmatter",
+]);
+
+/**
+ * Nodes that keep their source in an attribute instead of in a text node.
+ *
+ * Frontmatter, a block of embedded HTML, a tag inside a sentence: the card
+ * shows them as source, and a cut that only looked at text nodes measured
+ * them as nothing and left a page of raw HTML whole.
+ */
+const RAW_SOURCE = new Set([
+	"markdownUnsupported",
+	"markdownFrontmatter",
+	"markdownInlineHtml",
+]);
+
+/**
+ * Cuts any single line longer than the card, where it stops fitting.
+ *
+ * A pasted log, a generated file, a paragraph written without a break in it:
+ * one line can be longer than the whole card, and a ceiling on lines cannot
+ * shorten it — the render used to be refused outright. The start of it, and
+ * how much more there is, reads better than nothing.
+ *
+ * What a cut leaves out is named in place and not counted as hidden: no line
+ * went, so a count of hidden lines would disagree with what is drawn.
+ */
+export function capLongLines(doc: JSONContent, maxChars: number): JSONContent {
+	if (!Number.isFinite(maxChars)) return doc;
+	const budget = Math.max(0, Math.floor(maxChars));
+	const walk = (node: JSONContent): JSONContent => {
+		if (CAPPABLE.has(node.type ?? "")) return capLine(node, budget);
+		const children = node.content;
+		if (!children) return node;
+		return { ...node, content: children.map(walk) };
+	};
+	return walk(doc);
+}
+
+/** One block, cut at `budget` characters, with the rest named where it went. */
+function capLine(node: JSONContent, budget: number): JSONContent {
+	const total = countCharacters(node);
+	if (total <= budget) return node;
+	const dropped = total - budget;
+	let remaining = budget;
+	const cut = (candidate: JSONContent): JSONContent[] => {
+		if (candidate.type === "text") {
+			const text = candidate.text ?? "";
+			if (remaining >= 0 && text.length <= remaining) {
+				remaining -= text.length;
+				return [candidate];
+			}
+			const kept = remaining > 0 ? text.slice(0, remaining) : "";
+			const marker =
+				remaining >= 0
+					? [
+							{
+								type: GAP_NODE_TYPE,
+								attrs: { count: dropped, of: "line", changed: true },
+							},
+						]
+					: [];
+			remaining = -1;
+			return kept ? [{ ...candidate, text: kept }, ...marker] : marker;
+		}
+		if (RAW_SOURCE.has(candidate.type ?? "")) {
+			const text = String(candidate.attrs?.value ?? "");
+			if (remaining >= 0 && text.length <= remaining) {
+				remaining -= text.length;
+				return [candidate];
+			}
+			const kept = remaining > 0 ? text.slice(0, remaining) : "";
+			// Raw source has no children to hold a marker, so the note is the
+			// last of the source it shortened.
+			const note =
+				remaining >= 0 ? `⋯ ${dropped} more ${characters(dropped)}` : null;
+			remaining = -1;
+			if (note === null) return [];
+			return [
+				{
+					...candidate,
+					attrs: {
+						...candidate.attrs,
+						value: kept ? `${kept}\n${note}` : note,
+					},
+				},
+			];
+		}
+		// Past the cut nothing is kept: an image or a break the reader will not
+		// reach is not worth the bytes.
+		if (remaining < 0) return [];
+		const children = candidate.content;
+		if (!children) return [candidate];
+		return [{ ...candidate, content: children.flatMap(cut) }];
+	};
+	return cut(node)[0] ?? node;
+}
+
+function characters(count: number): string {
+	return count === 1 ? "character" : "characters";
+}
+
+/** The characters a block holds, which is what a cut is measured in. */
+function countCharacters(node: JSONContent): number {
+	if (node.type === "text") return (node.text ?? "").length;
+	if (RAW_SOURCE.has(node.type ?? ""))
+		return String(node.attrs?.value ?? "").length;
+	return (node.content ?? []).reduce(
+		(total, child) => total + countCharacters(child),
+		0,
+	);
 }
 
 /** Lines a dropped node takes with it, counted as the summary counts them. */

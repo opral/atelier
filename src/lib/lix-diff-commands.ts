@@ -11,6 +11,30 @@ function fileIdParameters(fileIds: readonly string[], firstParameter: number) {
 	return fileIds.map((_, index) => `$${firstParameter + index}`).join(", ");
 }
 
+function rowRefParameters(fileIds: readonly string[], firstParameter: number) {
+	return fileIds
+		.map((_, index) => `lix_row_ref('lix_file', $${firstParameter + index})`)
+		.join(", ");
+}
+
+export type RecoveryReceipt = {
+	readonly commitId: string | null;
+};
+
+function recoveryReceipt(
+	result: { readonly rows: readonly Readonly<Record<string, unknown>>[] },
+	operation: string,
+): RecoveryReceipt {
+	if (result.rows.length !== 1) {
+		throw new Error(`${operation} did not return one commit ID row.`);
+	}
+	const commitId = result.rows[0]?.commit_id;
+	if (commitId !== null && !isString(commitId)) {
+		throw new Error(`${operation} returned an invalid commit ID.`);
+	}
+	return { commitId };
+}
+
 /** Creates a full checkpoint through the canonical SQL surface. */
 export async function createCheckpoint(
 	lix: Lix,
@@ -54,19 +78,20 @@ export async function createCheckpointForFiles(
 	return { commitId };
 }
 
-export async function revertWorkingChangesForFiles(
+export async function discardWorkingChangesForFiles(
 	lix: Lix,
 	fileIds: readonly string[],
 	epoch: { readonly beforeCommitId: string; readonly afterCommitId: string },
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
 	const result = await lix.execute(
-		`INSERT INTO lix_revert (row_ref)
+		`SELECT commit_id FROM lix_restore($1, ARRAY(
 		 SELECT row_ref
 		 FROM lix_diff('lix_file')
 		 WHERE lixcol_from_commit_id = $1
 		   AND lixcol_to_commit_id = $2
-		   AND id IN (${fileIdParameters(fileIds, 3)})`,
+		   AND id IN (${fileIdParameters(fileIds, 3)})
+		 ))`,
 		[epoch.beforeCommitId, epoch.afterCommitId, ...fileIds],
 	);
 	if (result.rowsAffected === 0) {
@@ -136,7 +161,7 @@ export async function restoreCheckpoint(
 	lix: Lix,
 	checkpointCommitId: string,
 ): Promise<void> {
-	await lix.execute("INSERT INTO lix_restore (commit_id) VALUES ($1)", [
+	await lix.execute("SELECT commit_id FROM lix_restore($1)", [
 		checkpointCommitId,
 	]);
 }
@@ -147,38 +172,56 @@ export async function restoreCheckpointFiles(
 	fileIds: readonly string[],
 ): Promise<number> {
 	if (fileIds.length === 0) return 0;
-	const headResult = await lix.execute(
-		"SELECT lix_active_branch_commit_id() AS commit_id",
-	);
-	const headCommitId = headResult.rows[0]?.commit_id;
-	if (typeof headCommitId !== "string") {
-		throw new Error("The active Lix branch has no head commit.");
-	}
-	if (headCommitId === checkpointCommitId) return 0;
-
-	// Applying the head→checkpoint diff for the selected files restores their
-	// checkpoint state without touching anything else.
 	const result = await lix.execute(
-		`INSERT INTO lix_apply (row_ref)
-		 SELECT row_ref
-		 FROM lix_diff('lix_file', $1, $2)
-		 WHERE id IN (${fileIdParameters(fileIds, 3)})`,
-		[headCommitId, checkpointCommitId, ...fileIds],
+		`SELECT commit_id FROM lix_restore($1, ARRAY[${rowRefParameters(fileIds, 2)}])`,
+		[checkpointCommitId, ...fileIds],
 	);
 	return result.rowsAffected;
+}
+
+/**
+ * Undoes a checkpoint through the hard undo surface. A full undo includes the
+ * checkpoint's metadata effect; a selected undo carries exactly the requested
+ * file row refs and lets Lix add their dependency closure.
+ */
+export async function undoCheckpoint(
+	lix: Lix,
+	checkpointCommitId: string,
+): Promise<RecoveryReceipt> {
+	const result = await lix.execute("SELECT commit_id FROM lix_undo($1)", [
+		checkpointCommitId,
+	]);
+	return recoveryReceipt(result, "Checkpoint undo");
+}
+
+export async function undoCheckpointFiles(
+	lix: Lix,
+	checkpointCommitId: string,
+	fileIds: readonly string[],
+): Promise<RecoveryReceipt> {
+	if (fileIds.length === 0) return { commitId: null };
+	const result = await lix.execute(
+		`SELECT commit_id FROM lix_undo($1, ARRAY[${rowRefParameters(fileIds, 2)}])`,
+		[checkpointCommitId, ...fileIds],
+	);
+	return recoveryReceipt(result, "Selected checkpoint undo");
 }
 
 function isString(value: unknown): value is string {
 	return typeof value === "string";
 }
 
-/** Undo an already-applied span, rejecting later edits to selected files atomically. */
+/** Undo an already-applied span, rejecting later edits to selected files atomically.
+ *
+ * The reviewed range can contain several commits, so this keeps the range
+ * recovery surface instead of treating its endpoint as one undoable action.
+ */
 export async function undoAppliedFiles(
 	lix: Lix,
 	fileIds: readonly string[],
 	range: { beforeCommitId: string; afterCommitId: string },
-): Promise<void> {
-	if (!fileIds.length) return;
+): Promise<RecoveryReceipt> {
+	if (!fileIds.length) return { commitId: null };
 	const tx = await lix.beginTransaction();
 	try {
 		const head = (
@@ -194,11 +237,12 @@ export async function undoAppliedFiles(
 			throw new Error(
 				"These files changed after the reviewed changes. Undo was not applied; review the newer edits first.",
 			);
-		await tx.execute(
-			`INSERT INTO lix_apply (row_ref) SELECT row_ref FROM lix_diff('lix_file', $1, $2) WHERE id IN (${fileIdParameters(fileIds, 3)})`,
-			[range.afterCommitId, range.beforeCommitId, ...fileIds],
+		const result = await tx.execute(
+			`SELECT commit_id FROM lix_revert_range($1, $2, ARRAY[${rowRefParameters(fileIds, 3)}])`,
+			[range.beforeCommitId, range.afterCommitId, ...fileIds],
 		);
 		await tx.commit();
+		return recoveryReceipt(result, "Applied-change undo");
 	} catch (error) {
 		await tx.rollback().catch(() => {});
 		throw error;

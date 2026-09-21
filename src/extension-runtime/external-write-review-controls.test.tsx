@@ -733,6 +733,56 @@ describe("ExternalWriteReviewControls", () => {
 		);
 	});
 
+	test("historical latest checkpoint uses Undo as its primary action", async () => {
+		const undo = vi.fn(async () => {});
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="historical"
+				historicalUndoable
+				navigation={{
+					...NAVIGATION,
+					fileName: "launch-post.md",
+					activeIndex: 1,
+				}}
+				files={FILES}
+				onPrimary={undo}
+			/>,
+		);
+
+		expect(screen.getByRole("button", { name: "Undo" })).toBeVisible();
+		expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+		await waitFor(() =>
+			expect(undo).toHaveBeenCalledWith(["file-launch"], {
+				scope: "selection",
+			}),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "More undo options" }));
+		expect(
+			screen.getByRole("menuitem", { name: /Undo all 2 files/ }),
+		).toBeVisible();
+	});
+
+	test("historical metadata-only checkpoint still exposes full Undo", async () => {
+		const undo = vi.fn(async () => {});
+		render(
+			<ExternalWriteReviewControls
+				isActive
+				mode="historical"
+				historicalUndoable
+				onPrimary={undo}
+			/>,
+		);
+
+		const button = screen.getByRole("button", { name: "Undo" });
+		expect(button).toBeEnabled();
+		fireEvent.click(button);
+		await waitFor(() =>
+			expect(undo).toHaveBeenCalledWith([], { scope: "selection" }),
+		);
+	});
+
 	test("one changed file: no chip, no stepper arrows, no verb arrows", () => {
 		render(
 			<ExternalWriteReviewControls

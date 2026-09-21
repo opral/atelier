@@ -46,6 +46,11 @@ export type CheckpointRow = {
 	created_at: string;
 };
 
+/** The effective latest checkpoint and the baseline read with one snapshot. */
+export type LatestCheckpointWithWorkingBaseRow = CheckpointRow & {
+	working_base_commit_id: string | null;
+};
+
 /**
  * Unified filesystem listing containing both directories and files ordered by path.
  *
@@ -132,22 +137,31 @@ export function selectFileCheckpointChanges(
 	commitIds?: readonly string[],
 ) {
 	return qb(lix)
-		.selectFrom(sql<any>`lix_history('lix_file')`.as("history"))
+		.selectFrom(sql<any>`lix_log()`.as("log"))
+		.innerJoin(
+			sql<any>`lix_history('lix_file')`.as("history"),
+			"history.lixcol_to_commit_id",
+			"log.commit_id",
+		)
 		.select([
-			sql<string>`lixcol_to_commit_id`.as("commit_id"),
-			sql<string>`lixcol_from_commit_id`.as("parent_commit_id"),
-			sql<string>`lixcol_commit_created_at`.as("commit_created_at"),
-			sql<FileCheckpointChangeRow["change_kind"]>`diff_type`.as("change_kind"),
-			sql<string | null>`coalesce(to_path, from_path)`.as("path"),
+			sql<string>`history.lixcol_to_commit_id`.as("commit_id"),
+			sql<string>`history.lixcol_from_commit_id`.as("parent_commit_id"),
+			sql<string>`history.lixcol_commit_created_at`.as("commit_created_at"),
+			sql<FileCheckpointChangeRow["change_kind"]>`history.diff_type`.as(
+				"change_kind",
+			),
+			sql<string | null>`coalesce(history.to_path, history.from_path)`.as(
+				"path",
+			),
 		])
-		.where("id", "=", fileId)
+		.where("history.id", "=", fileId)
 		.$if(commitIds !== undefined, (query) =>
-			query.where(sql<string>`lixcol_to_commit_id`, "in", [
+			query.where(sql<string>`history.lixcol_to_commit_id`, "in", [
 				...(commitIds ?? []),
 			]),
 		)
-		.where(sql<boolean>`lixcol_commit_is_checkpoint`, "=", true)
-		.orderBy(sql`lixcol_position`, "asc")
+		.where("log.is_checkpoint", "=", true)
+		.orderBy(sql`log.position`, "asc")
 		.$castTo<FileCheckpointChangeRow>();
 }
 
@@ -280,7 +294,14 @@ export function selectFilesStateAt(lix: Lix, commitId: string) {
 	);
 }
 
-export const CHECKPOINT_PREVIEW_PAGE_SIZE = 20;
+/**
+ * Checkpoints a history panel shows, and asks about, at a time.
+ *
+ * Ten fills the panel without a scroll on an ordinary window, and the reader
+ * asks for the next ten. The number is also the bound on one history read:
+ * the preview names the files in a page, and a page is what is on screen.
+ */
+export const CHECKPOINT_PREVIEW_PAGE_SIZE = 10;
 export type CheckpointFilePreviewRow = {
 	commit_id: string;
 	id: string;
@@ -296,7 +317,9 @@ export function selectCheckpointFilePreviewPage(
 		commitIds.length === 0 ||
 		commitIds.length > CHECKPOINT_PREVIEW_PAGE_SIZE
 	) {
-		throw new Error("A checkpoint preview page must contain 1–20 commit IDs.");
+		throw new Error(
+			`A checkpoint preview page must contain 1–${CHECKPOINT_PREVIEW_PAGE_SIZE} commit IDs.`,
+		);
 	}
 	return qb(lix)
 		.selectFrom(
@@ -340,6 +363,15 @@ export async function selectFilePathsAtCommits(
 	return paths;
 }
 
+/** Reads a commit's creation time from the repository-global inventory. */
+export function selectCommitCreatedAt(lix: Lix, commitId: string) {
+	return qb(lix)
+		.selectFrom("lix_commit")
+		.select("created_at")
+		.where("id", "=", commitId)
+		.limit(1);
+}
+
 /** Checkpoints on the active branch, ordered by ancestry rather than time. */
 export function selectCheckpoints(lix: Lix) {
 	return qb(lix)
@@ -352,4 +384,28 @@ export function selectCheckpoints(lix: Lix) {
 
 export function selectLatestCheckpoint(lix: Lix) {
 	return selectCheckpoints(lix).limit(1);
+}
+
+/**
+ * Reads the repository-wide effective latest checkpoint together with the
+ * active branch baseline in one statement. Callers use the pair to decide
+ * whether a historical review is an Undo or a Restore.
+ */
+export function selectLatestCheckpointWithWorkingBase(lix: Lix) {
+	return qb(lix)
+		.selectFrom(sql<any>`lix_log()`.as("log"))
+		.select([
+			"commit_id",
+			"parent_commit_id",
+			"created_at",
+			sql<string | null>`(
+				SELECT working_base_commit_id
+				FROM lix_branch
+				WHERE id = lix_active_branch_id()
+			)`.as("working_base_commit_id"),
+		])
+		.where("is_checkpoint", "=", true)
+		.orderBy("position", "asc")
+		.limit(1)
+		.$castTo<LatestCheckpointWithWorkingBaseRow>();
 }

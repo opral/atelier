@@ -157,10 +157,8 @@ export function useSyncedTextFile({
 		};
 		void (async () => {
 			try {
-				for (;;) {
+				for await (const event of events) {
 					if (closed) break;
-					const event = await events.next();
-					if (!event || closed) continue;
 					const row = event.result.rows[0];
 					if (row) reconcile(row.content);
 				}
@@ -173,7 +171,7 @@ export function useSyncedTextFile({
 		})();
 		return () => {
 			closed = true;
-			events.close();
+			void events.return?.();
 			// Do not discard an already serialized edit while its preceding write
 			// is in flight. The detached flush drains it after the view closes.
 		};

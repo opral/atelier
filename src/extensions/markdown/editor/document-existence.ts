@@ -52,9 +52,8 @@ export function createDocumentExistence(lix: Lix | null | undefined) {
 	if (events) {
 		void (async () => {
 			try {
-				for (;;) {
-					const event = await events.next();
-					if (!event || closed) break;
+				for await (const event of events) {
+					if (closed) break;
 					paths = new Set(
 						event.result.rows.map((row) => String(row.path ?? "")),
 					);
@@ -86,7 +85,7 @@ export function createDocumentExistence(lix: Lix | null | undefined) {
 		},
 		close: () => {
 			closed = true;
-			events?.close();
+			void events?.return?.();
 		},
 	};
 }

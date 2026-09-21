@@ -135,19 +135,57 @@ function useTabRemovalFocus({
 		},
 		[area.activeInstance, area.views, onRemoveView],
 	);
+	// The keyboard is not always on the tab when its view closes: it is in the
+	// document, where reading and typing happen, and the tab may be closed
+	// from anywhere — a host's shortcut, the Files view, the end of a review.
+	// The view then leaves with the focus inside it and the keyboard falls to
+	// `<body>`. The tab that takes over is where it belongs then too, so the
+	// view that last had it is remembered here.
+	const viewsRef = useRef(area.views);
+	viewsRef.current = area.views;
+	const focusedViewRef = useRef<string | null>(null);
+	useEffect(() => {
+		const remember = (event: FocusEvent) => {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			const instance = target
+				.closest("[data-view-instance]")
+				?.getAttribute("data-view-instance");
+			// Only this area's views: another area's keyboard is its business.
+			if (!instance) return;
+			if (!viewsRef.current.some((entry) => entry.instance === instance))
+				return;
+			focusedViewRef.current = instance;
+		};
+		document.addEventListener("focusin", remember);
+		return () => document.removeEventListener("focusin", remember);
+	}, []);
+
 	const fallbacks = fallbackSelectors.join(",");
 	useLayoutEffect(() => {
 		const container = containerRef.current;
 		const pending = pendingRef.current;
-		if (!container || !pending) return;
-		if (area.views.some((entry) => entry.instance === pending.instance)) {
+		const strandedView = focusedViewRef.current;
+		const stranded =
+			strandedView !== null &&
+			!area.views.some((entry) => entry.instance === strandedView) &&
+			// Only a keyboard the removal dropped. One that has moved on — to
+			// the menu that closed the tab, to another area — is left alone.
+			(document.activeElement === null ||
+				document.activeElement === document.body);
+		if (stranded) focusedViewRef.current = null;
+		if (!container || !(pending || stranded)) return;
+		if (
+			pending &&
+			area.views.some((entry) => entry.instance === pending.instance)
+		) {
 			if (
 				area.views !== pending.previousViews ||
 				area.activeInstance !== pending.previousActiveInstance
 			) {
 				pendingRef.current = null;
 			}
-			return;
+			if (!stranded) return;
 		}
 		pendingRef.current = null;
 		const nextTab = activeInstance
@@ -494,6 +532,7 @@ export function PanelV2({
 		<ContainerElement
 			ref={setPanelElementRef}
 			aria-label={ariaLabel}
+			data-area-side={side}
 			onClickCapture={() => onFocusArea(side)}
 			className={clsx("flex h-full w-full flex-col", hostTextClass)}
 		>
@@ -570,6 +609,13 @@ export function PanelV2({
 			    the canvas shows through and their views style themselves for
 			    that surface. */}
 			<div
+				// The views stay mounted while their panel is collapsed — they
+				// keep their state and their measurements for when it comes back —
+				// and a zero-wide panel still answered Tab, so the keyboard walked
+				// into a sidebar nobody could see, the same way the collapsed
+				// panel's gutter and its section picker once did.
+				inert={contentVisible ? undefined : true}
+				aria-hidden={contentVisible ? undefined : true}
 				className={clsx(
 					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
 					side === "main" ? "border border-border bg-panel" : "bg-transparent",
@@ -759,11 +805,13 @@ function SidebarSectionPicker({
 				preferencesFor(activeEntry.kind),
 			)
 		: [];
+	const triggerRef = useRef<HTMLButtonElement>(null);
 
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
 				<button
+					ref={triggerRef}
 					type="button"
 					aria-label={`${activeLabel} panel view menu`}
 					data-attr="panel-section-picker"
@@ -789,10 +837,28 @@ function SidebarSectionPicker({
 				// the sidebar's content ambiguity in place.
 				align="start"
 				sideOffset={2}
-				// Closing does not hand focus back to the trigger: the restore is
-				// programmatic and would paint the keyboard focus ring after any
-				// pointer-driven open/close. Tabbing to the trigger still rings.
-				onCloseAutoFocus={(event) => event.preventDefault()}
+				// Radix hands focus back to whoever held it when the menu opened,
+				// which is <body> for a pointer-driven open — the trigger declines
+				// the click's focus — so the keyboard landed on nothing and the
+				// next Tab restarted at the top of the page. The trigger is where
+				// the picker was opened from, so it takes the keyboard back, without
+				// painting a ring: closing the picker is not a keyboard navigation
+				// moment. Tabbing to the trigger still rings.
+				onCloseAutoFocus={(event) => {
+					event.preventDefault();
+					const trigger = triggerRef.current;
+					// The item chosen may have taken the trigger with it — Hide
+					// sidebar collapses the panel, header and all — or put the
+					// keyboard somewhere of its own. Either way the restore has
+					// nothing to say.
+					if (!trigger?.isConnected) return;
+					const active = document.activeElement;
+					if (active !== null && active !== document.body) return;
+					trigger.focus({
+						preventScroll: true,
+						focusVisible: false,
+					} as FocusOptions);
+				}}
 				className="w-[212px] rounded-[10px] border border-border bg-panel p-1.5 shadow-lg"
 			>
 				{/* Open views and openable views read as one list: the picker answers
@@ -1787,6 +1853,19 @@ function SortableTab({
 	onRename,
 }: SortableTabProps) {
 	const [renaming, setRenaming] = useState(false);
+	// The field replaces the chip, so ending the rename takes the focused
+	// element out of the document: Enter and Escape left the keyboard on
+	// `<body>` and the next Tab restarted at the top of the page. The chip
+	// that comes back is where the rename started, so that is where the
+	// keyboard goes — but only when the field still had it, because a rename
+	// ended by clicking elsewhere must not pull the focus off what was clicked.
+	const tabButtonRef = useRef<HTMLButtonElement | null>(null);
+	const restoreFocusRef = useRef(false);
+	useLayoutEffect(() => {
+		if (renaming || !restoreFocusRef.current) return;
+		restoreFocusRef.current = false;
+		tabButtonRef.current?.focus({ preventScroll: true });
+	}, [renaming]);
 	const {
 		attributes,
 		listeners,
@@ -1811,6 +1890,11 @@ function SortableTab({
 		transition,
 	};
 
+	const setTabButtonRef = (node: HTMLButtonElement | null) => {
+		tabButtonRef.current = node;
+		setNodeRef(node);
+	};
+
 	// The field replaces the chip rather than sitting inside it: a tab is a
 	// button, and a button is no place to type.
 	if (renaming && onRename)
@@ -1821,7 +1905,10 @@ function SortableTab({
 				name={label}
 				style={style}
 				onRename={onRename}
-				onDone={() => setRenaming(false)}
+				onDone={(keptFocus) => {
+					restoreFocusRef.current = keptFocus;
+					setRenaming(false);
+				}}
 			/>
 		);
 
@@ -1834,7 +1921,7 @@ function SortableTab({
 			onCloseRight={onCloseRight}
 		>
 			<TabButtonBase
-				ref={setNodeRef}
+				ref={setTabButtonRef}
 				icon={icon}
 				label={label}
 				onRenameRequest={onRename ? () => setRenaming(true) : undefined}
@@ -1889,7 +1976,12 @@ const TabRenameField = forwardRef<
 		readonly name: string;
 		readonly style?: CSSProperties;
 		readonly onRename: (nextName: string) => Promise<boolean>;
-		readonly onDone: () => void;
+		/**
+		 * The rename is over. `keptFocus` says the field still had the keyboard
+		 * as it closed — Enter or Escape, not a click elsewhere — so the chip
+		 * taking its place is the one that should have it next.
+		 */
+		readonly onDone: (keptFocus: boolean) => void;
 	}
 >(({ icon: Icon, name, style, onRename, onDone }, ref) => {
 	const inputRef = useRef<HTMLInputElement | null>(null);
@@ -1900,6 +1992,20 @@ const TabRenameField = forwardRef<
 	// The menu's focus restore lands after the field mounts; a blur before
 	// the field has had the focus at all is that, not the reader leaving.
 	const focused = useRef(false);
+	// What the field owes itself once the rename it is waiting on has
+	// settled: see `commit`.
+	const resume = useRef<"idle" | "select" | "focus">("idle");
+
+	useEffect(() => {
+		if (busy || resume.current === "idle") return;
+		const mode = resume.current;
+		resume.current = "idle";
+		const input = inputRef.current;
+		if (!input) return;
+		// Only now is the input enabled again and able to hold the keyboard.
+		if (mode === "focus") input.focus();
+		input.select();
+	}, [busy]);
 
 	useEffect(() => {
 		// The context menu hands focus back to the chip as it closes, and the
@@ -1914,22 +2020,32 @@ const TabRenameField = forwardRef<
 		return () => cancelAnimationFrame(frame);
 	}, [name]);
 
-	const finish = () => {
+	// Whether the field still holds the keyboard is the caller's to say, not
+	// `document.activeElement`'s: the field disables itself while the rename
+	// is in flight, and disabling a focused input blurs it, so by the time a
+	// commit settles the keyboard has left an input the reader never left.
+	const finish = (keptFocus: boolean) => {
 		if (settled.current) return;
 		settled.current = true;
-		onDone();
+		onDone(keptFocus);
 	};
 
-	const commit = async () => {
+	const commit = async (keptFocus: boolean) => {
 		if (settled.current || busy) return;
 		const next = value.trim();
-		if (next.length === 0 || next === name) return finish();
+		if (next.length === 0 || next === name) return finish(keptFocus);
 		setBusy(true);
 		const renamed = await onRename(next);
 		setBusy(false);
-		if (renamed) return finish();
+		if (renamed) return finish(keptFocus);
 		setRejected(true);
-		inputRef.current?.select();
+		// The field stays open on the refused name and takes the keyboard back
+		// — the reader was typing in it and has nowhere else to be — but not
+		// here: it is still disabled in this render, and a disabled input
+		// cannot be focused, so the mark and the focus wait for the next one.
+		// Without that the tab was left as a field that answered nothing:
+		// neither what was typed into it nor the Escape meant to leave it.
+		resume.current = keptFocus ? "focus" : "select";
 	};
 
 	return (
@@ -1972,18 +2088,20 @@ const TabRenameField = forwardRef<
 					// A name the workspace refused is abandoned by clicking away;
 					// asking again on every blur would be a trap.
 					if (busy || !focused.current) return;
-					if (rejected) finish();
-					else void commit();
+					// The keyboard has gone to whatever was clicked; the chip that
+					// comes back must not take it off there.
+					if (rejected) finish(false);
+					else void commit(false);
 				}}
 				onKeyDown={(event) => {
 					if (event.key === "Enter") {
 						event.preventDefault();
-						void commit();
+						void commit(true);
 						return;
 					}
 					if (event.key === "Escape") {
 						event.preventDefault();
-						finish();
+						finish(true);
 					}
 				}}
 			/>
