@@ -55,3 +55,32 @@ export function formatKeyBinding(
 		KEYS[key]?.[mac ? 0 : 1] ?? (key.length === 1 ? key.toUpperCase() : key);
 	return mac ? [...modifiers, label].join("") : [...modifiers, label].join("+");
 }
+
+const ARIA_MODIFIERS: Record<string, [mac: string, other: string]> = {
+	Mod: ["Meta", "Control"],
+	Cmd: ["Meta", "Meta"],
+	Meta: ["Meta", "Meta"],
+	Ctrl: ["Control", "Control"],
+	Alt: ["Alt", "Alt"],
+	Shift: ["Shift", "Shift"],
+};
+
+/**
+ * A ProseMirror key binding as `aria-keyshortcuts` names it: the key's DOM
+ * name after its modifiers, joined with "+", so a screen reader announces
+ * the key the entry shows.
+ *
+ * @example
+ * ariaKeyShortcuts("Mod-Alt-ArrowUp", false) // "Control+Alt+ArrowUp"
+ */
+export function ariaKeyShortcuts(
+	binding: string,
+	mac: boolean = isMacPlatform(),
+): string {
+	const parts = binding.split("-");
+	const key = parts.pop() ?? "";
+	const modifiers = parts.map(
+		(part) => ARIA_MODIFIERS[part]?.[mac ? 0 : 1] ?? part,
+	);
+	return [...modifiers, key.length === 1 ? key.toUpperCase() : key].join("+");
+}
