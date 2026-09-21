@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { Editor, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
-import { TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { afterEach, describe, expect, test } from "vitest";
 import { MarkdownWc } from "./markdown-wc";
 import { buildMarkdownFromEditor } from "../build-markdown-from-editor";
@@ -121,5 +121,173 @@ describe("Enter over a selection that spans list items", () => {
 		select(editor, "ab", 1, "cd", 1);
 		expect(key(editor, "Enter")).toBe(true);
 		expect(md(editor)).toBe("- [x] a\n- [ ] d\n");
+	});
+});
+describe("Delete at the end of a list or quote never reaches into what follows", () => {
+	test("before a table keeps the table intact", () => {
+		const editor = editorFor("- a\n- b\n\n| x | z |\n| - | - |\n| y | w |\n");
+		caret(editor, "b", "end");
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toBe("- a\n- b\n\n| x | z |\n| - | - |\n| y | w |\n");
+	});
+	test("before a rule selects the rule instead of deleting it", () => {
+		const editor = editorFor("- a\n- b\n\n***\n\nc\n");
+		caret(editor, "b", "end");
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toBe("- a\n- b\n\n***\n\nc\n");
+		expect((editor.state.selection as NodeSelection).node?.type.name).toBe(
+			"horizontalRule",
+		);
+	});
+	test("at the end of a quote before a rule selects the rule", () => {
+		const editor = editorFor("> a\n\n***\n");
+		caret(editor, "a", "end");
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toBe("> a\n\n***\n");
+		expect((editor.state.selection as NodeSelection).node?.type.name).toBe(
+			"horizontalRule",
+		);
+	});
+	test("still folds the next item's text onto this line", () => {
+		const editor = editorFor("- a\n- b\n\nc\n");
+		caret(editor, "b", "end");
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toBe("- a\n- bc\n");
+	});
+	test("in an empty last item removes the item, not the paragraph after", () => {
+		const editor = editorFor("- a\n-\n\npara\n");
+		caret(editor, "", 0);
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toBe("- a\n\npara\n");
+	});
+	test("in a quote before an image keeps the image", () => {
+		const editor = editorFor("> a\n\n![i](i.png)\n\nc\n");
+		caret(editor, "a", "end");
+		expect(key(editor, "Delete")).toBe(true);
+		expect(md(editor)).toContain("![i](i.png)");
+	});
+});
+
+describe("Backspace after a quote or list never reaches through its last block", () => {
+	test("an image at the end of a quote survives", () => {
+		const editor = editorFor("> a\n>\n> ![i](i.png)\n\npara\n");
+		caret(editor, "para", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toContain("![i](i.png)");
+	});
+	test("prose never joins a code block at the end of a quote", () => {
+		const editor = editorFor("> ```\n> x\n> ```\n\npara\n");
+		caret(editor, "para", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("> ```\n> x\n> ```\n\npara\n");
+	});
+	test("prose never joins a table cell at the end of a list item", () => {
+		const editor = editorFor("- a\n\n  | x |\n  | - |\n  | y |\n\npara\n");
+		caret(editor, "para", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toContain("| y |");
+		expect(md(editor)).toContain("para");
+		expect(md(editor)).not.toContain("ypara");
+	});
+});
+
+describe("Backspace inside a quote or list item treats blocks above like the top level", () => {
+	test("prose never joins a code block", () => {
+		const editor = editorFor("> ```\n> code\n> ```\n>\n> b\n");
+		caret(editor, "b", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("> ```\n> code\n> ```\n>\n> b\n");
+		expect(editor.state.selection.$from.parent.type.name).toBe("codeBlock");
+	});
+	test("a rule is selected first", () => {
+		const editor = editorFor("> a\n>\n> ***\n>\n> b\n");
+		caret(editor, "b", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("> a\n>\n> ***\n>\n> b\n");
+		expect((editor.state.selection as NodeSelection).node?.type.name).toBe(
+			"horizontalRule",
+		);
+	});
+	test("an image is selected first", () => {
+		const editor = editorFor("> ![alt](a.png)\n>\n> b\n");
+		caret(editor, "b", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toContain("![alt](a.png)");
+	});
+	test("text after a table is not merged into its last cell", () => {
+		const editor = editorFor("- a\n\n  | x |\n  | - |\n  | y |\n\n  b\n");
+		caret(editor, "b", 0);
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).not.toContain("yb");
+	});
+});
+
+describe("Backspace on a line after a list inside a quote", () => {
+	test("folds onto the last item instead of toggling back into the list", () => {
+		const editor = editorFor("> - a\n> - b\n");
+		caret(editor, "b", 0);
+		key(editor, "Backspace"); // lifts: "> - a\n>\n> b"
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("> - ab\n");
+	});
+});
+
+describe("Backspace on an empty line in the middle of a quote", () => {
+	test("takes back the line and keeps one quote", () => {
+		const editor = editorFor("> a\n>\n> b\n");
+		caret(editor, "a", "end");
+		key(editor, "Enter");
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("> a\n>\n> b\n");
+		expect(editor.state.selection.$from.parent.textContent).toBe("a");
+		expect(editor.state.selection.$from.parentOffset).toBe(1);
+	});
+});
+
+describe("Backspace on an empty line below a non-text block removes the line", () => {
+	test.each([
+		["code block", "```\ncode\n```"],
+		["table", "| a |\n| - |\n| c |"],
+		["rule", "***"],
+		["image", "![a](a.png)"],
+		["frontmatter", "---\nt: x\n---"],
+	])("below a %s", (_name, block) => {
+		const editor = editorFor(`${block}\n\n<span></span>\n\nend\n`);
+		caret(editor, "", 0);
+		key(editor, "Backspace");
+		expect(md(editor)).toBe(`${block}\n\nend\n`);
+	});
+});
+
+describe("Delete at the end of a code block", () => {
+	test("does not pull the next paragraph into the code", () => {
+		const editor = editorFor("```\nx\n```\n\npara\n");
+		caret(editor, "x", "end");
+		key(editor, "Delete");
+		expect(md(editor)).toBe("```\nx\n```\n\npara\n");
+	});
+});
+describe("footnote definitions survive block-boundary keys", () => {
+	test("Backspace at the start of a definition keeps the footnote", () => {
+		const editor = editorFor("text[^1]\n\n[^1]: note one\n");
+		caret(editor, "note one", 0);
+		key(editor, "Backspace");
+		const out = md(editor);
+		expect(out).toContain("[^1]: ");
+		expect(md(editorFor(out))).toBe(out);
+	});
+	test("Delete at the end of the text above keeps the definition", () => {
+		const editor = editorFor("text[^1]\n\n[^1]: note one\n");
+		caret(editor, "text", "end");
+		key(editor, "Delete");
+		const out = md(editor);
+		expect(md(editorFor(out))).toBe(out);
+		expect(out).toContain("[^1]: note one");
+	});
+	test("Delete at the end of one definition does not swallow the next", () => {
+		const editor = editorFor("a[^1] b[^2]\n\n[^1]: one\n\n[^2]: two\n");
+		caret(editor, "one", "end");
+		key(editor, "Delete");
+		expect(md(editor)).toContain("[^2]: two");
 	});
 });

@@ -584,7 +584,10 @@ export const MarkdownWcShortcuts = Extension.create({
 		};
 
 		// Nested lists own their empty-item keys before the enclosing quote exits.
-		const escapeEmptyBlockquote = () => {
+		// Enter on any empty quoted line leaves the quote there; Backspace only
+		// on its first or last line. An empty line in the middle is one Enter
+		// took back, and splitting the quote in two would not undo it.
+		const escapeEmptyBlockquote = (edgesOnly = false) => {
 			const { state } = this.editor;
 			const { selection } = state;
 			if (!selection.empty) return false;
@@ -594,6 +597,14 @@ export const MarkdownWcShortcuts = Extension.create({
 				$from.parent?.type?.name !== "paragraph" ||
 				$from.parent.content.size !== 0 ||
 				$from.node($from.depth - 1)?.type?.name !== "blockquote"
+			) {
+				return false;
+			}
+			const index = $from.index($from.depth - 1);
+			if (
+				edgesOnly &&
+				index !== 0 &&
+				index !== $from.node($from.depth - 1).childCount - 1
 			) {
 				return false;
 			}
@@ -659,28 +670,6 @@ export const MarkdownWcShortcuts = Extension.create({
 				this.editor.view.dispatch(tr),
 			);
 
-		/** Position just inside the end of the last textblock within [from, to). */
-		const lastTextblockEndIn = (from: number, to: number) => {
-			let end = -1;
-			this.editor.state.doc.nodesBetween(from, to, (node, pos) => {
-				if (node.isTextblock) end = pos + 1 + node.content.size;
-			});
-			return end;
-		};
-		/** Position just inside the start of the first textblock at or after pos. */
-		const firstTextblockStartFrom = (pos: number) => {
-			let start = -1;
-			const { doc } = this.editor.state;
-			doc.nodesBetween(pos, doc.content.size, (node, nodePos) => {
-				if (start >= 0) return false;
-				if (node.isTextblock && nodePos + 1 > pos) {
-					start = nodePos + 1;
-					return false;
-				}
-				return true;
-			});
-			return start;
-		};
 		const isAtomBlock = (node: any) =>
 			node && node.isBlock && !node.isTextblock && (node.isAtom || node.isLeaf);
 		/**
@@ -708,105 +697,137 @@ export const MarkdownWcShortcuts = Extension.create({
 			return true;
 		};
 		/**
-		 * Backspace at the start of a top-level block looks at what is above:
-		 * text folds onto the block above it; a table, a rule, or an image is
-		 * selected first so one keystroke never deletes it; a code block is
-		 * never joined with prose.
+		 * Blocks a keystroke at a block boundary never merges with or deletes:
+		 * a table, a rule or an image is selected first, a code block or a
+		 * footnote is entered or left alone.
+		 */
+		const isOpaqueBlock = (node: any) =>
+			node.type.name === "table" ||
+			node.type.name === "codeBlock" ||
+			node.type.name === "footnoteDef" ||
+			isAtomBlock(node);
+		/** Containers whose edge no join crosses. */
+		const isClosedContainer = (node: any) =>
+			node.type.name === "footnoteDef" || node.type.name === "tableCell";
+		/**
+		 * The block a keystroke meets at the near edge of `node` (at `pos`):
+		 * lists, items and quotes are only wrappers around it.
+		 */
+		const edgeBlock = (node: any, pos: number, direction: -1 | 1) => {
+			while (!node.isTextblock && !isOpaqueBlock(node) && node.childCount) {
+				if (direction > 0) {
+					pos += 1;
+					node = node.firstChild;
+				} else {
+					pos += node.nodeSize - 1 - node.lastChild.nodeSize;
+					node = node.lastChild;
+				}
+			}
+			return { node, pos };
+		};
+		/**
+		 * Backspace at the start of a paragraph looks at the block above it in
+		 * the same container, at any depth, and at what that block ends with:
+		 * text folds onto the last line of a list or quote above it; a table, a
+		 * rule, or an image is selected first so one keystroke never deletes
+		 * it; a code block or a footnote is entered, never joined with prose.
+		 * An empty line after any of them simply goes.
 		 */
 		const backspaceAcrossBlockAbove = ($from: any) => {
 			const { state, view } = this.editor;
-			if ($from.depth !== 1 || $from.parentOffset !== 0) return false;
-			const index = $from.index(0);
-			if (index === 0) return false;
-			const previous = state.doc.child(index - 1);
-			const blockStart = $from.before(1);
-			if (previous.type.name === "table" || isAtomBlock(previous)) {
-				view.dispatch(
-					state.tr.setSelection(
-						NodeSelection.create(state.doc, blockStart - previous.nodeSize),
-					),
-				);
-				return true;
-			}
-			if (previous.type.name === "codeBlock") {
-				view.dispatch(
-					state.tr.setSelection(
-						TextSelection.create(state.doc, blockStart - 1),
-					),
-				);
-				return true;
-			}
-			if (
-				previous.type.name !== "bulletList" &&
-				previous.type.name !== "orderedList" &&
-				previous.type.name !== "blockquote"
-			) {
+			if ($from.parentOffset !== 0) return false;
+			const depth = $from.depth;
+			const container = $from.node(depth - 1);
+			const index = $from.index(depth - 1);
+			// The first line of a footnote has nothing in the footnote to join
+			// with; joining out of it would turn the definition into text.
+			if (index === 0) return isClosedContainer(container);
+			const previous = container.child(index - 1);
+			if (previous.isTextblock && previous.type.name !== "codeBlock") {
 				return false;
 			}
+			const blockStart = $from.before(depth);
 			if ($from.parent.content.size === 0) {
-				// An empty paragraph after the block simply goes; the caret
-				// lands at the end of the block above.
-				const tr = state.tr.delete(blockStart, $from.after(1));
+				const tr = state.tr.delete(blockStart, $from.after(depth));
 				tr.setSelection(Selection.near(tr.doc.resolve(blockStart), -1));
 				view.dispatch(tr.scrollIntoView());
 				return true;
 			}
-			const joinAt = lastTextblockEndIn(
-				blockStart - previous.nodeSize,
-				blockStart,
-			);
-			if (joinAt < 0) return false;
-			view.dispatch(state.tr.delete(joinAt, $from.pos).scrollIntoView());
+			const last = edgeBlock(previous, blockStart - previous.nodeSize, -1);
+			if (last.node.type.name === "table" || isAtomBlock(last.node)) {
+				view.dispatch(
+					state.tr.setSelection(NodeSelection.create(state.doc, last.pos)),
+				);
+				return true;
+			}
+			const lastEnd = last.pos + last.node.nodeSize - 1;
+			if (isOpaqueBlock(last.node)) {
+				view.dispatch(
+					state.tr
+						.setSelection(Selection.near(state.doc.resolve(lastEnd), -1))
+						.scrollIntoView(),
+				);
+				return true;
+			}
+			view.dispatch(state.tr.delete(lastEnd, $from.pos).scrollIntoView());
 			return true;
 		};
 		/**
 		 * Delete at the end of a textblock joins the next textblock's text onto
 		 * this line, whatever structure lies between (the end of a list, a
-		 * nested item, a quote). Atoms and code blocks are selected or left
-		 * alone instead.
+		 * nested item, a quote). The next block is found the way Backspace
+		 * finds the one above: a table, a rule or an image is selected, a code
+		 * block or a footnote is left alone, and nothing reaches out of a
+		 * footnote or a table cell.
 		 */
 		const deleteAcrossBlockBelow = ($from: any) => {
 			const { state, view } = this.editor;
 			if (!$from.parent.isTextblock) return false;
 			if ($from.parentOffset !== $from.parent.content.size) return false;
-			const afterBlock = $from.after($from.depth);
-			const nextNode = state.doc.nodeAt(afterBlock);
-			// The very next sibling decides for atoms and tables.
-			if (
-				nextNode &&
-				(nextNode.type.name === "table" || isAtomBlock(nextNode))
-			) {
-				view.dispatch(
-					state.tr.setSelection(NodeSelection.create(state.doc, afterBlock)),
-				);
-				return true;
+			let depth = $from.depth;
+			while ($from.indexAfter(depth - 1) === $from.node(depth - 1).childCount) {
+				if (isClosedContainer($from.node(depth - 1))) return true;
+				depth -= 1;
+				if (depth === 0) return false;
 			}
+			const nextPos = $from.after(depth);
+			const next = state.doc.nodeAt(nextPos)!;
+			const current = $from.parent;
 			// An empty line goes itself rather than pulling the next block up
-			// into it: a heading below keeps its level.
-			if (
-				$from.parent.type.name === "paragraph" &&
-				$from.parent.content.size === 0 &&
-				nextNode
-			) {
-				const blockStart = $from.before($from.depth);
-				const tr = state.tr.delete(blockStart, afterBlock);
-				tr.setSelection(Selection.near(tr.doc.resolve(blockStart), 1));
+			// into it: a heading below keeps its level, a paragraph after a
+			// list stays out of it. An item or a quote it alone fills goes too.
+			if (current.type.name === "paragraph" && current.content.size === 0) {
+				let removeDepth = $from.depth;
+				while (
+					removeDepth > depth &&
+					$from.node(removeDepth - 1).childCount === 1
+				) {
+					removeDepth -= 1;
+				}
+				const from = $from.before(removeDepth);
+				const tr = state.tr.delete(from, $from.after(removeDepth));
+				tr.setSelection(Selection.near(tr.doc.resolve(from), 1));
 				view.dispatch(tr.scrollIntoView());
 				return true;
 			}
-			const nextStart = firstTextblockStartFrom($from.pos);
-			if (nextStart < 0) return false;
-			const $next = state.doc.resolve(nextStart);
-			for (let depth = $next.depth; depth > 0; depth -= 1) {
-				if ($next.node(depth).type.name === "codeBlock") return true;
-			}
-			if ($next.parent.content.size === 0 && $next.depth === 1) {
+			// An empty line below goes, whatever this line is.
+			if (next.type.name === "paragraph" && next.content.size === 0) {
 				view.dispatch(
-					state.tr.delete(nextStart - 1, nextStart + 1).scrollIntoView(),
+					state.tr.delete(nextPos, nextPos + next.nodeSize).scrollIntoView(),
 				);
 				return true;
 			}
-			view.dispatch(state.tr.delete($from.pos, nextStart).scrollIntoView());
+			const first = edgeBlock(next, nextPos, 1);
+			if (first.node.type.name === "table" || isAtomBlock(first.node)) {
+				view.dispatch(
+					state.tr.setSelection(NodeSelection.create(state.doc, first.pos)),
+				);
+				return true;
+			}
+			if (current.type.name === "codeBlock" || isOpaqueBlock(first.node)) {
+				return true;
+			}
+			view.dispatch(state.tr.delete($from.pos, first.pos + 1).scrollIntoView());
 			return true;
 		};
 		const isEmptyItem = (node: any) =>
@@ -946,7 +967,7 @@ export const MarkdownWcShortcuts = Extension.create({
 
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
-				if (escapeEmptyBlockquote()) return true;
+				if (escapeEmptyBlockquote(true)) return true;
 				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
 				const { selection } = state;
@@ -967,11 +988,16 @@ export const MarkdownWcShortcuts = Extension.create({
 				// Backspace at the top of the body selects the frontmatter first;
 				// deleting a whole YAML block on one keystroke is too easy to do
 				// by accident.
+				// An empty line below it goes first, like below any block.
 				if (
 					$from.depth === 1 &&
 					$from.parentOffset === 0 &&
 					$from.index(0) === 1 &&
-					state.doc.firstChild?.type.name === "markdownFrontmatter"
+					state.doc.firstChild?.type.name === "markdownFrontmatter" &&
+					!(
+						$from.parent.type.name === "paragraph" &&
+						$from.parent.content.size === 0
+					)
 				) {
 					this.editor.view.dispatch(
 						state.tr.setSelection(NodeSelection.create(state.doc, 0)),
@@ -1017,7 +1043,9 @@ export const MarkdownWcShortcuts = Extension.create({
 					return this.editor.commands.lift("blockquote");
 				}
 				if (listItemDepth < 0) return backspaceAcrossBlockAbove($from);
-				if ($from.node(listItemDepth).firstChild !== para) return false;
+				if ($from.node(listItemDepth).firstChild !== para) {
+					return backspaceAcrossBlockAbove($from);
+				}
 				// Backspace at the start of an item's text lifts the item out of
 				// the list (a nested item outdents one level), the way Notion turns
 				// a bullet back into text. The browser default would instead fold
@@ -1113,7 +1141,6 @@ export const MarkdownWcShortcuts = Extension.create({
 				) {
 					return false;
 				}
-				if ($from.parent.type.name === "codeBlock") return false;
 				return deleteAcrossBlockBelow($from);
 			},
 
