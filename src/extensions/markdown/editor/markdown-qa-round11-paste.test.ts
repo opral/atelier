@@ -465,9 +465,7 @@ describe("pasted frontmatter", () => {
 	});
 });
 
-// Copying nested bold and italic produces invalid Markdown until the
-// serializer fix for `A **bold *both*** word` lands (tiptap-to-mdwc.ts).
-test.skip("copying bold text with nested italic pastes back unchanged", () => {
+test("copying bold text with nested italic pastes back unchanged", () => {
 	const editor = setup("A **bold *both*** word");
 	const text = find(editor, "bold");
 	select(editor, text.from, find(editor, "both").to);
