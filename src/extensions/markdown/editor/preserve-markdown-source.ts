@@ -122,6 +122,9 @@ export function preserveMarkdownSource(
 	const definitionSource = definitions.join("\n");
 	const emitted = (minimal: boolean) =>
 		next.map((segment, index) => {
+			// A reused block's source stands in for it; this spelling is only
+			// the fallback when that source cannot be reused in place.
+			if (reused[index] !== undefined) return segment.text;
 			const content = segment.text.slice(
 				0,
 				segment.text.length - segment.gap.length,
