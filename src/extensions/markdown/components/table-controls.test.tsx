@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import {
 	act,
+	cleanup,
 	fireEvent,
 	render,
 	screen,
@@ -10,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { Editor, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import { MarkdownWc } from "../editor/tiptap-markdown-bridge";
-import { TableControlsExtension } from "../editor/extensions/table-controls";
+import {
+	TableControlsExtension,
+	tableControlsPluginKey,
+} from "../editor/extensions/table-controls";
 import { TableNavigationExtension } from "../editor/extensions/table-navigation";
 import { EditorProvider, useEditorCtx } from "../editor/editor-context";
 import { parseMarkdown } from "../editor/markdown";
@@ -34,23 +38,50 @@ const rect = (left: number, top: number, width: number, height: number) =>
 		toJSON: () => ({}),
 	}) as DOMRect;
 
-// A laid-out table: the grid 300px wide from x=40, rows 30px tall from
-// y=100, cells 100px wide.
+/**
+ * The layout the tests lay the table out in. By default the grid is 300px
+ * wide from x=40, rows 30px tall from y=100, cells 100px wide; the table's
+ * element is its room, across the page and 16px taller than the grid (the
+ * strip kept for the bottom bar). `clip` is the editor's scroll box, when a
+ * test gives it one, and `scrollY` moves everything in it up.
+ */
+const layout = {
+	room: rect(0, 100, 800, 106),
+	gridLeft: 40,
+	clip: null as DOMRect | null,
+	scrollY: 0,
+};
+
 beforeEach(() => {
+	layout.room = rect(0, 100, 800, 106);
+	layout.gridLeft = 40;
+	layout.clip = null;
+	layout.scrollY = 0;
 	Element.prototype.getBoundingClientRect = function (this: Element) {
 		const index = (element: Element) =>
 			[...element.parentElement!.children].indexOf(element);
-		if (this.tagName === "TABLE") return rect(0, 100, 800, 90);
-		if (this.tagName === "TBODY") return rect(40, 100, 300, 90);
-		if (this.tagName === "TR") return rect(40, 100 + index(this) * 30, 300, 30);
+		const y = -layout.scrollY;
+		const x = layout.gridLeft;
+		if (this instanceof HTMLElement && this.dataset.clip && layout.clip)
+			return layout.clip;
+		if (this.tagName === "TABLE")
+			return rect(
+				layout.room.left,
+				layout.room.top + y,
+				layout.room.width,
+				layout.room.height,
+			);
+		if (this.tagName === "TBODY") return rect(x, 100 + y, 300, 90);
+		if (this.tagName === "TR")
+			return rect(x, 100 + y + index(this) * 30, 300, 30);
 		if (this.tagName === "TD" || this.tagName === "TH")
 			return rect(
-				40 + index(this) * 100,
-				100 + index(this.parentElement!) * 30,
+				x + index(this) * 100,
+				100 + y + index(this.parentElement!) * 30,
 				100,
 				30,
 			);
-		if (this.tagName === "P") return rect(40, 220, 300, 20);
+		if (this.tagName === "P") return rect(x, 222 + y, 300, 20);
 		return originalRect.call(this);
 	};
 });
@@ -77,6 +108,10 @@ const TABLE = "| a | b | c |\n|---|:-:|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n";
 
 function setup(markdown = `${TABLE}\nafter\n`) {
 	const element = document.createElement("div");
+	// The editor's scroll box, measured as `layout.clip` says.
+	element.dataset.clip = "true";
+	element.style.overflowX = "auto";
+	element.style.overflowY = "auto";
 	document.body.appendChild(element);
 	const editor = new Editor({
 		element,
@@ -239,8 +274,9 @@ describe("TableControls", () => {
 		await waitFor(() => expect(menu()).not.toBeNull());
 		fireEvent.keyDown(menu()!, { key: "ArrowDown" });
 		fireEvent.keyDown(menu()!, { key: "ArrowDown" });
+		// Entered like a radio group: on the column's alignment, centre.
 		expect(menu()!.getAttribute("aria-activedescendant")).toBe(
-			"markdown-table-menu-align-left",
+			"markdown-table-menu-align-center",
 		);
 		fireEvent.keyDown(menu()!, { key: "ArrowRight" });
 		fireEvent.keyDown(menu()!, { key: "ArrowRight" });
@@ -253,7 +289,7 @@ describe("TableControls", () => {
 		);
 		fireEvent.keyDown(menu()!, { key: "ArrowUp" });
 		expect(menu()!.getAttribute("aria-activedescendant")).toBe(
-			"markdown-table-menu-align-right",
+			"markdown-table-menu-align-center",
 		);
 		fireEvent.keyDown(menu()!, { key: "ArrowLeft" });
 		fireEvent.keyDown(menu()!, { key: "ArrowLeft" });
@@ -430,5 +466,405 @@ describe("TableControls", () => {
 		await waitFor(() => expect(menu()).not.toBeNull());
 		fireEvent.pointerDown(document.body);
 		await waitFor(() => expect(menu()).toBeNull());
+	});
+});
+
+async function pointAt(x: number, y: number) {
+	await act(async () => {
+		document.body.dispatchEvent(
+			new PointerEvent("pointermove", {
+				bubbles: true,
+				clientX: x,
+				clientY: y,
+				pointerType: "mouse",
+			}),
+		);
+		await new Promise((resolve) => setTimeout(resolve, 40));
+	});
+}
+
+/** Scrolls the editor's content up by `by` pixels and lets the frame run. */
+async function scrollBy(by: number) {
+	layout.scrollY += by;
+	await act(async () => {
+		window.dispatchEvent(new Event("scroll"));
+		await new Promise((resolve) => setTimeout(resolve, 40));
+	});
+}
+
+/** Places the caret `offset` characters into the cell reading `text`. */
+function caretIn(editor: Editor, text: string, offset = 0) {
+	let pos = -1;
+	editor.state.doc.descendants((node, at) => {
+		if (pos < 0 && node.type.name === "tableCell" && node.textContent === text)
+			pos = at + 1 + offset;
+	});
+	if (pos < 0) throw new Error(`no cell ${text}`);
+	act(() => {
+		editor.commands.focus();
+		editor.commands.setTextSelection(pos);
+	});
+	return pos;
+}
+
+const caretText = (editor: Editor) => {
+	const { $from } = editor.state.selection;
+	return `${$from.parent.textContent}@${$from.parentOffset}`;
+};
+
+const openMenuState = (editor: Editor) =>
+	tableControlsPluginKey.getState(editor.state)?.menu ?? null;
+
+const controlsShown = () =>
+	[
+		...document.querySelectorAll<HTMLElement>(
+			".markdown-table-grip, .markdown-table-add",
+		),
+	].map((control) => control.dataset.axis ?? control.dataset.edge);
+
+describe("TableControls, QA round 11", () => {
+	test("a table as wide as its room still has its row grip, left of the grid", async () => {
+		// No gutter beside the grid: the table's element is exactly its grid.
+		layout.room = rect(40, 100, 300, 106);
+		setup();
+		await hover("5");
+		expect(grip("row")).not.toBeNull();
+		expect(grip("row")!.style.left).toBe(`${40 - 7 - 0.5}px`);
+	});
+
+	test("with no room left of the grid, the row grip lies over the row's left border", async () => {
+		layout.room = rect(40, 100, 300, 106);
+		layout.clip = rect(38, 0, 700, 600);
+		setup();
+		await hover("5");
+		expect(grip("row")).not.toBeNull();
+		expect(grip("row")!.style.left).toBe("41px");
+	});
+
+	test("a table wider than its room keeps its add-column bar at the room's edge", async () => {
+		layout.room = rect(40, 100, 260, 106);
+		setup();
+		await hover("5");
+		const bar = screen.getByLabelText("Add a column");
+		expect(
+			Number.parseFloat(bar.style.left) + Number.parseFloat(bar.style.width),
+		).toBeLessThanOrEqual(300);
+	});
+
+	test("the bottom bar lies in the table's own strip, clear of the next line", async () => {
+		setup();
+		await hover("5");
+		const bar = screen.getByLabelText("Add a row");
+		const top = Number.parseFloat(bar.style.top);
+		const bottom = top + Number.parseFloat(bar.style.height);
+		expect(top).toBeGreaterThanOrEqual(190);
+		expect(bottom).toBeLessThanOrEqual(206);
+	});
+
+	test("the bars go away once the pointer is past the table's own box", async () => {
+		setup();
+		await hover("5");
+		expect(screen.queryByLabelText("Add a row")).not.toBeNull();
+		// Below the table's strip, above the next paragraph's line.
+		await pointAt(100, 214);
+		expect(controlsShown()).toEqual([]);
+	});
+
+	test("a row menu whose grip scrolls out of the editor closes and gives the keys back", async () => {
+		layout.clip = rect(0, 50, 800, 500);
+		const editor = setup();
+		caretIn(editor, "4");
+		const caret = editor.state.selection.from;
+		await hover("5");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		expect(document.activeElement).toBe(menu());
+		await scrollBy(200);
+		await waitFor(() => expect(menu()).toBeNull());
+		expect(openMenuState(editor)).toBeNull();
+		expect(document.querySelector(".markdown-table-cell-selected")).toBeNull();
+		expect(document.activeElement).toBe(editor.view.dom);
+		expect(editor.state.selection.from).toBe(caret);
+	});
+
+	test("a right click's menu follows its cell, and closes once the cell scrolls away", async () => {
+		layout.clip = rect(0, 50, 800, 700);
+		const editor = setup();
+		const target = cell("6");
+		fireEvent.mouseDown(target, { button: 2 });
+		act(() => {
+			target.dispatchEvent(
+				new MouseEvent("contextmenu", {
+					bubbles: true,
+					cancelable: true,
+					clientX: 250,
+					clientY: 170,
+				}),
+			);
+		});
+		await waitFor(() => expect(menu()).not.toBeNull());
+		const top = Number.parseFloat(menu()!.style.top);
+		await scrollBy(20);
+		expect(Number.parseFloat(menu()!.style.top)).toBe(top - 20);
+		await scrollBy(200);
+		await waitFor(() => expect(menu()).toBeNull());
+		expect(openMenuState(editor)).toBeNull();
+		expect(document.activeElement).toBe(editor.view.dom);
+	});
+
+	test("controls that unmount (read-only, review) close their menu for good", async () => {
+		const editor = setup();
+		await hover("2");
+		fireEvent.click(grip("column")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		cleanup();
+		expect(openMenuState(editor)).toBeNull();
+		expect(document.querySelector(".markdown-table-cell-selected")).toBeNull();
+	});
+
+	test("an editor made read-only drops the menu and its tint, and does not bring them back", async () => {
+		const editor = setup();
+		await hover("2");
+		fireEvent.click(grip("column")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		act(() => editor.setEditable(false));
+		expect(openMenuState(editor)).toBeNull();
+		expect(document.querySelector(".markdown-table-cell-selected")).toBeNull();
+		act(() => editor.setEditable(true));
+		expect(menu()).toBeNull();
+		expect(openMenuState(editor)).toBeNull();
+	});
+
+	test("Tab leaves a menu like Escape: closed, keys back in the editor", async () => {
+		const editor = setup();
+		caretIn(editor, "4");
+		const caret = editor.state.selection.from;
+		await hover("5");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		fireEvent.keyDown(menu()!, { key: "Tab" });
+		await waitFor(() => expect(menu()).toBeNull());
+		expect(editor.state.selection.from).toBe(caret);
+		expect(document.activeElement).toBe(editor.view.dom);
+	});
+
+	test("the keys enter the alignment buttons on the column's own alignment, drawn as a focus", async () => {
+		setup(
+			"| Name | Qty |\n|---|--:|\n| apple | 3 |\n| pear | 5 |\n| fig | 7 |\n",
+		);
+		await hover("Qty");
+		fireEvent.click(grip("column")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		// Insert left, Insert right, then the buttons: on "right", checked.
+		fireEvent.keyDown(menu()!, { key: "ArrowDown" });
+		fireEvent.keyDown(menu()!, { key: "ArrowDown" });
+		expect(menu()!.getAttribute("aria-activedescendant")).toBe(
+			"markdown-table-menu-align-right",
+		);
+		expect(menu()!.dataset.keyboard).toBe("true");
+		const options = [...menu()!.querySelectorAll('[role="menuitemradio"]')];
+		expect(
+			options.map((option) => option.getAttribute("aria-checked")),
+		).toEqual(["false", "false", "true"]);
+		// Up from below the buttons lands on the checked one too.
+		fireEvent.keyDown(menu()!, { key: "ArrowDown" });
+		fireEvent.keyDown(menu()!, { key: "ArrowUp" });
+		expect(menu()!.getAttribute("aria-activedescendant")).toBe(
+			"markdown-table-menu-align-right",
+		);
+	});
+
+	test("a column's menu leaves the caret where it was typing, in its cell", async () => {
+		const editor = setup(
+			"| Name | Qty |\n|---|--:|\n| apple | 3 |\n| banana | 12 |\n",
+		);
+		caretIn(editor, "banana", 3);
+		await hover("Qty");
+		fireEvent.click(grip("column")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		fireEvent.click(screen.getByLabelText("Align left"));
+		expect(editor.state.doc.firstChild!.attrs.align).toEqual([null, "left"]);
+		expect(caretText(editor)).toBe("banana@3");
+		// Moving the caret's column takes the caret along with its cell.
+		await hover("Qty");
+		fireEvent.click(grip("column")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		fireEvent.click(screen.getByText("Move left"));
+		expect(grid(editor)).toEqual(["Qty|Name", "3|apple", "12|banana"]);
+		expect(caretText(editor)).toBe("banana@3");
+		expect(tableTargetAt(editor.state)).toMatchObject({ row: 2, column: 1 });
+	});
+
+	test("deleting another row keeps the caret; deleting the caret's row moves it", async () => {
+		const editor = setup();
+		caretIn(editor, "4", 1);
+		await hover("2");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		fireEvent.click(screen.getByText("Delete row"));
+		expect(grid(editor)).toEqual(["a|b|c", "4|5|6"]);
+		expect(caretText(editor)).toBe("4@1");
+		await hover("4");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		fireEvent.click(screen.getByText("Delete row"));
+		expect(grid(editor)).toEqual(["a|b|c"]);
+		expect(tableTargetAt(editor.state)).not.toBeNull();
+	});
+
+	test("behind a right click's menu no grip or bar is left to click", async () => {
+		setup();
+		await hover("6");
+		expect(controlsShown().length).toBeGreaterThan(0);
+		const target = cell("6");
+		fireEvent.mouseDown(target, { button: 2 });
+		act(() => {
+			target.dispatchEvent(
+				new MouseEvent("contextmenu", {
+					bubbles: true,
+					cancelable: true,
+					clientX: 250,
+					clientY: 170,
+				}),
+			);
+		});
+		await waitFor(() => expect(menu()).not.toBeNull());
+		await hover("5");
+		expect(controlsShown()).toEqual([]);
+	});
+
+	test("a grip's menu keeps only that grip", async () => {
+		setup();
+		await hover("5");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		expect(controlsShown()).toEqual(["row"]);
+		expect(grip("row")!.getAttribute("aria-controls")).toBe(menu()!.id);
+		expect(grip("row")!.getAttribute("aria-expanded")).toBe("true");
+	});
+
+	test("a Ctrl-click after a right click on a selection opens the table's menu", async () => {
+		const editor = setup();
+		let from = -1;
+		editor.state.doc.descendants((node, pos) => {
+			if (from < 0 && node.isText && node.text === "5") from = pos;
+		});
+		editor.commands.setTextSelection({ from, to: from + 1 });
+		const target = cell("5");
+		fireEvent.mouseDown(target, { button: 2 });
+		const native = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
+		act(() => {
+			target.dispatchEvent(native);
+		});
+		expect(native.defaultPrevented).toBe(false);
+		editor.commands.setTextSelection(from);
+		// A Mac's Ctrl-click: a left press, then the menu event.
+		fireEvent.mouseDown(target, { button: 0, ctrlKey: true });
+		const ours = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+			ctrlKey: true,
+		});
+		act(() => {
+			target.dispatchEvent(ours);
+		});
+		expect(ours.defaultPrevented).toBe(true);
+		await waitFor(() => expect(menu()).not.toBeNull());
+	});
+
+	test("Shift-F10 and the menu key open the row-and-column menu at the caret", async () => {
+		const editor = setup();
+		caretIn(editor, "5", 1);
+		editor.view.coordsAtPos = () =>
+			({ left: 150, right: 150, top: 160, bottom: 180 }) as any;
+		act(() => {
+			editor.view.dom.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					key: "F10",
+					shiftKey: true,
+					bubbles: true,
+				}),
+			);
+		});
+		await waitFor(() => expect(menu()).not.toBeNull());
+		expect(menu()!.getAttribute("aria-label")).toBe("Row and column");
+		expect(openMenuState(editor)).toMatchObject({
+			axis: "cell",
+			target: { row: 2, column: 1 },
+		});
+		fireEvent.keyDown(menu()!, { key: "Escape" });
+		await waitFor(() => expect(menu()).toBeNull());
+		// The menu key: a menu event sent to the focused editor, no press.
+		const key = new MouseEvent("contextmenu", {
+			bubbles: true,
+			cancelable: true,
+		});
+		act(() => {
+			editor.view.dom.dispatchEvent(key);
+		});
+		expect(key.defaultPrevented).toBe(true);
+		await waitFor(() => expect(menu()).not.toBeNull());
+	});
+
+	test("entries name their keys to assistive technology, not their glyphs", async () => {
+		setup();
+		await hover("5");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		const above = document.getElementById(
+			"markdown-table-menu-insert-row-above",
+		)!;
+		expect(above.getAttribute("aria-keyshortcuts")).toMatch(
+			/^(Control|Meta)\+Alt\+ArrowUp$/,
+		);
+		expect(above.querySelector("kbd")!.getAttribute("aria-hidden")).toBe(
+			"true",
+		);
+	});
+
+	test("an open menu stays on its row when someone else inserts a row above it", async () => {
+		const editor = setup();
+		// The first edit stamps the document's ids; get it out of the way.
+		act(() => {
+			editor.commands.setTextSelection(editor.state.doc.content.size - 2);
+			editor.commands.insertContent("x");
+		});
+		await hover("5");
+		fireEvent.click(grip("row")!);
+		await waitFor(() => expect(menu()).not.toBeNull());
+		const table = editor.state.doc.firstChild!;
+		act(() => {
+			// A new body row after the header, as a collaborator's edit would.
+			const row = table.child(1);
+			const empty = row.type.create(
+				null,
+				Array.from({ length: row.childCount }, () =>
+					row.child(0).type.create(),
+				),
+			);
+			editor.view.dispatch(
+				editor.state.tr.insert(1 + table.child(0).nodeSize, empty),
+			);
+		});
+		expect(openMenuState(editor)).toMatchObject({ target: { row: 3 } });
+		expect(
+			[...document.querySelectorAll(".markdown-table-cell-selected")].map(
+				(node) => node.textContent,
+			),
+		).toEqual(["4", "5", "6"]);
+		// And closes once that row is deleted.
+		act(() => {
+			const now = editor.state.doc.firstChild!;
+			let start = 1;
+			for (let index = 0; index < 3; index++)
+				start += now.child(index).nodeSize;
+			editor.view.dispatch(
+				editor.state.tr.delete(start, start + now.child(3).nodeSize),
+			);
+		});
+		expect(openMenuState(editor)).toBeNull();
 	});
 });

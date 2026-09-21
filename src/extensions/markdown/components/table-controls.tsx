@@ -1,6 +1,8 @@
 import {
 	useCallback,
 	useEffect,
+	useId,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -28,9 +30,16 @@ import {
 	Trash2,
 } from "lucide-react";
 import type { ChainedCommands, Editor } from "@tiptap/core";
+import {
+	TextSelection,
+	type EditorState,
+	type Transaction,
+} from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { useEditorState } from "@tiptap/react";
 import { useEditorCtx } from "../editor/editor-context";
 import {
+	mapTableTarget,
 	tableControlsPluginKey,
 	tableShortcuts,
 	type TableMenu,
@@ -45,18 +54,26 @@ import {
 	type TableAlign,
 	type TableTarget,
 } from "../editor/table-commands";
-import { clampLeft, clampToClipRect, getClipRect } from "./clip-rect";
+import {
+	clampLeft,
+	clampToClipRect,
+	getClipRect,
+	isAnchorClipped,
+} from "./clip-rect";
 import { useMenuDismissal } from "./menu-dismissal";
-import { formatKeyBinding } from "./shortcut-label";
+import { ariaKeyShortcuts, formatKeyBinding } from "./shortcut-label";
 
 /** The grips' size across and along the border they sit on. */
 const GRIP_THICKNESS = 14;
 const GRIP_LENGTH = 24;
-/** The "+" bars: how thick, and how far from the table's edge. */
-const BAR_THICKNESS = 14;
-const BAR_GAP = 5;
-/** How far past the table the pointer may go on its way to a control. */
-const REACH = 30;
+/**
+ * The "+" bars: the bottom one fills the strip the table keeps below its
+ * grid (style.css; taller for a coarse pointer) up to this height, the
+ * right one is a thin strip this far from the grid.
+ */
+const BAR_MAX_THICKNESS = 28;
+const SIDE_BAR_THICKNESS = 10;
+const BAR_GAP = 4;
 const MENU_WIDTH = 288;
 const MENU_GAP = 6;
 /** Row heights in the menu, for placing it before it is drawn. */
@@ -89,6 +106,16 @@ function tableElements(editor: Editor, tablePos: number) {
 	return body instanceof HTMLElement ? { table, body } : null;
 }
 
+/** The element of the cell `target` names, if it is on screen. */
+function cellElement(editor: Editor, target: TableTarget): HTMLElement | null {
+	const table = editor.state.doc.nodeAt(target.tablePos);
+	if (table?.type.name !== "table") return null;
+	const pos = cellPosition(table, target.tablePos, target.row, target.column);
+	if (pos === null) return null;
+	const cell = editor.view.nodeDOM(pos);
+	return cell instanceof HTMLElement ? cell : null;
+}
+
 type Rect = {
 	readonly left: number;
 	readonly top: number;
@@ -106,8 +133,16 @@ type Layout = {
 /**
  * Where the controls for `target` go: the row's grip on the table's left
  * border, the column's on its top border, the "+" bars along the bottom and
- * right edges. A control whose place has scrolled out of the editor, or out
- * of a wide table's scroll room, is not drawn.
+ * right edges.
+ *
+ * They are measured against the editor's scroll box, not the table's own
+ * element: a table as wide as the editor has no room beside its grid, and a
+ * grip that had to fit inside the element was never drawn at all. Where the
+ * editor has no room left of the grid either (a narrow pane, a phone), the
+ * row's grip lies over the row's left border instead, as Notion's does. A
+ * table wider than its room scrolls, and then the controls keep to the part
+ * of the grid that is showing. A control whose row or column has scrolled
+ * out of sight is not drawn.
  */
 function measure(editor: Editor, target: TableTarget): Layout | null {
 	const elements = tableElements(editor, target.tablePos);
@@ -121,82 +156,87 @@ function measure(editor: Editor, target: TableTarget): Layout | null {
 	const grid = body.getBoundingClientRect();
 	const rowBox = row.getBoundingClientRect();
 	const cellBox = cell.getBoundingClientRect();
-	const left = Math.max(clip.left, room.left);
-	const right = Math.min(clip.right, room.right);
-	const visible = (rect: Rect) =>
-		rect.left >= left - 1 &&
-		rect.left + rect.width <= right + 1 &&
+	// The part of the grid that is showing: a wide table's room scrolls it.
+	const gridLeft = Math.max(grid.left, room.left, clip.left);
+	const gridRight = Math.min(grid.right, room.right, clip.right);
+	const inView = (rect: Rect) =>
+		rect.left >= clip.left - 1 &&
+		rect.left + rect.width <= clip.right + 1 &&
 		rect.top >= clip.top - 1 &&
 		rect.top + rect.height <= clip.bottom + 1;
-	const within = (rect: Rect) => (visible(rect) ? rect : null);
+	const within = (rect: Rect) => (inView(rect) ? rect : null);
+	const rowGripLeft =
+		gridLeft - GRIP_THICKNESS / 2 - 0.5 >= clip.left
+			? gridLeft - GRIP_THICKNESS / 2 - 0.5
+			: gridLeft + 1;
+	// The bottom bar lives in the room the table keeps below its grid, and
+	// never reaches the next block's line.
 	const next = table.nextElementSibling?.getBoundingClientRect();
-	const below = next && next.top > grid.bottom ? next.top - grid.bottom : 20;
-	const belowBar = Math.max(6, Math.min(BAR_THICKNESS, below - 4));
-	const gridLeft = Math.max(grid.left, room.left);
-	const gridRight = Math.min(grid.right, room.right);
+	const floor = Math.min(
+		Math.max(room.bottom, grid.bottom),
+		next && next.top > grid.bottom ? next.top : Infinity,
+	);
+	const barHeight = Math.max(
+		4,
+		Math.min(BAR_MAX_THICKNESS, floor - grid.bottom - 4),
+	);
+	const sideLeft =
+		gridRight + BAR_GAP + SIDE_BAR_THICKNESS <= clip.right &&
+		grid.right <= gridRight + 1
+			? gridRight + BAR_GAP
+			: gridRight - SIDE_BAR_THICKNESS - 2;
+	const columnCenter = cellBox.left + cellBox.width / 2;
 	return {
 		rowGrip: within({
-			left: gridLeft - GRIP_THICKNESS / 2 - 0.5,
+			left: rowGripLeft,
 			top: rowBox.top + rowBox.height / 2 - GRIP_LENGTH / 2,
 			width: GRIP_THICKNESS,
 			height: GRIP_LENGTH,
 		}),
 		columnGrip:
-			cellBox.left + cellBox.width / 2 < gridLeft ||
-			cellBox.left + cellBox.width / 2 > gridRight
+			columnCenter < gridLeft || columnCenter > gridRight
 				? null
 				: within({
-						left: cellBox.left + cellBox.width / 2 - GRIP_LENGTH / 2,
+						left: columnCenter - GRIP_LENGTH / 2,
 						top: grid.top - GRIP_THICKNESS / 2 - 0.5,
 						width: GRIP_LENGTH,
 						height: GRIP_THICKNESS,
 					}),
-		// In the gap below the grid, clear of the next block's text.
-		addRow: within({
-			left: gridLeft,
-			top: grid.bottom + (below - belowBar) / 2,
-			width: Math.max(0, gridRight - gridLeft),
-			height: belowBar,
-		}),
-		addColumn:
-			grid.right > room.right + 1
+		addRow:
+			gridRight <= gridLeft
 				? null
 				: within({
-						left: grid.right + BAR_GAP,
-						top: grid.top,
-						width: BAR_THICKNESS,
-						height: grid.height,
+						left: gridLeft,
+						top: grid.bottom + 2,
+						width: gridRight - gridLeft,
+						height: barHeight,
 					}),
+		addColumn: within({
+			left: sideLeft,
+			top: grid.top,
+			width: SIDE_BAR_THICKNESS,
+			height: grid.height,
+		}),
 	};
 }
 
-/** The pointer is over the table or the band around it the controls use. */
+/**
+ * The pointer is over the table's own box, or the controls' places around
+ * its grid. Past that the controls go away, so a bar never waits under a
+ * pointer that is on its way to the text after the table.
+ */
 function nearTable(editor: Editor, target: TableTarget, x: number, y: number) {
 	const elements = tableElements(editor, target.tablePos);
 	if (!elements) return false;
+	const room = elements.table.getBoundingClientRect();
 	const grid = elements.body.getBoundingClientRect();
+	const reach = GRIP_THICKNESS / 2 + 1;
 	return (
-		x >= grid.left - REACH &&
-		x <= grid.right + REACH &&
-		y >= grid.top - REACH &&
-		y <= grid.bottom + REACH
+		x >= Math.min(room.left, grid.left - reach) &&
+		x <= Math.max(room.right, grid.right + BAR_GAP + SIDE_BAR_THICKNESS + 1) &&
+		y >= Math.min(room.top, grid.top - reach) &&
+		y <= Math.max(room.bottom, grid.bottom)
 	);
-}
-
-/** The target, still a cell after an edit elsewhere moved its table. */
-function remap(
-	editor: Editor,
-	target: TableTarget | null,
-	map: (pos: number) => number | null,
-): TableTarget | null {
-	if (!target) return null;
-	const tablePos = map(target.tablePos);
-	if (tablePos === null) return null;
-	const table = editor.state.doc.nodeAt(tablePos);
-	if (table?.type.name !== "table") return null;
-	if (target.row >= table.childCount || target.column >= tableWidth(table))
-		return null;
-	return tablePos === target.tablePos ? target : { ...target, tablePos };
 }
 
 /** The editor's DOM once it is mounted, or null before. */
@@ -244,6 +284,42 @@ function useCoarsePointer(): boolean {
 	return coarse;
 }
 
+type Cell = { readonly row: number; readonly column: number };
+
+/**
+ * Where a cell of the table is after an entry's edit, or null when the edit
+ * took it. Each edit rebuilds the whole table, so a position in it cannot
+ * simply be mapped through the transaction; the entry says instead what it
+ * did to the rows and columns.
+ */
+type CellMap = (
+	cell: Cell,
+	before: ProseMirrorNode,
+	after: ProseMirrorNode,
+) => Cell | null;
+
+/** An edit that renumbers the rows or the columns and leaves the rest. */
+const shift =
+	(axis: "row" | "column", map: (index: number) => number | null): CellMap =>
+	(cell) => {
+		const index = map(cell[axis]);
+		return index === null ? null : { ...cell, [axis]: index };
+	};
+const deleted = (axis: "row" | "column", at: number) =>
+	shift(axis, (index) =>
+		index === at ? null : index > at ? index - 1 : index,
+	);
+const swapped = (axis: "row" | "column", a: number, b: number) =>
+	shift(axis, (index) => (index === a ? b : index === b ? a : index));
+/** Sorting reorders whole rows and keeps each row's node: find it again. */
+const sorted: CellMap = (cell, before, after) => {
+	const row = before.maybeChild(cell.row);
+	for (let index = 0; index < after.childCount; index++)
+		if (after.child(index) === row) return { ...cell, row: index };
+	return null;
+};
+const unchanged: CellMap = (cell) => cell;
+
 type MenuItem =
 	| {
 			readonly kind: "action";
@@ -253,6 +329,12 @@ type MenuItem =
 			readonly shortcut?: TableShortcut;
 			readonly danger?: boolean;
 			readonly run: (chain: ChainedCommands) => ChainedCommands;
+			/**
+			 * Where the caret's cell goes, for an edit that leaves the caret
+			 * where it was. An insert has none: the caret goes into the new
+			 * row or column, which is there to be typed into.
+			 */
+			readonly cells?: CellMap;
 	  }
 	| { readonly kind: "align"; readonly current: TableAlign }
 	| { readonly kind: "label"; readonly text: string }
@@ -301,6 +383,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 			icon: ArrowUp,
 			shortcut: "moveRowUp",
 			run: (chain) => chain.moveTableRowUp(target),
+			cells: swapped("row", target.row, target.row - 1),
 		});
 	if (target.row >= 1 && target.row < rows - 1)
 		rowItems.push({
@@ -310,6 +393,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 			icon: ArrowDown,
 			shortcut: "moveRowDown",
 			run: (chain) => chain.moveTableRowDown(target),
+			cells: swapped("row", target.row, target.row + 1),
 		});
 	const deleteRow: MenuItem = {
 		kind: "action",
@@ -319,6 +403,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 		shortcut: "deleteRow",
 		danger: true,
 		run: (chain) => chain.deleteTableRow(target),
+		cells: deleted("row", target.row),
 	};
 
 	const columnItems: MenuItem[] = [
@@ -349,6 +434,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 				label: "Sort A → Z",
 				icon: ArrowDownAZ,
 				run: (chain) => chain.sortTableColumn("asc", target),
+				cells: sorted,
 			},
 			{
 				kind: "action",
@@ -356,6 +442,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 				label: "Sort Z → A",
 				icon: ArrowDownZA,
 				run: (chain) => chain.sortTableColumn("desc", target),
+				cells: sorted,
 			},
 		);
 	if (target.column > 0)
@@ -366,6 +453,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 			icon: ArrowLeft,
 			shortcut: "moveColumnLeft",
 			run: (chain) => chain.moveTableColumnLeft(target),
+			cells: swapped("column", target.column, target.column - 1),
 		});
 	if (target.column < width - 1)
 		columnItems.push({
@@ -375,6 +463,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 			icon: ArrowRight,
 			shortcut: "moveColumnRight",
 			run: (chain) => chain.moveTableColumnRight(target),
+			cells: swapped("column", target.column, target.column + 1),
 		});
 	const deleteColumn: MenuItem = {
 		kind: "action",
@@ -384,6 +473,7 @@ export function tableMenuItems(editor: Editor, menu: TableMenu): MenuItem[] {
 		shortcut: "deleteColumn",
 		danger: true,
 		run: (chain) => chain.deleteTableColumn(target),
+		cells: deleted("column", target.column),
 	};
 	const columnLabel: MenuItem = {
 		kind: "label",
@@ -459,6 +549,12 @@ export function TableControls() {
 	const overlayRef = useRef<HTMLDivElement>(null);
 	const showingRef = useRef(false);
 	const recentlyClosed = useRef<{ key: string; at: number } | null>(null);
+	const pointOrigin = useRef<{
+		point: { x: number; y: number };
+		left: number;
+		top: number;
+	} | null>(null);
+	const menuId = useId();
 
 	// The pointer's cell, kept while the pointer crosses the band around the
 	// table to reach a grip or a bar.
@@ -519,13 +615,18 @@ export function TableControls() {
 					setFrame((count) => count + 1);
 				});
 		};
-		const onTransaction = ({ transaction }: { transaction: any }) => {
+		// The hovered cell is followed through an edit, as an open menu's is.
+		const onTransaction = ({ transaction }: { transaction: Transaction }) => {
 			if (transaction.docChanged)
 				setHover((previous) =>
-					remap(editor, previous, (pos) => {
-						const mapped = transaction.mapping.mapResult(pos, 1);
-						return mapped.deleted ? null : mapped.pos;
-					}),
+					previous
+						? mapTableTarget(
+								transaction.before,
+								previous,
+								transaction.mapping,
+								editor.state,
+							)
+						: null,
 				);
 			relayout();
 		};
@@ -543,15 +644,30 @@ export function TableControls() {
 	// A right click in a cell opens the row-and-column menu there. The
 	// browser's own menu stays where it is the one wanted: over a selection
 	// (to copy it), over a link, and with Shift held. What counts is the
-	// selection before the click: a right click on a word selects it.
+	// selection before the click: a right click on a word selects it. Every
+	// press is read, not only the right button's: on a Mac a Ctrl-click is a
+	// left press that opens the menu. A menu event no press came before is the
+	// keyboard's menu key (sent to the focused editor, not to a cell), and
+	// opens the menu at the caret's cell.
 	useEffect(() => {
 		if (!editor || !mounted) return;
+		let pressed = false;
 		let hadSelection = false;
-		const onMouseDown = (event: MouseEvent) => {
-			if (event.button === 2) hadSelection = !editor.state.selection.empty;
+		const onPress = () => {
+			pressed = true;
+			hadSelection = !editor.state.selection.empty;
 		};
 		const onContextMenu = (event: MouseEvent) => {
-			if (!editor.isEditable || event.shiftKey || hadSelection) return;
+			const fromPointer = pressed;
+			const selected = hadSelection;
+			pressed = false;
+			hadSelection = false;
+			if (!editor.isEditable || event.shiftKey) return;
+			if (!fromPointer && event.target === editor.view.dom) {
+				if (editor.commands.openTableMenuAtCaret()) event.preventDefault();
+				return;
+			}
+			if (selected) return;
 			const node = event.target as Node | null;
 			const element =
 				node instanceof Element ? node : (node?.parentElement ?? null);
@@ -582,13 +698,25 @@ export function TableControls() {
 				.run();
 		};
 		const dom = editor.view.dom;
-		dom.addEventListener("mousedown", onMouseDown, true);
+		dom.addEventListener("pointerdown", onPress, true);
+		dom.addEventListener("mousedown", onPress, true);
 		dom.addEventListener("contextmenu", onContextMenu);
 		return () => {
-			dom.removeEventListener("mousedown", onMouseDown, true);
+			dom.removeEventListener("pointerdown", onPress, true);
+			dom.removeEventListener("mousedown", onPress, true);
 			dom.removeEventListener("contextmenu", onContextMenu);
 		};
 	}, [editor, mounted]);
+
+	// Controls that go away take their menu with them: a document switched
+	// to read-only or into review unmounts them, and a menu left open in the
+	// editor's state would come back, and take focus, once it is editable.
+	useEffect(() => {
+		if (!editor) return;
+		return () => {
+			if (!editor.isDestroyed) editor.commands.closeTableMenu();
+		};
+	}, [editor]);
 
 	const closeMenu = useCallback(() => {
 		if (!editor || editor.isDestroyed) return;
@@ -613,12 +741,25 @@ export function TableControls() {
 		[editor],
 	);
 
+	// A menu whose grip or cell has scrolled out of the editor closes, the
+	// way the link popover does, rather than hang on screen detached from
+	// what it is about or, with no anchor to sit by, vanish while it keeps
+	// the keyboard. The menu gives the focus back to the editor as it goes.
+	const anchorGone = useRef(false);
+	useEffect(() => {
+		if (anchorGone.current) {
+			anchorGone.current = false;
+			closeMenu();
+		}
+	});
+
 	if (!editor || !mounted || editor.isDestroyed || !editor.isEditable)
 		return null;
 
+	// While a menu is open, only the grip it came from stays: the others and
+	// the "+" bars would be clicked through it, or beside it, by mistake.
 	const gripMenu = menu && menu.axis !== "cell" ? menu : null;
-	const active =
-		gripMenu?.target ?? (coarse ? caretCell : (hover ?? null)) ?? null;
+	const active = menu ? menu.target : ((coarse ? caretCell : hover) ?? null);
 	showingRef.current = active !== null || menu !== null;
 	const layout = active ? measure(editor, active) : null;
 	const portalTarget =
@@ -629,13 +770,34 @@ export function TableControls() {
 	const lastRow = table ? table.childCount - 1 : 0;
 	const lastColumn = table ? tableWidth(table) - 1 : 0;
 
-	const menuAnchor: Rect | null = !menu
-		? null
-		: menu.point
-			? { left: menu.point.x, top: menu.point.y, width: 0, height: 0 }
-			: menu.axis === "row"
+	let menuAnchor: Rect | null = null;
+	if (menu?.point) {
+		// A right click's menu stays by the point clicked as its cell moves.
+		const box = cellElement(editor, menu.target)?.getBoundingClientRect();
+		const clip = getClipRect(editor.view.dom);
+		if (box && !isAnchorClipped(box, clip)) {
+			if (pointOrigin.current?.point !== menu.point)
+				pointOrigin.current = {
+					point: menu.point,
+					left: box.left,
+					top: box.top,
+				};
+			const origin = pointOrigin.current;
+			menuAnchor = {
+				left: menu.point.x + box.left - origin.left,
+				top: menu.point.y + box.top - origin.top,
+				width: 0,
+				height: 0,
+			};
+		}
+	} else if (menu) {
+		menuAnchor =
+			menu.axis === "row"
 				? (layout?.rowGrip ?? null)
 				: (layout?.columnGrip ?? null);
+	}
+	anchorGone.current = menu !== null && menuAnchor === null;
+	const showGrip = (axis: "row" | "column") => !menu || gripMenu?.axis === axis;
 
 	return createPortal(
 		<>
@@ -645,7 +807,7 @@ export function TableControls() {
 					className="markdown-table-controls"
 					data-testid="markdown-table-controls"
 				>
-					{layout.rowGrip ? (
+					{layout.rowGrip && showGrip("row") ? (
 						<button
 							type="button"
 							className="markdown-table-grip"
@@ -659,6 +821,7 @@ export function TableControls() {
 							}
 							aria-haspopup="menu"
 							aria-expanded={gripMenu?.axis === "row"}
+							aria-controls={gripMenu?.axis === "row" ? menuId : undefined}
 							tabIndex={-1}
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => openMenu("row", active)}
@@ -666,7 +829,7 @@ export function TableControls() {
 							<GripVertical aria-hidden="true" />
 						</button>
 					) : null}
-					{layout.columnGrip ? (
+					{layout.columnGrip && showGrip("column") ? (
 						<button
 							type="button"
 							className="markdown-table-grip"
@@ -676,6 +839,7 @@ export function TableControls() {
 							aria-label={`Column ${active.column + 1} options`}
 							aria-haspopup="menu"
 							aria-expanded={gripMenu?.axis === "column"}
+							aria-controls={gripMenu?.axis === "column" ? menuId : undefined}
 							tabIndex={-1}
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => openMenu("column", active)}
@@ -683,7 +847,7 @@ export function TableControls() {
 							<GripHorizontal aria-hidden="true" />
 						</button>
 					) : null}
-					{layout.addRow && !gripMenu ? (
+					{layout.addRow && !menu ? (
 						<button
 							type="button"
 							className="markdown-table-add"
@@ -704,7 +868,7 @@ export function TableControls() {
 							<Plus aria-hidden="true" />
 						</button>
 					) : null}
-					{layout.addColumn && !gripMenu ? (
+					{layout.addColumn && !menu ? (
 						<button
 							type="button"
 							className="markdown-table-add"
@@ -734,6 +898,7 @@ export function TableControls() {
 			{menu ? (
 				<TableMenuPanel
 					key={`${menu.axis}:${menu.target.tablePos}:${menu.target.row}:${menu.target.column}`}
+					id={menuId}
 					editor={editor}
 					menu={menu}
 					anchor={menuAnchor}
@@ -745,12 +910,35 @@ export function TableControls() {
 	);
 }
 
+/**
+ * The caret, or a selection within one cell, when it is in the table at
+ * `tablePos`: the cell, and the offsets in its text.
+ */
+function caretInTable(state: EditorState, tablePos: number) {
+	const { selection } = state;
+	if (!(selection instanceof TextSelection)) return null;
+	const target = tableTargetAt(state, selection.head);
+	if (target?.tablePos !== tablePos) return null;
+	const table = state.doc.nodeAt(tablePos)!;
+	const pos = cellPosition(table, tablePos, target.row, target.column)!;
+	const end = pos + state.doc.nodeAt(pos)!.nodeSize - 1;
+	if (selection.anchor <= pos || selection.anchor > end) return null;
+	return {
+		table,
+		cell: { row: target.row, column: target.column },
+		anchor: selection.anchor - pos - 1,
+		head: selection.head - pos - 1,
+	};
+}
+
 function TableMenuPanel({
+	id,
 	editor,
 	menu,
 	anchor,
 	close,
 }: {
+	readonly id: string;
 	readonly editor: Editor;
 	readonly menu: TableMenu;
 	readonly anchor: Rect | null;
@@ -773,14 +961,34 @@ function TableMenuPanel({
 			),
 		[items],
 	);
+	const lastAnchor = useRef(anchor);
 	const [activeIndex, setActiveIndex] = useState(0);
+	// Whether the keys or the pointer chose the active entry: only the keys'
+	// choice is drawn as a focus ring.
+	const [byKeyboard, setByKeyboard] = useState(false);
 	const active = focusables[Math.min(activeIndex, focusables.length - 1)];
+	const alignCurrent = items.find(
+		(item): item is Extract<MenuItem, { kind: "align" }> =>
+			item.kind === "align",
+	)?.current;
 
 	useMenuDismissal({ active: true, editor, menuRef, close });
 
-	useEffect(() => {
-		menuRef.current?.focus({ preventScroll: true });
-	}, []);
+	// The menu takes the keyboard while it is open. However it goes away,
+	// the keyboard goes back to the editor, the caret where it was: a menu
+	// closed because its grip scrolled away, or its cell was deleted by
+	// someone else, would otherwise leave focus on the page, where what is
+	// typed next is lost. Read before the menu leaves the page, while the
+	// focus is still in it.
+	useLayoutEffect(() => {
+		const element = menuRef.current;
+		element?.focus({ preventScroll: true });
+		return () => {
+			if (!element?.contains(element.ownerDocument.activeElement)) return;
+			if (editor.isDestroyed || !editor.isEditable) return;
+			editor.view.focus();
+		};
+	}, [editor]);
 
 	// The anchor cell when the menu goes away: the caret is left in the table,
 	// where it was if it was in it, else at the end of the menu's cell.
@@ -808,9 +1016,38 @@ function TableMenuPanel({
 	const activate = useCallback(
 		(focusable: Focusable | undefined) => {
 			if (!focusable) return;
+			// A caret already in this table stays where it was, in its cell,
+			// wherever the edit moved that cell: the grip's row or column is not
+			// where the user was typing. A caret whose cell went with the edit,
+			// or that was outside the table, is left where the edit put it, and
+			// so is the caret of an insert, in the new cell.
+			const caret = caretInTable(editor.state, menu.target.tablePos);
+			const cells = "item" in focusable ? focusable.item.cells : unchanged;
+			const restoreCaret = (chain: ChainedCommands) =>
+				!caret || !cells
+					? chain
+					: chain.command(({ tr }) => {
+							const { tablePos } = menu.target;
+							const after = tr.doc.nodeAt(tablePos);
+							if (after?.type.name !== "table") return true;
+							const cell = cells(caret.cell, caret.table, after);
+							const pos = cell
+								? cellPosition(after, tablePos, cell.row, cell.column)
+								: null;
+							if (pos === null) return true;
+							const size = tr.doc.nodeAt(pos)!.content.size;
+							tr.setSelection(
+								TextSelection.create(
+									tr.doc,
+									pos + 1 + Math.min(caret.anchor, size),
+									pos + 1 + Math.min(caret.head, size),
+								),
+							);
+							return true;
+						});
 			const chain = editor.chain().focus().closeTableMenu();
 			if ("item" in focusable) {
-				focusable.item.run(chain).run();
+				restoreCaret(focusable.item.run(chain)).run();
 				return;
 			}
 			const current =
@@ -818,12 +1055,12 @@ function TableMenuPanel({
 					menu.target.column
 				] ?? null;
 			// The chosen alignment again clears it back to none.
-			chain
-				.setTableColumnAlign(
+			restoreCaret(
+				chain.setTableColumnAlign(
 					current === focusable.align ? null : focusable.align,
 					menu.target,
-				)
-				.run();
+				),
+			).run();
 		},
 		[editor, menu],
 	);
@@ -831,15 +1068,28 @@ function TableMenuPanel({
 	const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
 		const count = focusables.length;
 		const index = Math.min(activeIndex, count - 1);
+		const isAlign = (at: number) =>
+			focusables[at] !== undefined && "align" in focusables[at]!;
+		const inAlign = isAlign(index);
 		const move = (next: number) => {
 			event.preventDefault();
-			setActiveIndex((next + count) % count);
+			let to = (next + count) % count;
+			// Into the alignment buttons from outside, the way a radio group is
+			// entered: on the checked one, else the first.
+			if (isAlign(to) && !inAlign) {
+				const checked = focusables.findIndex(
+					(entry) => "align" in entry && entry.align === alignCurrent,
+				);
+				to =
+					checked >= 0
+						? checked
+						: focusables.findIndex((entry) => "align" in entry);
+			}
+			setByKeyboard(true);
+			setActiveIndex(to);
 		};
-		const inAlign = active !== undefined && "align" in active;
 		switch (event.key) {
-			case "ArrowDown":
-			case "Tab": {
-				if (event.key === "Tab" && event.shiftKey) return move(index - 1);
+			case "ArrowDown": {
 				// The alignment buttons are one row: down leaves it.
 				if (inAlign) {
 					const after = focusables.findIndex(
@@ -857,13 +1107,11 @@ function TableMenuPanel({
 				return move(index - 1);
 			}
 			case "ArrowRight":
-				if (inAlign && index + 1 < count && "align" in focusables[index + 1]!)
-					return move(index + 1);
+				if (inAlign && isAlign(index + 1)) return move(index + 1);
 				event.preventDefault();
 				return;
 			case "ArrowLeft":
-				if (inAlign && index > 0 && "align" in focusables[index - 1]!)
-					return move(index - 1);
+				if (inAlign && isAlign(index - 1)) return move(index - 1);
 				event.preventDefault();
 				return;
 			case "Home":
@@ -875,6 +1123,9 @@ function TableMenuPanel({
 				event.preventDefault();
 				activate(active);
 				return;
+			// A menu is left with Tab, as with Escape: it is not a stop in the
+			// page's tab order, and the caret it was opened from gets the keys.
+			case "Tab":
 			case "Escape":
 				event.preventDefault();
 				event.stopPropagation();
@@ -893,14 +1144,18 @@ function TableMenuPanel({
 			activate(focusables[at]);
 		};
 
-	if (!anchor) return null;
+	// A menu whose anchor has just gone is closed on the next effect; until
+	// then it stays where it was, keeping the focus it will hand back.
+	if (anchor) lastAnchor.current = anchor;
+	const place = anchor ?? lastAnchor.current;
+	if (!place) return null;
 	const clip = getClipRect(editor.view.dom);
 	const height = items.reduce(
 		(total, item) => total + MENU_ROW_HEIGHT[item.kind],
 		MENU_PADDING,
 	);
 	const beside = clampToClipRect({
-		coords: { top: anchor.top, bottom: anchor.top + anchor.height },
+		coords: { top: place.top, bottom: place.top + place.height },
 		clip,
 		preferredHeight: height,
 		gap: MENU_GAP,
@@ -914,27 +1169,24 @@ function TableMenuPanel({
 			: {
 					top: Math.max(
 						clip.top + MENU_GAP,
-						Math.min(anchor.top, clip.bottom - height - MENU_GAP),
+						Math.min(place.top, clip.bottom - height - MENU_GAP),
 					),
 					bottom: null,
 					maxHeight: clip.bottom - clip.top - 2 * MENU_GAP,
 					placement: "over" as const,
 				};
 	const left = clampLeft({
-		left: anchor.left,
+		left: place.left,
 		width: MENU_WIDTH,
 		clip,
 		gap: MENU_GAP,
 	});
 	const activeId = active ? `markdown-table-menu-${active.id}` : undefined;
-	const alignCurrent = items.find(
-		(item): item is Extract<MenuItem, { kind: "align" }> =>
-			item.kind === "align",
-	)?.current;
 
 	return (
 		<div
 			ref={menuRef}
+			id={id}
 			className="markdown-slash-menu markdown-table-menu"
 			style={{
 				position: "fixed",
@@ -945,6 +1197,7 @@ function TableMenuPanel({
 				maxHeight: placed.maxHeight,
 			}}
 			data-placement={placed.placement}
+			data-keyboard={byKeyboard ? "true" : undefined}
 			role="menu"
 			aria-label={
 				menu.axis === "row"
@@ -987,24 +1240,29 @@ function TableMenuPanel({
 								aria-label="Alignment"
 							>
 								{ALIGN_OPTIONS.map((option) => {
-									const id = `align-${option.align}`;
-									const at = focusables.findIndex((entry) => entry.id === id);
+									const optionId = `align-${option.align}`;
+									const at = focusables.findIndex(
+										(entry) => entry.id === optionId,
+									);
 									return (
 										<div
-											key={id}
-											id={`markdown-table-menu-${id}`}
+											key={optionId}
+											id={`markdown-table-menu-${optionId}`}
 											className="markdown-table-menu-align-option"
 											role="menuitemradio"
 											aria-checked={alignCurrent === option.align}
 											aria-label={option.label}
 											title={option.label}
-											data-active={active?.id === id ? "true" : undefined}
+											data-active={active?.id === optionId ? "true" : undefined}
 											data-checked={
 												alignCurrent === option.align ? "true" : undefined
 											}
 											tabIndex={-1}
 											onMouseDown={(event) => event.preventDefault()}
-											onMouseEnter={() => setActiveIndex(at)}
+											onMouseEnter={() => {
+												setByKeyboard(false);
+												setActiveIndex(at);
+											}}
 											onClick={() => activate(focusables[at])}
 											onKeyDown={activateOnKey(at)}
 										>
@@ -1023,9 +1281,17 @@ function TableMenuPanel({
 							role="menuitem"
 							data-active={active?.id === item.id ? "true" : undefined}
 							data-danger={item.danger ? "true" : undefined}
+							aria-keyshortcuts={
+								item.shortcut
+									? ariaKeyShortcuts(shortcuts[item.shortcut])
+									: undefined
+							}
 							tabIndex={-1}
 							onMouseDown={(event) => event.preventDefault()}
-							onMouseEnter={() => setActiveIndex(at)}
+							onMouseEnter={() => {
+								setByKeyboard(false);
+								setActiveIndex(at);
+							}}
 							onClick={() => activate(focusables[at])}
 							onKeyDown={activateOnKey(at)}
 						>
@@ -1034,7 +1300,10 @@ function TableMenuPanel({
 								{item.label}
 							</span>
 							{item.shortcut ? (
-								<kbd className="markdown-table-menu-shortcut">
+								<kbd
+									className="markdown-table-menu-shortcut"
+									aria-hidden="true"
+								>
 									{formatKeyBinding(shortcuts[item.shortcut])}
 								</kbd>
 							) : null}
