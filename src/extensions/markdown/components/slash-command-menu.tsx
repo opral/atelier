@@ -26,11 +26,9 @@ const INACTIVE_SLASH_STATE: SlashCommandState = {
 	range: null,
 };
 
+// Text comes first, so "/" then Enter makes plain text, as in Notion; the
+// once-per-document frontmatter entry waits at the end.
 const COMMAND_GROUPS = [
-	{
-		label: "Document",
-		commandIds: ["frontmatter"],
-	},
 	{
 		label: "Basic blocks",
 		commandIds: ["paragraph", "heading1", "heading2", "heading3"],
@@ -49,6 +47,10 @@ const COMMAND_GROUPS = [
 			"table",
 			"horizontalRule",
 		],
+	},
+	{
+		label: "Document",
+		commandIds: ["frontmatter"],
 	},
 ] as const;
 
@@ -88,7 +90,7 @@ export function SlashCommandMenu() {
 	} | null>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
-	const filteredCommands = useMemo(
+	const matchingCommands = useMemo(
 		() =>
 			filterCommands(
 				BLOCK_COMMANDS.filter(
@@ -99,20 +101,27 @@ export function SlashCommandMenu() {
 			),
 		[editor, slashState.query],
 	);
-	const selectedIndex =
-		selection.query === slashState.query
-			? Math.min(selection.index, Math.max(0, filteredCommands.length - 1))
-			: 0;
 	const groupedCommands = useMemo(
 		() =>
 			COMMAND_GROUPS.map((group) => ({
 				...group,
 				commands: group.commandIds
-					.map((id) => filteredCommands.find((command) => command.id === id))
+					.map((id) => matchingCommands.find((command) => command.id === id))
 					.filter((command): command is BlockCommand => Boolean(command)),
 			})).filter((group) => group.commands.length > 0),
-		[filteredCommands],
+		[matchingCommands],
 	);
+	// The arrow keys walk the options in the order they are drawn, group by
+	// group. Walking BLOCK_COMMANDS' order instead jumped the highlight
+	// around the list.
+	const filteredCommands = useMemo(
+		() => groupedCommands.flatMap((group) => group.commands),
+		[groupedCommands],
+	);
+	const selectedIndex =
+		selection.query === slashState.query
+			? Math.min(selection.index, Math.max(0, filteredCommands.length - 1))
+			: 0;
 
 	// Calculate position when active and update on scroll
 	useEffect(() => {
