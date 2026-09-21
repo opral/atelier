@@ -1,6 +1,7 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, TextSelection } from "@tiptap/pm/state";
 import { deleteTableTransaction, isBlankLine } from "../table-commands";
+import { placeCaretBelowDocument } from "./click-below-document";
 import { deleteSelectedTableText } from "./table-selection";
 
 /**
@@ -109,6 +110,10 @@ export const TableNavigationExtension = Extension.create({
 					? state.doc.resolve(target).nodeBefore
 					: state.doc.nodeAt(target);
 			if (adjacent) return selectNear(editor, target, direction);
+			// Below a table that ends the document, the line a click below it
+			// opens: written to the file only once it is typed into.
+			if (direction > 0 && target === state.doc.content.size)
+				return placeCaretBelowDocument(view);
 
 			const paragraph = state.schema.nodes.paragraph;
 			if (!paragraph) return false;

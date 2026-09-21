@@ -65,8 +65,9 @@ function caretIn(editor: Editor, text: string, offset = 0) {
 	editor.commands.setTextSelection(found);
 }
 
-function press(editor: Editor, key: string) {
+function press(editor: Editor, key: string, init: KeyboardEventInit = {}) {
 	const event = new KeyboardEvent("keydown", {
+		...init,
 		key,
 		bubbles: true,
 		cancelable: true,
@@ -513,5 +514,31 @@ describe("a selection across rows or columns", () => {
 		// The row of c1; the table is the document's first block.
 		editor.commands.deleteTableRow({ tablePos: 0, row: 3, column: 0 });
 		expect(grid(editor).slice(1)).toEqual(["a1|a2|a3", "b1|b2|b3"]);
+	});
+});
+
+describe("leaving a table that ends the document", () => {
+	test("ArrowDown opens a line that is written only once typed into", async () => {
+		const source = "x\n\n| a |\n|---|\n| 1 |\n";
+		const { editor, saved } = await open(source);
+		caretIn(editor, "1", 1);
+		expect(press(editor, "ArrowDown")).toBe(true);
+		const { $from } = editor.state.selection;
+		expect($from.parent.type.name).toBe("paragraph");
+		expect($from.depth).toBe(1);
+		expect(await saved()).toBeUndefined();
+		type(editor, "Q");
+		expect(await saved()).toBe(`${source}\nQ\n`);
+	});
+
+	test("so does Mod-Enter", async () => {
+		const { editor, saved } = await open("| a |\n|---|\n");
+		caretIn(editor, "a");
+		const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+		expect(
+			press(editor, "Enter", mac ? { metaKey: true } : { ctrlKey: true }),
+		).toBe(true);
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(await saved()).toBeUndefined();
 	});
 });
