@@ -97,7 +97,7 @@ export function handlePaste(args: {
 	}
 
 	const plainText: string = event?.clipboardData?.getData?.("text/plain") ?? "";
-	const html: string = event?.clipboardData?.getData?.("text/html") ?? "";
+	let html: string = event?.clipboardData?.getData?.("text/html") ?? "";
 	if (!plainText && !html.trim()) return false;
 	let text = plainText;
 
@@ -148,6 +148,20 @@ export function handlePaste(args: {
 			editor.view.dispatch(editor.state.tr.insertText(text));
 			return true;
 		}
+		const vscodeMode = vscodeEditorMode(event);
+		if (vscodeMode !== null && vscodeMode !== "markdown") {
+			// Code copied from VS Code is source in the editor's language, not
+			// Markdown: "# comment" is not a heading and "a * b * c" is not bold.
+			// A fragment of one line stays literal text in the sentence.
+			if (!/\n/.test(text.replace(/\r?\n$/, "")) && !vscodeWholeLine(event)) {
+				editor.view.dispatch(editor.state.tr.insertText(text));
+				return true;
+			}
+			if (selection?.$from?.parent.type.name !== "tableCell") {
+				text = fencedCode(text, vscodeMode);
+				html = "";
+			}
+		} else if (vscodeMode === "markdown") html = "";
 		// Rich text from other apps: its formatting lives in the HTML, and its
 		// plain text is not Markdown.
 		const htmlMarkdown = markdownFromClipboardHtml(html);
@@ -252,6 +266,41 @@ function padInline(block: any, space: string, side: "start" | "end"): void {
 	if (side === "start") content.unshift(text);
 	else content.push(text);
 	block.content = content;
+}
+
+/**
+ * VS Code puts the source language of a copy in `vscode-editor-data`; its
+ * HTML is only syntax colouring. Returns null for any other clipboard.
+ */
+function vscodeEditorMode(event: ClipboardEvent | any): string | null {
+	const data = vscodeEditorData(event);
+	return data ? (typeof data.mode === "string" ? data.mode : "") : null;
+}
+
+function vscodeWholeLine(event: ClipboardEvent | any): boolean {
+	return vscodeEditorData(event)?.isFromEmptySelection === true;
+}
+
+function vscodeEditorData(event: ClipboardEvent | any): any {
+	const raw = event?.clipboardData?.getData?.("vscode-editor-data");
+	if (!raw) return null;
+	try {
+		const data = JSON.parse(raw);
+		return data && typeof data === "object" ? data : null;
+	} catch {
+		return null;
+	}
+}
+
+function fencedCode(code: string, mode: string): string {
+	const body = code.replace(/\r\n?/g, "\n").replace(/\n$/, "");
+	const longestRun = Math.max(
+		2,
+		...(body.match(/`+/g) ?? []).map((run) => run.length),
+	);
+	const fence = "`".repeat(longestRun + 1);
+	const language = mode === "plaintext" ? "" : mode;
+	return `${fence}${language}\n${body}\n${fence}\n`;
 }
 
 /**

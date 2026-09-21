@@ -353,3 +353,77 @@ test("a list pasted mid-item splits the item around the pasted items", () => {
 	paste(editor, { "text/plain": "- one\n- two" });
 	expect(md(editor)).toBe("- al\n- one\n- two\n- pha\n- beta\n");
 });
+
+describe("code copied from VS Code", () => {
+	const source = "# comment\ndef __init__(self):\n    x = a * b * c";
+	const vscode = (mode: string, extra: Record<string, unknown> = {}) =>
+		JSON.stringify({
+			version: 1,
+			isFromEmptySelection: false,
+			multicursorText: null,
+			mode,
+			...extra,
+		});
+
+	test("becomes a fenced code block in the copy's language", () => {
+		const editor = setup("Intro");
+		editor.commands.setTextSelection(find(editor, "Intro").to);
+		paste(editor, {
+			"text/plain": source,
+			"text/html": `<div style="white-space: pre;"><div><span>#&nbsp;comment</span></div></div>`,
+			"vscode-editor-data": vscode("python"),
+		});
+		expect(md(editor)).toBe(`Intro\n\n\`\`\`python\n${source}\n\`\`\`\n`);
+	});
+
+	test("a fragment of one line stays literal text", () => {
+		const editor = setup("Use  here");
+		editor.commands.setTextSelection(find(editor, "Use ").to);
+		paste(editor, {
+			"text/plain": "a * b * c",
+			"vscode-editor-data": vscode("python"),
+		});
+		expect(editor.state.doc.textContent).toBe("Use a * b * c here");
+		expect(editor.state.doc.child(0).type.name).toBe("paragraph");
+	});
+
+	test("a whole copied line becomes a code block", () => {
+		const editor = setup("");
+		paste(editor, {
+			"text/plain": "npm run build\n",
+			"vscode-editor-data": vscode("shellscript", {
+				isFromEmptySelection: true,
+			}),
+		});
+		expect(md(editor)).toBe("```shellscript\nnpm run build\n```\n");
+	});
+
+	test("Markdown copied from VS Code is still Markdown", () => {
+		const editor = setup("");
+		paste(editor, {
+			"text/plain": "## Heading\n\n- item",
+			"text/html": "<div><span>## Heading</span></div>",
+			"vscode-editor-data": vscode("markdown"),
+		});
+		expect(md(editor)).toBe("## Heading\n\n- item\n");
+	});
+
+	test("backtick fences inside the code get a longer fence", () => {
+		const editor = setup("");
+		paste(editor, {
+			"text/plain": "const md = `\n```js\n`;",
+			"vscode-editor-data": vscode("typescript"),
+		});
+		expect(md(editor)).toBe("````typescript\nconst md = `\n```js\n`;\n````\n");
+	});
+
+	test("inside a code block the text stays literal", () => {
+		const editor = setup("```python\npass\n```");
+		editor.commands.setTextSelection(find(editor, "pass").to);
+		paste(editor, {
+			"text/plain": "\nx = a * b",
+			"vscode-editor-data": vscode("python"),
+		});
+		expect(md(editor)).toBe("```python\npass\nx = a * b\n```\n");
+	});
+});
