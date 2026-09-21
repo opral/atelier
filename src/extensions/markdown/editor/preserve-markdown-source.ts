@@ -1,4 +1,5 @@
 import {
+	minimizeEscapes,
 	parseMarkdownSource,
 	parseMarkdownSourceRaw,
 	serializeAst,
@@ -86,34 +87,45 @@ export function preserveMarkdownSource(
 		// A newly typed literal reference must not acquire a hidden old target.
 		return canonical(candidate) === target ? candidate : text;
 	};
-	const preserved = next.map((block) => {
-		const reused = available.get(block.key)?.shift();
-		return reused ?? block.text;
-	});
-	const candidate = withDefinitions(preserved.join(""));
-	if (canonical(candidate) === target) return candidate;
-	const separated = preserved.map((text, index) => {
-		// A formerly final block may now precede another block.
-		return index < next.length - 1 && !/\r?\n\r?\n$/.test(text)
-			? text + (text.endsWith("\n") ? "\n" : "\n\n")
-			: text;
-	});
-	const separatedCandidate = withDefinitions(separated.join(""));
-	if (canonical(separatedCandidate) === target) return separatedCandidate;
-	// A moved block may depend on its old neighbors or reference definitions.
-	// Retain every independently safe spelling instead of reformatting the
-	// entire file because one source boundary could not be reused.
-	const safe = next.map((block) => block.text);
-	for (let index = 0; index < safe.length; index++) {
-		const previous = safe[index]!;
-		safe[index] = separated[index]!;
-		if (canonical(withDefinitions(safe.join(""))) !== target)
-			safe[index] = previous;
-	}
-	const result = withDefinitions(safe.join(""));
+	// Blocks the editor re-emits are written with only the escapes their
+	// meaning needs; the rest keep their source spelling.
+	const reused = next.map((block) => available.get(block.key)?.shift());
+	const definitionSource = definitions.join("\n");
+	const minimal = next.map((block, index) =>
+		reused[index] === undefined
+			? minimizeEscapes(block.text, definitionSource)
+			: block.text,
+	);
+	const assemble = (fresh: readonly string[]): string | null => {
+		const preserved = fresh.map((text, index) => reused[index] ?? text);
+		const candidate = withDefinitions(preserved.join(""));
+		if (canonical(candidate) === target) return candidate;
+		const separated = preserved.map((text, index) => {
+			// A formerly final block may now precede another block.
+			return index < next.length - 1 && !/\r?\n\r?\n$/.test(text)
+				? text + (text.endsWith("\n") ? "\n" : "\n\n")
+				: text;
+		});
+		const separatedCandidate = withDefinitions(separated.join(""));
+		if (canonical(separatedCandidate) === target) return separatedCandidate;
+		// A moved block may depend on its old neighbors or reference definitions.
+		// Retain every independently safe spelling instead of reformatting the
+		// entire file because one source boundary could not be reused.
+		const safe = [...fresh];
+		for (let index = 0; index < safe.length; index++) {
+			const previous = safe[index]!;
+			safe[index] = separated[index]!;
+			if (canonical(withDefinitions(safe.join(""))) !== target)
+				safe[index] = previous;
+		}
+		const result = withDefinitions(safe.join(""));
+		return canonical(result) === target ? result : null;
+	};
 	return matchLineEndings(
 		original,
-		canonical(result) === target ? result : serialized,
+		assemble(minimal) ??
+			assemble(next.map((block) => block.text)) ??
+			serialized,
 	);
 }
 

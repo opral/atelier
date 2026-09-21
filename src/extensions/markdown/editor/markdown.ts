@@ -29,7 +29,33 @@ export function parseMarkdownSourceRaw(markdown: string): AstRoot {
 		mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
 	});
 	restoreEmptyTaskItems(ast, markdown);
+	markLiteralAutolinks(ast, markdown);
 	return ast;
+}
+
+/** Marks a link written as a bare URL, `www.` domain or email address. */
+export const LITERAL_AUTOLINK_DATA_KEY = "__atelier_literal_autolink";
+
+/**
+ * GFM links a bare `https://x.com`, `www.x.com` or `me@x.com` without any
+ * syntax. The serializer only knows `<https://x.com>` and
+ * `[www.x.com](http://www.x.com)`, so an edit rewrote every bare URL in the
+ * block. Remember which links were bare so they can be written that way.
+ */
+function markLiteralAutolinks(node: any, source: string): void {
+	if (!node || typeof node !== "object") return;
+	if (node.type === "link") {
+		// Links GFM finds in text after parsing (`https\://x.com` too) have
+		// no position of their own.
+		const first = node.position
+			? source[node.position.start.offset]
+			: undefined;
+		if (first !== "[" && first !== "<") {
+			node.data = { ...node.data, [LITERAL_AUTOLINK_DATA_KEY]: true };
+		}
+	}
+	for (const child of Array.isArray(node.children) ? node.children : [])
+		markLiteralAutolinks(child, source);
 }
 
 /**
@@ -186,6 +212,81 @@ function serializeOptions(): any {
 	};
 }
 
+// A backslash before ASCII punctuation, or the hex character reference the
+// serializer writes where a backslash cannot help.
+const ESCAPE_PATTERN = /\\[!-/:-@[-`{-~]|&#x[0-9A-Fa-f]+;/g;
+
+/**
+ * Drops every escape that `markdown` does not need. mdast-util-to-markdown
+ * escapes a character wherever it could start syntax in some context, so an
+ * edited paragraph came back as `snake\_case`, `\[!NOTE]`, `\[[Note]]` or
+ * `AT\&T`. Each escape is removed only if the text still parses to the same
+ * document; `definitions` holds the file's reference definitions, so a
+ * literal `[label]` is not turned into a link to one of them.
+ */
+export function minimizeEscapes(markdown: string, definitions = ""): string {
+	const literal = literalRanges(markdown);
+	const candidates = [...markdown.matchAll(ESCAPE_PATTERN)].filter(
+		(match) =>
+			!literal.some(
+				([start, end]) => match.index >= start && match.index < end,
+			),
+	);
+	if (candidates.length === 0) return markdown;
+	const meaning = (text: string) =>
+		JSON.stringify(parseMarkdown(`${text}\n\n${definitions}`));
+	const expected = meaning(markdown);
+	const apply = (removed: ReadonlySet<number>) => {
+		let out = "";
+		let cursor = 0;
+		candidates.forEach((match, index) => {
+			if (!removed.has(index)) return;
+			out += markdown.slice(cursor, match.index);
+			out += match[0].startsWith("\\")
+				? match[0].slice(1)
+				: String.fromCodePoint(Number.parseInt(match[0].slice(3, -1), 16));
+			cursor = match.index + match[0].length;
+		});
+		return out + markdown.slice(cursor);
+	};
+	// Try the whole group first, since usually no escape is needed, and
+	// halve it only where one is.
+	let removed = new Set<number>();
+	const attempt = (group: readonly number[]): void => {
+		const trial = new Set([...removed, ...group]);
+		if (meaning(apply(trial)) === expected) {
+			removed = trial;
+			return;
+		}
+		if (group.length === 1) return;
+		const middle = Math.floor(group.length / 2);
+		attempt(group.slice(0, middle));
+		attempt(group.slice(middle));
+	};
+	attempt(candidates.map((_, index) => index));
+	return apply(removed);
+}
+
+/** Source ranges where a backslash is a literal character, not an escape. */
+function literalRanges(markdown: string): [number, number][] {
+	const ranges: [number, number][] = [];
+	const visit = (node: any): void => {
+		if (
+			(node.type === "code" ||
+				node.type === "inlineCode" ||
+				node.type === "html" ||
+				node.type === "yaml") &&
+			node.position
+		) {
+			ranges.push([node.position.start.offset, node.position.end.offset]);
+			return;
+		}
+		for (const child of node.children ?? []) visit(child);
+	};
+	visit(parseMarkdownSourceRaw(markdown));
+	return ranges;
+}
+
 function taskListItemToMarkdown(): any {
 	return {
 		handlers: {
@@ -242,7 +343,47 @@ function prepareAstForMarkdown(value: any): any {
 	if (isInlineContainer(out) && Array.isArray(out.children)) {
 		out.children = trimInlineBoundaryWhitespace(out.children);
 	}
+	if (Array.isArray(out.children) && out.children.some(isLiteralAutolink)) {
+		out.children = out.children.map((child: any, index: number) =>
+			isLiteralAutolink(child) &&
+			bareAutolinkFits(out.children[index - 1], out.children[index + 1])
+				? { type: "html", value: child.children[0].value }
+				: child,
+		);
+	}
 	return out;
+}
+
+/** A link that was a bare URL in the source and still reads as that URL. */
+function isLiteralAutolink(node: any): boolean {
+	if (node?.type !== "link" || !node.data?.[LITERAL_AUTOLINK_DATA_KEY])
+		return false;
+	const text = node.children?.length === 1 ? node.children[0] : null;
+	if (text?.type !== "text" || typeof text.value !== "string") return false;
+	if (!/^[\w./:@%?=&#+~-]+$/.test(text.value)) return false;
+	return (
+		node.url === text.value ||
+		node.url === `http://${text.value}` ||
+		node.url === `mailto:${text.value}`
+	);
+}
+
+/**
+ * A bare URL is only a link where GFM would find it again: after whitespace
+ * or at the start of its container, and ending before whitespace or trailing
+ * punctuation. Typing right after it (`https://x.comZ`) would otherwise
+ * extend the link.
+ */
+function bareAutolinkFits(before: any, after: any): boolean {
+	const opens =
+		before === undefined ||
+		(before.type === "text" && /\s$/.test(before.value ?? ""));
+	const closes =
+		after === undefined ||
+		after.type === "break" ||
+		(after.type === "text" &&
+			/^(?:\s|[.,:;!?]+(?:\s|$))/.test(after.value ?? ""));
+	return opens && closes;
 }
 
 function isInlineContainer(node: Record<string, any>): boolean {

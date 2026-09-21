@@ -328,3 +328,72 @@ describe("links with no visible text", () => {
 		expect(await typeAfter(markdown, "end")).toBe(`${markdown}Z\n`);
 	});
 });
+
+describe("escapes only where the meaning needs them", () => {
+	test.each([
+		"> [!NOTE]\n> Body text",
+		"> [!tip]+ Title\n> Body text",
+		"#project [[Note]] [[Note|alias]] ![[img.png]] ==hi== text",
+		"## See [[Note]] text",
+		"snake_case path/some_file.md 5 * 3 a*b AT&T ~5 #tag [b] = text",
+		"$a_1 * b_2$ text",
+		"$$\n\\sum_{i} x_i\n$$ text",
+		"https://example.com and me@x.com text",
+		"C:\\Users\\me and a\\b text",
+	])("%j keeps its spelling when edited", async (markdown) => {
+		expect(await typeAfter(markdown, "text")).toBe(`${markdown}Z\n`);
+	});
+
+	test.each([
+		"\\*not emphasis\\* text",
+		"\\# not a heading text",
+		"\\- not a list text",
+		"1\\. not a list text",
+		"\\> not a quote text",
+		"\\+ not a list text",
+		"\\`not code\\` text",
+		"\\~~not struck~~ text",
+		"\\[x]: not a definition text",
+		"a \\<b> not html text",
+		"\\[not a link](u) text",
+	])("%j keeps the escapes it needs", async (markdown) => {
+		const saved = await typeAfter(markdown, "text");
+		expect(throughEditor(saved!)).toBe(throughEditor(`${markdown}Z`));
+	});
+
+	test("a literal [label] stays escaped when the file defines that label", async () => {
+		const markdown = "Literal \\[b] and [c] text\n\n[b]: https://b.example\n";
+		expect(await typeAfter(markdown, "text")).toBe(
+			"Literal \\[b] and [c] textZ\n\n[b]: https://b.example\n",
+		);
+	});
+
+	test("bare URLs stay bare, and one typed against stays the same link", async () => {
+		expect(
+			await typeAfter("see https://x.com, www.x.com and me@x.com text", "text"),
+		).toBe("see https://x.com, www.x.com and me@x.com textZ\n");
+		const saved = await typeAfter("see https://x.com end", "https://x.com");
+		const reloaded = astToTiptapDoc(parseMarkdown(saved!)) as JSONContent;
+		expect(reloaded.content?.[0]?.content).toMatchObject([
+			{ text: "see " },
+			{ text: "https://x.com", marks: [{ attrs: { href: "https://x.com" } }] },
+			{ text: "Z end" },
+		]);
+	});
+
+	test("a URL typed as plain text is saved as written", async () => {
+		const { editor, lastWrite } = await openForSave("Visit");
+		const end = textPosition(editor, "Visit") + 5;
+		editor.view.dispatch(
+			editor.state.tr.insertText(" https://example.com now", end, end),
+		);
+		await settle();
+		expect(lastWrite()).toBe("Visit https://example.com now\n");
+	});
+});
+
+test("a CRLF file keeps CRLF in the edited block", async () => {
+	expect(await typeAfter("Para end\r\n\r\n- a\r\n- b\r\n", "end")).toBe(
+		"Para endZ\r\n\r\n- a\r\n- b\r\n",
+	);
+});
