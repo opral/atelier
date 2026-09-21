@@ -26,3 +26,85 @@ test("the frontmatter selection ring does not apply in a review", () => {
 	expect(rules).toHaveLength(1);
 	expect(rules[0]).toContain(".markdown-view:not(.markdown-review)");
 });
+
+/**
+ * Backspace or Delete beside a table, rule or image selects the whole block,
+ * and the next key deletes it. Each of them must look selected, outside a
+ * review, with something that actually paints: the image has no border, so
+ * a border colour alone showed nothing.
+ */
+test("a table, rule or image selected whole is visibly selected", () => {
+	const looks = (selector: RegExp) => {
+		const found: string[] = [];
+		sheet.walkRules((rule) => {
+			if (!selector.test(rule.selector)) return;
+			const paints = rule.some(
+				(node) =>
+					node.type === "decl" &&
+					[
+						"outline",
+						"box-shadow",
+						"background-color",
+						"border-color",
+					].includes(node.prop) &&
+					node.value.includes("var(--atelier-"),
+			);
+			if (paints) found.push(rule.selector);
+		});
+		return found;
+	};
+	const table = looks(/table\.ProseMirror-selectednode/);
+	const rule = looks(/hr\.ProseMirror-selectednode/);
+	const image = looks(
+		/markdown-image-embed\.ProseMirror-selectednode[\s\S]*markdown-image-block-content/,
+	);
+	for (const selectors of [table, rule, image]) {
+		expect(selectors.length).toBeGreaterThan(0);
+	}
+	for (const selector of [...table, ...rule])
+		expect(selector).toContain(".markdown-view:not(.markdown-review)");
+	// A ring, not only a border colour, on the image.
+	sheet.walkRules((node) => {
+		if (!image.includes(node.selector)) return;
+		expect(
+			node.some((decl) => decl.type === "decl" && decl.prop === "box-shadow"),
+		).toBe(true);
+	});
+});
+
+/**
+ * An empty document showed nothing at all until it was clicked; the hint
+ * that says how to start is shown for it unfocused too. Other empty lines
+ * keep theirs for the focused caret only.
+ */
+test("an empty document shows its placeholder before it is focused", () => {
+	const shell = postcss.parse(
+		readFileSync(join(import.meta.dirname, "../../index.css"), "utf8"),
+	);
+	const selectors: string[] = [];
+	shell.walkRules((rule) => {
+		if (
+			rule.some(
+				(node) =>
+					node.type === "decl" &&
+					node.prop === "content" &&
+					node.value === "attr(data-placeholder)",
+			)
+		)
+			selectors.push(...rule.selectors);
+	});
+	expect(
+		selectors.some(
+			(selector) =>
+				selector.includes(".is-editor-empty") &&
+				!selector.includes("data-editor-focused"),
+		),
+	).toBe(true);
+	expect(
+		selectors.some(
+			(selector) =>
+				selector.includes("data-editor-focused") &&
+				!selector.includes(".is-editor-empty"),
+		),
+	).toBe(true);
+});

@@ -335,6 +335,91 @@
 			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
+		/* Backspace or Delete beside a table, rule or embed, an arrow key onto
+		   one, or a click selects the whole block, and the next key removes or
+		   replaces it. Nothing showed that, so a second Backspace deleted a
+		   table nobody saw selected. Blocks with their own selected look
+		   (frontmatter above, tables and rules just below, images and videos
+		   further down) keep it. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			:is(
+				.markdown-wc-unsupported-block,
+				.ProseMirror
+					> *:not(
+						hr,
+						table,
+						.markdown-frontmatter,
+						.markdown-image-embed,
+						[data-markdown-image-block],
+						.markdown-video-embed
+					)
+			).ProseMirror-selectednode {
+			border-radius: var(--markdown-radius);
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 2px;
+		}
+
+		/* A table's element is the scroll room around the grid, and clips
+		   anything drawn outside it: the grid itself shows the selection, its
+		   edge in the ring colour and its cells tinted like selected text. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			table.ProseMirror-selectednode
+			> tbody {
+			border-color: var(--atelier-ring);
+		}
+
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			table.ProseMirror-selectednode
+			tr {
+			background-color: var(--atelier-bg-selection);
+		}
+
+		/* A rule is one line: it is shown selected as a band around the line,
+		   tinted like selected text, with the ring at its edge. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror
+			hr.ProseMirror-selectednode {
+			border-radius: 1px;
+			box-shadow:
+				0 0 0 7px var(--atelier-bg-selection),
+				0 0 0 9px var(--atelier-ring);
+		}
+
+		/* A text selection that runs over a block with no text of its own — an
+		   image, a rule, an embed — takes it along, so it is tinted the colour
+		   the browser paints selected text. */
+		.markdown-view
+			.ProseMirror
+			.markdown-in-selection:not(
+				.markdown-image-embed,
+				[data-markdown-image-block],
+				.markdown-video-embed
+			),
+		.markdown-view
+			.ProseMirror
+			.markdown-image-embed.markdown-in-selection
+			> .markdown-image-block-content,
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block].markdown-in-selection:is(
+				img,
+				.markdown-pdf-embed
+			),
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed.markdown-in-selection
+			> .markdown-video-frame {
+			border-radius: var(--markdown-radius);
+			box-shadow: 0 0 0 4px var(--atelier-bg-selection);
+		}
+
+		.markdown-view .ProseMirror hr.markdown-in-selection {
+			box-shadow: 0 0 0 7px var(--atelier-bg-selection);
+		}
+
 		.markdown-frontmatter-header {
 			display: flex;
 			min-height: 2.125rem;
@@ -933,12 +1018,42 @@
 			opacity: 0.6;
 			padding: 0.18rem 0.38rem;
 			pointer-events: none;
-			transition: opacity 120ms ease;
+			transition:
+				opacity 120ms ease,
+				background-color 120ms ease,
+				color 120ms ease;
 		}
 
 		.markdown-view .ProseMirror pre:hover .markdown-code-language,
 		.markdown-view .ProseMirror pre:focus-within .markdown-code-language {
 			opacity: 1;
+		}
+
+		/* While editing, the label is the button that sets the language. */
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			button.markdown-code-language {
+			cursor: pointer;
+			pointer-events: auto;
+		}
+
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			button.markdown-code-language:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		/* A block with no language says so only where it can be given one,
+		   and only while the pointer is over it. */
+		.markdown-view
+			.ProseMirror:not([contenteditable="true"])
+			.markdown-code-language[data-plain],
+		.markdown-view
+			.ProseMirror
+			pre:not(:hover)
+			.markdown-code-language[data-plain] {
+			display: none;
 		}
 
 		.markdown-view .ProseMirror .syntax-comment {
@@ -1055,6 +1170,8 @@
 			outline: none;
 		}
 
+		/* The image has no border to colour, so the selection is a ring, the
+		   same one a selected video gets. */
 		.markdown-view
 			.ProseMirror
 			[data-markdown-image-block].ProseMirror-selectednode:is(
@@ -1062,6 +1179,7 @@
 				.markdown-pdf-embed
 			) {
 			border-color: var(--atelier-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view
@@ -1069,6 +1187,7 @@
 			.markdown-image-embed.ProseMirror-selectednode
 			> .markdown-image-block-content {
 			border-color: var(--atelier-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view
@@ -1929,6 +2048,31 @@
 
 		.markdown-embed-file-search input::placeholder {
 			color: var(--atelier-fg-subtle);
+		}
+
+		.markdown-code-language-option {
+			display: flex;
+			min-height: 2rem;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.5rem;
+			padding: 0.3rem 0.5rem;
+			border-radius: 7px;
+			cursor: pointer;
+			font-size: 0.8125rem;
+			user-select: none;
+		}
+
+		.markdown-code-language-option[data-selected="true"] {
+			background: var(--atelier-accent-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-accent-border);
+		}
+
+		.markdown-code-language-option svg {
+			width: 0.875rem;
+			height: 0.875rem;
+			flex-shrink: 0;
+			color: var(--atelier-link);
 		}
 
 		.markdown-embed-file-option-icon img {

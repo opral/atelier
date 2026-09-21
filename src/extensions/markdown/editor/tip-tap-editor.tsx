@@ -44,6 +44,10 @@ import {
 	type StorePastedImage,
 } from "./handle-paste";
 import { storePastedMarkdownImage } from "./store-pasted-image";
+import {
+	isBelowDocument,
+	placeCaretBelowDocument,
+} from "./extensions/click-below-document";
 
 type TipTapEditorProps = {
 	fileId: string;
@@ -220,11 +224,25 @@ function TipTapEditorFileContent({
 		(lix) => selectMarkdownFileDelivery(lix, activeBranchId, activeFileId),
 		{ evictOnUnmount: true },
 	);
+	const sourceRow =
+		sourceFileResult.status === "success"
+			? sourceFileResult.rows[0]
+			: undefined;
+	// Decoded once, here. Every save delivers a new row, and the development
+	// build's render logging walks a byte array handed down as a prop one
+	// index at a time, in each component it passes through.
+	const sourceFile = useMemo<MarkdownFileDelivery | undefined>(
+		() =>
+			sourceRow && {
+				...sourceRow,
+				content: decodeMarkdownData(sourceRow.content),
+			},
+		[sourceRow],
+	);
 	if (sourceFileResult.status === "pending") {
 		return <TipTapEditorLoadingState className={props.className} />;
 	}
 	if (sourceFileResult.status === "error") throw sourceFileResult.error;
-	const sourceFile = sourceFileResult.rows[0];
 
 	return (
 		<TipTapEditorSourceBoundary
@@ -410,6 +428,8 @@ function TipTapEditorLoadedContent({
 			event.preventDefault();
 			if (editor.isEmpty) {
 				editor.commands.focus("start");
+			} else if (isBelowDocument(editor.view, event.clientY)) {
+				placeCaretBelowDocument(editor.view);
 			} else {
 				editor.commands.focus("end");
 			}

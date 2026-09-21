@@ -22,7 +22,7 @@ export function createCodeBlockNodeView(options: {
 	const language = node.attrs?.language ?? null;
 
 	if (language !== "mermaid") {
-		return createPlainCodeBlockNodeView(node, diffAttrs);
+		return createPlainCodeBlockNodeView({ node, editor, getPos, diffAttrs });
 	}
 
 	return createMermaidCodeBlockNodeView({
@@ -34,24 +34,52 @@ export function createCodeBlockNodeView(options: {
 	});
 }
 
-function createPlainCodeBlockNodeView(
-	node: ProseMirrorNode,
-	diffAttrs: DiffAttrs,
-): NodeView {
+/**
+ * The block's label names its language and, where the document can be
+ * edited, opens the menu that sets it; a block without one says "Plain
+ * text" there, which only shows while editing.
+ */
+function createPlainCodeBlockNodeView(options: {
+	readonly node: ProseMirrorNode;
+	readonly editor: Editor;
+	readonly getPos: () => number | undefined;
+	readonly diffAttrs: DiffAttrs;
+}): NodeView {
+	const { node, editor, getPos, diffAttrs } = options;
 	const pre = document.createElement("pre");
 	const code = document.createElement("code");
 	const language = node.attrs?.language ?? null;
+	const languageLabel = language ? codeLanguageLabel(language) : "Plain text";
 	if (language) {
 		code.className = `language-${language}`;
 		pre.dataset.language = language;
-		const languageLabel = codeLanguageLabel(language);
-		const label = document.createElement("span");
-		label.className = "markdown-code-language";
-		label.contentEditable = "false";
-		label.textContent = languageLabel;
-		label.setAttribute("aria-label", `Code language: ${languageLabel}`);
-		pre.appendChild(label);
 	}
+	const label = document.createElement("button");
+	label.type = "button";
+	label.className = "markdown-code-language";
+	label.contentEditable = "false";
+	label.textContent = languageLabel;
+	label.setAttribute("aria-label", `Code language: ${languageLabel}`);
+	label.setAttribute("aria-haspopup", "listbox");
+	if (!language) label.dataset.plain = "true";
+	// The label is not text in the document: the caret stays where it was,
+	// and the menu opens on the press, the way a select does.
+	label.addEventListener("mousedown", (event) => {
+		event.preventDefault();
+		if (event.button !== 0 || !editor.isEditable) return;
+		const pos = getPos();
+		// Only an editor with the menu installed (not a review's or a test's).
+		if (pos !== undefined) (editor.commands as any).openCodeLanguageMenu?.(pos);
+	});
+	label.addEventListener("keydown", (event) => {
+		if (event.key !== "Enter" && event.key !== " ") return;
+		event.preventDefault();
+		const pos = getPos();
+		if (pos !== undefined && editor.isEditable)
+			(editor.commands as any).openCodeLanguageMenu?.(pos);
+	});
+	label.tabIndex = -1;
+	pre.appendChild(label);
 	for (const [key, value] of Object.entries(diffAttrs)) {
 		code.setAttribute(key, value);
 	}
@@ -59,6 +87,8 @@ function createPlainCodeBlockNodeView(
 	return {
 		dom: pre,
 		contentDOM: code,
+		stopEvent: (event) => event.target === label,
+		ignoreMutation: (mutation) => mutation.target === label,
 	};
 }
 

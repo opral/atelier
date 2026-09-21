@@ -532,7 +532,12 @@
 	.atelier-root
 		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror
-		:is(p, h1, h2, h3, h4, h5, h6).is-empty::before {
+		:is(p, h1, h2, h3, h4, h5, h6).is-empty::before,
+	/* An entirely empty document says how to start before it is clicked. */
+	.atelier-root
+		.tiptap-container
+		.ProseMirror
+		:is(p, h1, h2, h3, h4, h5, h6).is-empty.is-editor-empty::before {
 		color: var(--atelier-fg-subtle);
 		opacity: 0.55;
 		font-style: normal;
