@@ -117,10 +117,12 @@ export function preserveMarkdownSource(
 		edited.forEach((index, order) => {
 			counterpart[index] = leftOver[order];
 		});
-	// Blocks the editor re-emits are written with only the escapes their
-	// meaning needs; the rest keep their source spelling.
 	const definitionSource = definitions.join("\n");
-	const emitted = (minimal: boolean) =>
+	// Blocks the editor re-emits are written with only the escapes their
+	// meaning needs, and with the character references and table rows of
+	// the block they replace. If the file then does not read back as the
+	// editor's document, they are written exactly as serialized instead.
+	const emitted = (restore: boolean) =>
 		next.map((segment, index) => {
 			// A reused block's source stands in for it; this spelling is only
 			// the fallback when that source cannot be reused in place.
@@ -136,17 +138,18 @@ export function preserveMarkdownSource(
 				pair !== undefined &&
 				(originals[pair]!.definitions.length > 0 ||
 					(pair < originals.length - 1 && index < next.length - 1));
-			const written = minimal
-				? minimizeEscapes(content, definitionSource)
-				: content;
-			return (
-				(pair === undefined
-					? written
-					: restoreTableSource(
-							restoreCharacterReferences(written, originals[pair]!.text),
-							originals[pair]!.text,
-						)) + (between ? originals[pair]!.gap : segment.gap)
-			);
+			let written = content;
+			if (restore) {
+				written = minimizeEscapes(written, definitionSource);
+				if (pair !== undefined) {
+					const source = originals[pair]!.text;
+					written = restoreTableSource(
+						restoreCharacterReferences(written, source),
+						source,
+					);
+				}
+			}
+			return written + (between ? originals[pair]!.gap : segment.gap);
 		});
 	const withSourceDefinitions = (texts: readonly string[]) =>
 		texts.map((text, index) => {

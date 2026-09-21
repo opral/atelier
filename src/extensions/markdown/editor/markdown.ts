@@ -130,8 +130,10 @@ function sourceStyle(node: any, source: string): SourceStyle | null {
 				ruleSpaces: /[*_-][ \t]+[*_-]/.test(text),
 			};
 		}
-		case "break":
-			return text.startsWith("\\") ? null : { breakSpelling: text };
+		case "break": {
+			const spaces = /^( {2,})\r?\n$/.exec(text);
+			return spaces ? { breakSpelling: `${spaces[1]}\n` } : null;
+		}
 		default:
 			return null;
 	}
@@ -153,9 +155,9 @@ function withSourceStyle(
 		try {
 			return handler(node, parent, state, info);
 		} finally {
-			state.options = Object.assign(state.options, saved);
-			for (const key of Object.keys(overrides))
-				if (!(key in saved)) delete state.options[key];
+			// Nested lists set their own options; put this level's back.
+			for (const key of Object.keys(overrides)) delete state.options[key];
+			Object.assign(state.options, saved);
 		}
 	};
 }
@@ -528,7 +530,10 @@ function occurrences(text: string, character: string): number[] {
 	return out;
 }
 
-/** Source ranges where a backslash is a literal character, not an escape. */
+/**
+ * Source ranges written verbatim (code, HTML, frontmatter), where a backslash
+ * or `&copy;` is literal text rather than an escape or a reference.
+ */
 function literalRanges(markdown: string): [number, number][] {
 	const ranges: [number, number][] = [];
 	const visit = (node: any): void => {
