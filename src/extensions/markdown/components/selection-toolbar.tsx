@@ -21,6 +21,7 @@ import {
 	SELECTION_BLOCK_OPTIONS,
 	type SelectionBlockType,
 	getSelectionBlockType,
+	unlistedBlock,
 } from "../editor/block-commands";
 import { getClipRect, isAnchorClipped } from "./clip-rect";
 import { LinkPopover } from "./link-popover";
@@ -279,9 +280,12 @@ export function SelectionToolbar() {
 	}, [cancelHoverClose, editor]);
 	useEffect(() => cancelHoverClose, [cancelHoverClose]);
 
+	// A heading level the menu does not offer, or a mixed selection, is named
+	// as it is and checks no entry; calling it Text claimed a conversion.
 	const activeBlock = useMemo(
 		() =>
 			SELECTION_BLOCK_OPTIONS.find((option) => option.value === state.block) ??
+			unlistedBlock(state.block) ??
 			SELECTION_BLOCK_OPTIONS[0]!,
 		[state.block],
 	);

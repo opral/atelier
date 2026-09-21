@@ -319,4 +319,30 @@ describe("SlashCommandMenu", () => {
 			"/definitely-no-command",
 		);
 	});
+
+	test("ArrowDown walks the options in the order they are drawn", async () => {
+		const editor = setup();
+		await act(async () => {
+			editor.commands.insertContent("/");
+		});
+		await screen.findByRole("listbox", { name: "Slash commands" });
+		const drawn = screen
+			.getAllByRole("option")
+			.map((option) => option.getAttribute("id"));
+		const walked: (string | null)[] = [];
+		for (let step = 0; step < drawn.length; step += 1) {
+			walked.push(
+				screen
+					.getAllByRole("option")
+					.find((option) => option.getAttribute("aria-selected") === "true")
+					?.getAttribute("id") ?? null,
+			);
+			await act(async () => {
+				fireEvent.keyDown(editor.view.dom, { key: "ArrowDown" });
+			});
+		}
+		expect(walked).toEqual(drawn);
+		// "/" then Enter makes text: the first option drawn, and highlighted.
+		expect(drawn[0]).toBe("markdown-slash-option-paragraph");
+	});
 });
