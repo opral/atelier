@@ -155,3 +155,74 @@ test("a long document's first keystroke does not rewrite every block", async () 
 		await lix.close();
 	}
 });
+
+test("a click under a document that ends in a table opens a line after it, saved once typed", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("round11_browser_click_below");
+	const markdown = "# T\n\nIntro.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n";
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fileId,
+			path: "/click-below.md",
+			content: new TextEncoder().encode(markdown),
+		})
+		.execute();
+	const editor = createEditor({
+		lix,
+		fileId,
+		initialMarkdown: markdown,
+		persistDebounceMs: 0,
+	});
+	document.body.appendChild(editor.view.dom);
+	try {
+		// The click lands on the editor's own box, under its last block.
+		const event = new MouseEvent("mousedown", {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+			clientY: 10_000,
+		});
+		editor.view.dom.dispatchEvent(event);
+		expect(event.defaultPrevented).toBe(true);
+		const { selection, doc } = editor.state;
+		expect(doc.lastChild?.type.name).toBe("paragraph");
+		expect(selection.$from.parent).toBe(doc.lastChild);
+
+		// Nothing typed yet: the file is as it was.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(await readMarkdown(lix, fileId)).toBe(markdown);
+
+		editor.view.dispatch(editor.state.tr.insertText("New line"));
+		await waitFor(async () =>
+			(await readMarkdown(lix, fileId)).endsWith("\n\nNew line\n"),
+		);
+		expect(await readMarkdown(lix, fileId)).toBe(`${markdown}\nNew line\n`);
+		// Once typed into, it is an ordinary paragraph: emptied again, the empty
+		// line is written like any other.
+		await waitFor(async () =>
+			Object.keys(editor.state.doc.lastChild?.attrs.data ?? {}).every(
+				(key) => key === "id",
+			),
+		);
+
+		// A second click under the (now paragraph-ending) document adds nothing.
+		const count = editor.state.doc.childCount;
+		editor.view.dom.dispatchEvent(
+			new MouseEvent("mousedown", {
+				bubbles: true,
+				cancelable: true,
+				button: 0,
+				clientY: 10_000,
+			}),
+		);
+		expect(editor.state.doc.childCount).toBe(count);
+		expect(editor.state.selection.$from.parent).toBe(
+			editor.state.doc.lastChild,
+		);
+	} finally {
+		editor.view.dom.remove();
+		editor.destroy();
+		await lix.close();
+	}
+});

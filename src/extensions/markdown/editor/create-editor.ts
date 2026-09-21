@@ -27,6 +27,7 @@ import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { MentionCommandsExtension } from "./extensions/mention-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import { FocusedControlGuardExtension } from "./extensions/focused-control-guard";
+import { ClickBelowDocumentExtension } from "./extensions/click-below-document";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
 import type { AtelierDocumentLinks } from "@/extension-api";
@@ -544,6 +545,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}),
 			TableNavigationExtension,
 			FocusedControlGuardExtension,
+			ClickBelowDocumentExtension,
 		],
 		// Nothing listens for its "delete" events, and it re-maps every step of
 		// every transaction to emit them.

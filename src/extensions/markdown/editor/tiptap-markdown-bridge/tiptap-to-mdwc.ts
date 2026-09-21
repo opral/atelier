@@ -62,8 +62,11 @@ export function tiptapDocToAst(doc: PMNode): any {
 				continue;
 			}
 		}
+		// A block the editor put there only to hold the caret (an empty
+		// document's heading, the line a click under the document opens) is
+		// written once it has text.
 		if (
-			n.type === "heading" &&
+			(n.type === "heading" || n.type === "paragraph") &&
 			n.attrs?.data?.[EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY]
 		) {
 			const inline = pmInlineToMd(n.content || []);

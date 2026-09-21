@@ -44,6 +44,10 @@ import {
 	type StorePastedImage,
 } from "./handle-paste";
 import { storePastedMarkdownImage } from "./store-pasted-image";
+import {
+	isBelowDocument,
+	placeCaretBelowDocument,
+} from "./extensions/click-below-document";
 
 type TipTapEditorProps = {
 	fileId: string;
@@ -410,6 +414,8 @@ function TipTapEditorLoadedContent({
 			event.preventDefault();
 			if (editor.isEmpty) {
 				editor.commands.focus("start");
+			} else if (isBelowDocument(editor.view, event.clientY)) {
+				placeCaretBelowDocument(editor.view);
 			} else {
 				editor.commands.focus("end");
 			}
