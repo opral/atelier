@@ -422,3 +422,21 @@ describe("the source around an edited block", () => {
 		).toBe("[d]: https://x.com\n\nSee [docs](https://x.com) endZ\n");
 	});
 });
+
+describe("characters keep their spelling in an edited block", () => {
+	test.each([
+		"a&nbsp;b &copy; text",
+		"a&#xA0;b&#160;c text",
+		"mixed \u00A0 and &nbsp; text",
+		"Cafe\u0301 and \uF9D1 text",
+		"`&copy;` stays code, &copy; stays a reference text",
+	])("%j", async (markdown) => {
+		expect(await typeAfter(markdown, "text")).toBe(`${markdown}Z\n`);
+	});
+
+	test("a new non-breaking space follows the source's spelling", async () => {
+		expect(await typeAfter("a&nbsp;b text", "text", "\u00A0c")).toBe(
+			"a&nbsp;b text&nbsp;c\n",
+		);
+	});
+});

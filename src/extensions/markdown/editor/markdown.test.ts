@@ -119,12 +119,12 @@ describe("markdown parser", () => {
 		});
 	});
 
-	test("normalizes CRLF and Unicode text", () => {
-		const ast = parseMarkdown("Cafe\u0301\r\nnext");
+	test("normalizes CRLF but keeps Unicode text as written", () => {
+		const ast = parseMarkdown("Cafe\u0301 \uF9D1\r\nnext");
 
 		expect(ast.children[0]?.children?.[0]).toEqual({
 			type: "text",
-			value: "Café\nnext",
+			value: "Cafe\u0301 \uF9D1\nnext",
 		});
 	});
 
@@ -284,7 +284,7 @@ describe("markdown serializer", () => {
 
 		expect(normalizeAst(input)).toEqual({
 			type: "root",
-			children: [{ type: "paragraph", children: [{ value: "Café\n" }] }],
+			children: [{ type: "paragraph", children: [{ value: "Cafe\u0301\n" }] }],
 		});
 		expect(input).toEqual({
 			type: "root",

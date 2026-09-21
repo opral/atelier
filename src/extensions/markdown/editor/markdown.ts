@@ -267,6 +267,81 @@ export function minimizeEscapes(markdown: string, definitions = ""): string {
 	return apply(removed);
 }
 
+const CHARACTER_REFERENCE_PATTERN =
+	/&(?:#[xX][0-9A-Fa-f]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});/g;
+
+/**
+ * Writes characters the way `source` wrote them. The editor holds decoded
+ * text, so an edited block turned `&nbsp;` into an invisible U+00A0 and
+ * `&copy;` into ©. Where the edited block has as many of a character as its
+ * source did, each occurrence takes the source's spelling in order; where
+ * the count changed and the source always used one reference, every
+ * occurrence uses it.
+ */
+export function restoreCharacterReferences(
+	markdown: string,
+	source: string,
+): string {
+	const sourceLiteral = literalRanges(source);
+	const outside = (ranges: [number, number][], index: number) =>
+		!ranges.some(([start, end]) => index >= start && index < end);
+	const references = [...source.matchAll(CHARACTER_REFERENCE_PATTERN)].filter(
+		(match) => outside(sourceLiteral, match.index),
+	);
+	if (references.length === 0) return markdown;
+	const decoded = new Map<string, string>();
+	for (const match of references) {
+		if (decoded.has(match[0])) continue;
+		const text = fromMarkdown(`a${match[0]}`).children[0] as any;
+		const value = text?.children?.[0]?.value;
+		if (typeof value === "string" && value.slice(1) !== match[0])
+			decoded.set(match[0], value.slice(1));
+	}
+	const markdownLiteral = literalRanges(markdown);
+	const replacements = new Map<number, string>();
+	for (const character of new Set(decoded.values())) {
+		const spellings = [
+			...references
+				.filter((match) => decoded.get(match[0]) === character)
+				.map((match) => ({ index: match.index, spelling: match[0] })),
+			...occurrences(source, character)
+				.filter((index) => outside(sourceLiteral, index))
+				.map((index) => ({ index, spelling: character })),
+		]
+			.sort((a, b) => a.index - b.index)
+			.map((entry) => entry.spelling);
+		const targets = occurrences(markdown, character).filter((index) =>
+			outside(markdownLiteral, index),
+		);
+		const uniform = new Set(spellings).size === 1 ? spellings[0] : undefined;
+		targets.forEach((index, order) => {
+			const spelling =
+				targets.length === spellings.length ? spellings[order] : uniform;
+			if (spelling && spelling !== character) replacements.set(index, spelling);
+		});
+	}
+	if (replacements.size === 0) return markdown;
+	let out = "";
+	let cursor = 0;
+	for (const index of [...replacements.keys()].sort((a, b) => a - b)) {
+		const character = String.fromCodePoint(markdown.codePointAt(index)!);
+		out += markdown.slice(cursor, index) + replacements.get(index);
+		cursor = index + character.length;
+	}
+	return out + markdown.slice(cursor);
+}
+
+function occurrences(text: string, character: string): number[] {
+	const out: number[] = [];
+	for (
+		let index = text.indexOf(character);
+		index !== -1;
+		index = text.indexOf(character, index + character.length)
+	)
+		out.push(index);
+	return out;
+}
+
 /** Source ranges where a backslash is a literal character, not an escape. */
 function literalRanges(markdown: string): [number, number][] {
 	const ranges: [number, number][] = [];
@@ -492,18 +567,11 @@ function normalizeValue(value: any): any {
 	return out;
 }
 
+// Text is not Unicode-normalized: NFC rewrote decomposed accents and
+// replaced CJK compatibility ideographs (U+F9D1 became U+516D) in every
+// block the editor saved.
 function normalizeText(input: string): string {
-	const normalizedNewlines = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-	return isAscii(normalizedNewlines)
-		? normalizedNewlines
-		: normalizedNewlines.normalize("NFC");
-}
-
-function isAscii(input: string): boolean {
-	for (let index = 0; index < input.length; index++) {
-		if (input.charCodeAt(index) > 0x7f) return false;
-	}
-	return true;
+	return input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 function asRoot(ast: any): AstRoot {

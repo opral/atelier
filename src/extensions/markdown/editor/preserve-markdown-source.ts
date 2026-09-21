@@ -2,6 +2,7 @@ import {
 	minimizeEscapes,
 	parseMarkdownSource,
 	parseMarkdownSourceRaw,
+	restoreCharacterReferences,
 	serializeAst,
 } from "./markdown";
 import { astToTiptapDoc, tiptapDocToAst } from "./tiptap-markdown-bridge";
@@ -131,8 +132,13 @@ export function preserveMarkdownSource(
 				pair !== undefined &&
 				(originals[pair]!.definitions.length > 0 ||
 					(pair < originals.length - 1 && index < next.length - 1));
+			const written = minimal
+				? minimizeEscapes(content, definitionSource)
+				: content;
 			return (
-				(minimal ? minimizeEscapes(content, definitionSource) : content) +
+				(pair === undefined
+					? written
+					: restoreCharacterReferences(written, originals[pair]!.text)) +
 				(between ? originals[pair]!.gap : segment.gap)
 			);
 		});
