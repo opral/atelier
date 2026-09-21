@@ -104,3 +104,31 @@ describe("autolink", () => {
 		expect(runs(editor)).toEqual([["https://. x", ""]]);
 	});
 });
+
+describe("autolink on Enter", () => {
+	test("a URL that ends the line becomes a link when Enter splits it", () => {
+		const editor = editorFor("");
+		type(editor, "see https://example.com/a.");
+		key(editor, "Enter");
+		type(editor, "next");
+		expect(runs(editor)).toEqual([
+			["see ", ""],
+			["https://example.com/a", "link:https://example.com/a"],
+			[".", ""],
+			["next", ""],
+		]);
+		expect(editor.state.doc.childCount).toBe(2);
+	});
+
+	test("in a list item too; undo takes back the split, then the link", () => {
+		const editor = editorFor("- a\n");
+		caret(editor, "a", "end");
+		type(editor, " www.x.io");
+		key(editor, "Enter");
+		expect(md(editor)).toBe("- a [www.x.io](https://www.x.io)\n-\n");
+		editor.commands.undo();
+		expect(md(editor)).toBe("- a [www.x.io](https://www.x.io)\n");
+		editor.commands.undo();
+		expect(runs(editor)).toEqual([["a www.x.io", ""]]);
+	});
+});

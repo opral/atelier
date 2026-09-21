@@ -7,7 +7,13 @@ import {
 } from "@tiptap/core";
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
-import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
+import {
+	type EditorState,
+	NodeSelection,
+	Selection,
+	TextSelection,
+	type Transaction,
+} from "@tiptap/pm/state";
 import { normalizeUrl } from "../normalize-url";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
@@ -43,6 +49,37 @@ function typedUrl(candidate: string): string | null {
 		break;
 	}
 	return /^(?:https?:\/\/|www\.)[^\s./?#:]/.test(url) ? url : null;
+}
+
+/**
+ * Links a URL that ends right at the caret, for Enter: a URL that ends the
+ * line never gets the space that links it as you type, yet GFM makes it a
+ * link when the file is read again, so the editor and the file disagreed.
+ */
+function linkTypedUrlBeforeCaret(state: EditorState): Transaction | null {
+	const { selection, schema } = state;
+	const linkType = schema.marks.link;
+	const $from = selection.$from;
+	if (!linkType || !selection.empty || !$from.parent.isTextblock) return null;
+	if ($from.parent.type.spec.code) return null;
+	const before = $from.nodeBefore;
+	if (!before?.isText || before.marks.some((mark) => mark.type.spec.code)) {
+		return null;
+	}
+	const match = new RegExp(`${TYPED_URL}$`).exec(
+		$from.parent.textBetween(0, $from.parentOffset, undefined, "\uFFFC"),
+	);
+	const typed = match?.[1] ?? "";
+	const url = typedUrl(typed);
+	const href = url && normalizeUrl(url);
+	if (!url || !href) return null;
+	const urlStart = $from.pos - typed.length;
+	if (state.doc.rangeHasMark(urlStart, $from.pos, linkType)) return null;
+	return state.tr.addMark(
+		urlStart,
+		urlStart + url.length,
+		linkType.create({ href }),
+	);
 }
 
 function codeFenceLanguage(value: string): string | null | undefined {
@@ -1169,6 +1206,10 @@ export const MarkdownWcShortcuts = Extension.create({
 				flushDomSelection();
 				// A new block is its own undo step: Mod-Z after typing into it
 				// takes back the typing, not the split as well.
+				// A URL at the caret becomes a link first, as its own undo step
+				// like every other autoformat.
+				const linkUrl = linkTypedUrlBeforeCaret(this.editor.state);
+				if (linkUrl) this.editor.view.dispatch(closeHistory(linkUrl));
 				this.editor.view.dispatch(closeHistory(this.editor.state.tr));
 				if (
 					this.editor.state.selection instanceof NodeSelection &&
