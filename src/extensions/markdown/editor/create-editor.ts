@@ -26,6 +26,7 @@ import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { MentionCommandsExtension } from "./extensions/mention-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
+import { TableControlsExtension } from "./extensions/table-controls";
 import { FocusedControlGuardExtension } from "./extensions/focused-control-guard";
 import { ClickBelowDocumentExtension } from "./extensions/click-below-document";
 import { SelectionBlockHighlightExtension } from "./extensions/selection-block-highlight";
@@ -544,6 +545,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				onStateChange: () => {},
 			}),
 			TableNavigationExtension,
+			TableControlsExtension,
 			FocusedControlGuardExtension,
 			ClickBelowDocumentExtension,
 			SelectionBlockHighlightExtension,

@@ -163,7 +163,22 @@ export function preserveMarkdownSource(
 	const assemble = (fresh: readonly string[]): string | null => {
 		const preserved = fresh.map((text, index) => {
 			const match = reused[index];
-			return match === undefined ? text : originals[match]!.text;
+			if (match === undefined) return text;
+			const source = originals[match]!;
+			// A block left last by the removal of the blocks after it ends the
+			// way the file ended, not with the blank line that separated them.
+			const last = originals.at(-1)!;
+			if (
+				index === fresh.length - 1 &&
+				match !== originals.length - 1 &&
+				source.definitions.length === 0 &&
+				last.definitions.length === 0
+			)
+				return (
+					source.text.slice(0, source.text.length - source.gap.length) +
+					last.gap
+				);
+			return source.text;
 		});
 		const candidate = withDefinitions(
 			withSourceDefinitions(preserved).join(""),
@@ -222,18 +237,19 @@ function segments(text: string, nodes: readonly any[]): Segment[] {
  * Cells past the header's width are not part of a GFM table and the editor
  * drops them, but they are the author's text: they come back after their
  * row. A table whose source is not column-aligned stays unaligned, so
- * editing one cell no longer re-pads every row.
+ * editing one cell no longer re-pads every row, and a row inserted, deleted
+ * or moved, or a sort, rewrites only the rows it made or changed: an
+ * untouched row is found by what it says, wherever it now stands.
  */
 function restoreTableSource(markdown: string, source: string): string {
 	const sourceTable = parseMarkdownSourceRaw(source).children[0];
 	const table = parseMarkdownSourceRaw(markdown).children[0];
 	if (sourceTable?.type !== "table" || table?.type !== "table") return markdown;
-	const width = sourceTable.children[0]?.children.length ?? 0;
-	if (
-		table.children.length !== sourceTable.children.length ||
-		table.children[0]?.children.length !== width
-	)
-		return markdown;
+	const sourceWidth = sourceTable.children[0]?.children.length ?? 0;
+	const width = table.children[0]?.children.length ?? 0;
+	const sameShape =
+		table.children.length === sourceTable.children.length &&
+		width === sourceWidth;
 	const slice = (text: string, node: any) =>
 		text.slice(node.position.start.offset, node.position.end.offset);
 	const lines = (text: string, node: any) => slice(text, node).split("\n");
@@ -243,15 +259,32 @@ function restoreTableSource(markdown: string, source: string): string {
 	const aligned =
 		new Set(sourceLines.map((line) => line.trimEnd().length)).size === 1 &&
 		sourceLines.some((line) => /\S {2,}\||\| {2,}\S/.test(line));
+	if (aligned && !sameShape) return markdown;
 	const meaning = (row: any) =>
 		JSON.stringify(
-			normalizeAst({ type: "root", children: row.children.slice(0, width) })
-				.children,
+			normalizeAst({
+				type: "root",
+				children: row.children.slice(0, sourceWidth),
+			}).children,
 		);
+	// Source rows not yet spoken for, by what they say.
+	const unused = new Map<string, number[]>();
+	if (!aligned && width === sourceWidth)
+		sourceTable.children.forEach((row: any, index: number) => {
+			const key = meaning(row);
+			unused.set(key, [...(unused.get(key) ?? []), index]);
+		});
+	const take = (row: any, index: number): number | undefined => {
+		const candidates = unused.get(meaning(row));
+		if (!candidates?.length) return undefined;
+		// The row in the same place first, so identical rows keep their own.
+		const at = candidates.includes(index) ? candidates.indexOf(index) : 0;
+		return candidates.splice(at, 1)[0];
+	};
 	const rows = table.children.map((row: any, index: number) => {
-		const sourceRow = sourceTable.children[index];
-		if (!aligned && meaning(row) === meaning(sourceRow))
-			return slice(source, sourceRow);
+		const reused = aligned ? undefined : take(row, index);
+		if (reused !== undefined)
+			return slice(source, sourceTable.children[reused]);
 		const written = aligned
 			? slice(markdown, row)
 			: `| ${row.children
@@ -259,8 +292,9 @@ function restoreTableSource(markdown: string, source: string): string {
 						slice(markdown, cell).replace(/^\|/, "").replace(/\|$/, "").trim(),
 					)
 					.join(" | ")} |`;
+		const sourceRow = sameShape ? sourceTable.children[index] : undefined;
 		const excess =
-			sourceRow.children.length > width
+			sourceRow && sourceRow.children.length > width
 				? source.slice(
 						sourceRow.children[width].position.start.offset,
 						sourceRow.position.end.offset,
@@ -275,23 +309,55 @@ function restoreTableSource(markdown: string, source: string): string {
 		? lines(markdown, table)[1]
 		: sameAlign
 			? sourceLines[1]
-			: `| ${(table.align ?? [])
-					.map((align: string | null) =>
-						align === "left"
-							? ":--"
-							: align === "right"
-								? "--:"
-								: align === "center"
-									? ":-:"
-									: "---",
-					)
-					.join(" | ")} |`;
+			: delimiterLike(
+					sourceLines[1],
+					sourceTable.align ?? [],
+					table.align ?? [],
+				);
 	if (delimiter === undefined) return markdown;
 	return (
 		markdown.slice(0, table.position.start.offset) +
 		[rows[0], delimiter, ...rows.slice(1)].join("\n") +
 		markdown.slice(table.position.end.offset)
 	);
+}
+
+type Align = "left" | "right" | "center" | null;
+
+/**
+ * A delimiter row for `align` spelled the way `source` spells its own: the
+ * same marker for each alignment it already uses, and spaces around the
+ * cells if it has them.
+ */
+function delimiterLike(
+	source: string | undefined,
+	sourceAlign: readonly Align[],
+	align: readonly Align[],
+): string {
+	const cells = (source ?? "")
+		.trim()
+		.replace(/^\|/, "")
+		.replace(/\|$/, "")
+		.split("|");
+	const spelling = new Map<Align, string>();
+	cells.forEach((cell, index) => {
+		const cellAlign = sourceAlign[index] ?? null;
+		if (!spelling.has(cellAlign) && /^\s*:?-+:?\s*$/.test(cell))
+			spelling.set(cellAlign, cell.trim());
+	});
+	const markers = align.map(
+		(cellAlign) =>
+			spelling.get(cellAlign ?? null) ??
+			(cellAlign === "left"
+				? ":--"
+				: cellAlign === "right"
+					? "--:"
+					: cellAlign === "center"
+						? ":-:"
+						: "---"),
+	);
+	const spaced = source === undefined || cells.some((cell) => /^\s/.test(cell));
+	return spaced ? `| ${markers.join(" | ")} |` : `|${markers.join("|")}|`;
 }
 
 /** Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. */

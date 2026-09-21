@@ -1,0 +1,474 @@
+import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
+import {
+	Selection,
+	TextSelection,
+	type Command,
+	type EditorState,
+	type Transaction,
+} from "@tiptap/pm/state";
+
+/**
+ * Row and column edits for the editor's GFM table.
+ *
+ * A GFM table is a grid of one-line cells. Its first row is the header, and
+ * each column carries at most an alignment (`:--`, `:-:`, `--:`); nothing
+ * else can be said about a row or a column in Markdown. The schema mirrors
+ * that: `table.attrs.align` holds one entry per column, and every cell
+ * repeats its column's alignment and whether it sits in the first row
+ * (`isHeader`), for rendering. Every command here rebuilds the table with
+ * those attributes derived again from the rows' new order, so a row that
+ * moves into first place becomes the header and a column keeps its
+ * alignment wherever it goes.
+ *
+ * Each command replaces the table in one step, so it is one undo step, and
+ * places the caret in the cell the edit is about.
+ */
+
+export type TableAlign = "left" | "center" | "right" | null;
+
+/** A cell of a table: the table's position, the cell's row and column. */
+export type TableTarget = {
+	readonly tablePos: number;
+	readonly row: number;
+	readonly column: number;
+};
+
+export type SortDirection = "asc" | "desc";
+
+/** The transaction meta every table edit carries. */
+export const TABLE_EDIT_META = "markdownTableEdit";
+
+/** The cell the selection's start is in, or null outside a table. */
+export function tableTargetAt(
+	state: EditorState,
+	pos: number = state.selection.from,
+): TableTarget | null {
+	const $pos = state.doc.resolve(pos);
+	for (let depth = $pos.depth; depth > 2; depth--) {
+		if ($pos.node(depth).type.name !== "tableCell") continue;
+		if ($pos.node(depth - 1).type.name !== "tableRow") return null;
+		if ($pos.node(depth - 2).type.name !== "table") return null;
+		return {
+			tablePos: $pos.before(depth - 2),
+			row: $pos.index(depth - 2),
+			column: $pos.index(depth - 1),
+		};
+	}
+	return null;
+}
+
+/** Position of the cell at `row`/`column` of the table at `tablePos`. */
+export function cellPosition(
+	table: ProseMirrorNode,
+	tablePos: number,
+	row: number,
+	column: number,
+): number | null {
+	if (row < 0 || row >= table.childCount) return null;
+	let pos = tablePos + 1;
+	for (let index = 0; index < row; index++) pos += table.child(index).nodeSize;
+	const rowNode = table.child(row);
+	if (column < 0 || column >= rowNode.childCount) return null;
+	pos += 1;
+	for (let index = 0; index < column; index++)
+		pos += rowNode.child(index).nodeSize;
+	return pos;
+}
+
+/** The number of columns: the header's width, as GFM counts it. */
+export function tableWidth(table: ProseMirrorNode): number {
+	return table.firstChild?.childCount ?? 0;
+}
+
+/** `table.attrs.align`, one entry per column. */
+export function tableAlign(table: ProseMirrorNode): TableAlign[] {
+	const align = Array.isArray(table.attrs.align) ? table.attrs.align : [];
+	return Array.from(
+		{ length: tableWidth(table) },
+		(_, column) => (align[column] as TableAlign | undefined) ?? null,
+	);
+}
+
+type Row = {
+	/** The row this one was, whose attributes (its id) it keeps. */
+	readonly node: ProseMirrorNode | null;
+	readonly cells: readonly ProseMirrorNode[];
+};
+
+type Caret = {
+	readonly row: number;
+	readonly column: number;
+	/** The offset in the cell's text; past its end means the end. */
+	readonly offset: number;
+};
+
+type Edit =
+	| { readonly rows: readonly Row[]; readonly align: readonly TableAlign[] }
+	| { readonly deleteTable: true };
+
+type Context = {
+	readonly state: EditorState;
+	readonly table: ProseMirrorNode;
+	readonly target: TableTarget;
+	readonly rows: Row[];
+	readonly align: TableAlign[];
+	readonly width: number;
+	/** Where the caret is in the target cell, when it is in it. */
+	readonly offset: number;
+	readonly emptyCell: (row: number, column: number) => ProseMirrorNode;
+};
+
+function resolveTarget(
+	state: EditorState,
+	target: TableTarget | undefined,
+): { table: ProseMirrorNode; target: TableTarget } | null {
+	const resolved = target ?? tableTargetAt(state);
+	if (!resolved) return null;
+	const table = state.doc.nodeAt(resolved.tablePos);
+	if (table?.type.name !== "table") return null;
+	if (resolved.row < 0 || resolved.row >= table.childCount) return null;
+	const width = tableWidth(table);
+	if (resolved.column < 0 || resolved.column >= width) return null;
+	return { table, target: resolved };
+}
+
+function contextFor(
+	state: EditorState,
+	table: ProseMirrorNode,
+	target: TableTarget,
+): Context {
+	const width = tableWidth(table);
+	const align = tableAlign(table);
+	const cellType = state.schema.nodes.tableCell!;
+	const emptyCell = (row: number, column: number) =>
+		cellType.create({ isHeader: row === 0, align: align[column] ?? null });
+	const rows: Row[] = [];
+	table.forEach((row) => {
+		const cells: ProseMirrorNode[] = [];
+		row.forEach((cell) => cells.push(cell));
+		rows.push({ node: row, cells });
+	});
+	const inTarget = tableTargetAt(state);
+	const offset =
+		inTarget &&
+		inTarget.tablePos === target.tablePos &&
+		inTarget.row === target.row &&
+		inTarget.column === target.column
+			? state.selection.$from.parentOffset
+			: Number.POSITIVE_INFINITY;
+	return { state, table, target, rows, align, width, offset, emptyCell };
+}
+
+/** Rows padded to the header's width, for an edit to a column. */
+function paddedRows(context: Context): Row[] {
+	return context.rows.map((row, rowIndex) => {
+		if (row.cells.length >= context.width) return row;
+		const cells = [...row.cells];
+		while (cells.length < context.width)
+			cells.push(context.emptyCell(rowIndex, cells.length));
+		return { node: row.node, cells };
+	});
+}
+
+/**
+ * The table the rows make: the first row the header, each cell aligned as
+ * its column. Nodes that already say so are reused as they are.
+ */
+function buildTable(
+	schema: Schema,
+	table: ProseMirrorNode,
+	rows: readonly Row[],
+	align: readonly TableAlign[],
+): ProseMirrorNode {
+	const width = rows[0]?.cells.length ?? 0;
+	const columns = Array.from(
+		{ length: width },
+		(_, column) => align[column] ?? null,
+	);
+	const rowType = schema.nodes.tableRow!;
+	const built = rows.map((row, rowIndex) => {
+		const cells = row.cells.map((cell, column) => {
+			const isHeader = rowIndex === 0;
+			const cellAlign = columns[column] ?? null;
+			if (cell.attrs.isHeader === isHeader && cell.attrs.align === cellAlign)
+				return cell;
+			return cell.type.create(
+				{ ...cell.attrs, isHeader, align: cellAlign },
+				cell.content,
+				cell.marks,
+			);
+		});
+		const node = row.node;
+		if (
+			node &&
+			node.childCount === cells.length &&
+			cells.every((cell, index) => cell === node.child(index))
+		)
+			return node;
+		return rowType.create(node?.attrs ?? null, cells);
+	});
+	return table.type.create(
+		{ ...table.attrs, align: columns },
+		built,
+		table.marks,
+	);
+}
+
+/** Removes the table, the way Backspace removes an emptied one. */
+function deleteTable(
+	state: EditorState,
+	tablePos: number,
+	table: ProseMirrorNode,
+): Transaction {
+	const from = tablePos;
+	const to = from + table.nodeSize;
+	const parent = state.doc.resolve(from).parent;
+	const tr =
+		parent.childCount === 1
+			? state.tr.replaceWith(from, to, state.schema.nodes.paragraph!.create())
+			: state.tr.delete(from, to);
+	tr.setSelection(Selection.near(tr.doc.resolve(from), -1));
+	return tr;
+}
+
+function tableCommand(
+	target: TableTarget | undefined,
+	edit: (context: Context) => { edit: Edit; caret?: Caret } | false,
+): Command {
+	return (state, dispatch) => {
+		const resolved = resolveTarget(state, target);
+		if (!resolved) return false;
+		const context = contextFor(state, resolved.table, resolved.target);
+		const result = edit(context);
+		if (!result) return false;
+		if (!dispatch) return true;
+		const { tablePos } = resolved.target;
+		if ("deleteTable" in result.edit) {
+			dispatch(
+				deleteTable(state, tablePos, resolved.table)
+					.setMeta(TABLE_EDIT_META, true)
+					.scrollIntoView(),
+			);
+			return true;
+		}
+		const next = buildTable(
+			state.schema,
+			resolved.table,
+			result.edit.rows,
+			result.edit.align,
+		);
+		const tr = state.tr;
+		if (!next.eq(resolved.table))
+			tr.replaceWith(tablePos, tablePos + resolved.table.nodeSize, next);
+		const caret = result.caret;
+		if (caret) {
+			const table = tr.doc.nodeAt(tablePos)!;
+			const row = Math.min(caret.row, table.childCount - 1);
+			const rowNode = table.child(row);
+			const column = Math.min(caret.column, rowNode.childCount - 1);
+			const cellPos = cellPosition(table, tablePos, row, column)!;
+			const cell = tr.doc.nodeAt(cellPos)!;
+			const offset = Math.min(caret.offset, cell.content.size);
+			tr.setSelection(TextSelection.create(tr.doc, cellPos + 1 + offset));
+		}
+		dispatch(tr.setMeta(TABLE_EDIT_META, true).scrollIntoView());
+		return true;
+	};
+}
+
+/**
+ * A new empty row above or below the target's. A row "above" the header
+ * becomes the header: in Markdown the first row is always the header, so
+ * the new, empty row takes that place and the old header becomes the first
+ * body row, with its text intact. That is Notion's "Insert above" on a
+ * header row, too: the new row is where the user asked for it.
+ */
+export function addRow(
+	side: "before" | "after",
+	target?: TableTarget,
+): Command {
+	return tableCommand(target, (context) => {
+		const index = context.target.row + (side === "after" ? 1 : 0);
+		const cells = Array.from({ length: context.width }, (_, column) =>
+			context.emptyCell(index, column),
+		);
+		const rows = [...context.rows];
+		rows.splice(index, 0, { node: null, cells });
+		return {
+			edit: { rows, align: context.align },
+			caret: { row: index, column: context.target.column, offset: 0 },
+		};
+	});
+}
+
+/**
+ * Deletes the target's row. Deleting the header promotes the next row to
+ * header; deleting the only row deletes the table.
+ */
+export function deleteRow(target?: TableTarget): Command {
+	return tableCommand(target, (context) => {
+		if (context.rows.length <= 1) return { edit: { deleteTable: true } };
+		const rows = context.rows.filter(
+			(_, index) => index !== context.target.row,
+		);
+		return {
+			edit: { rows, align: context.align },
+			// The row that took its place, or the one above at the end.
+			caret: {
+				row: Math.min(context.target.row, rows.length - 1),
+				column: context.target.column,
+				offset: Number.POSITIVE_INFINITY,
+			},
+		};
+	});
+}
+
+/**
+ * Swaps the target's row with its neighbour. The header stays first: it
+ * cannot move down, and the first body row cannot move above it.
+ */
+export function moveRow(direction: -1 | 1, target?: TableTarget): Command {
+	return tableCommand(target, (context) => {
+		const from = context.target.row;
+		const to = from + direction;
+		if (from === 0 || to < 1 || to >= context.rows.length) return false;
+		const rows = [...context.rows];
+		[rows[from], rows[to]] = [rows[to]!, rows[from]!];
+		return {
+			edit: { rows, align: context.align },
+			caret: { row: to, column: context.target.column, offset: context.offset },
+		};
+	});
+}
+
+/** A new empty column left or right of the target's, with no alignment. */
+export function addColumn(
+	side: "before" | "after",
+	target?: TableTarget,
+): Command {
+	return tableCommand(target, (context) => {
+		const index = context.target.column + (side === "after" ? 1 : 0);
+		const align = [...context.align];
+		align.splice(index, 0, null);
+		const cellType = context.state.schema.nodes.tableCell!;
+		const rows = paddedRows(context).map((row, rowIndex) => {
+			const cells = [...row.cells];
+			cells.splice(
+				index,
+				0,
+				cellType.create({ isHeader: rowIndex === 0, align: null }),
+			);
+			return { node: row.node, cells };
+		});
+		return {
+			edit: { rows, align },
+			caret: { row: context.target.row, column: index, offset: 0 },
+		};
+	});
+}
+
+/** Deletes the target's column; deleting the only column deletes the table. */
+export function deleteColumn(target?: TableTarget): Command {
+	return tableCommand(target, (context) => {
+		if (context.width <= 1) return { edit: { deleteTable: true } };
+		const column = context.target.column;
+		const align = context.align.filter((_, index) => index !== column);
+		const rows = paddedRows(context).map((row) => ({
+			node: row.node,
+			cells: row.cells.filter((_, index) => index !== column),
+		}));
+		return {
+			edit: { rows, align },
+			// The column that took its place, or the one left of it at the end.
+			caret: {
+				row: context.target.row,
+				column: Math.min(column, context.width - 2),
+				offset: Number.POSITIVE_INFINITY,
+			},
+		};
+	});
+}
+
+/** Swaps the target's column, with its alignment, with its neighbour. */
+export function moveColumn(direction: -1 | 1, target?: TableTarget): Command {
+	return tableCommand(target, (context) => {
+		const from = context.target.column;
+		const to = from + direction;
+		if (to < 0 || to >= context.width) return false;
+		const swap = <T>(items: readonly T[]) => {
+			const next = [...items];
+			[next[from], next[to]] = [next[to]!, next[from]!];
+			return next;
+		};
+		const rows = paddedRows(context).map((row) => ({
+			node: row.node,
+			cells: swap(row.cells),
+		}));
+		return {
+			edit: { rows, align: swap(context.align) },
+			caret: { row: context.target.row, column: to, offset: context.offset },
+		};
+	});
+}
+
+/** Aligns the target's column; null writes a plain `---` delimiter. */
+export function setColumnAlign(
+	align: TableAlign,
+	target?: TableTarget,
+): Command {
+	return tableCommand(target, (context) => {
+		const next = [...context.align];
+		next[context.target.column] = align;
+		return {
+			edit: { rows: context.rows, align: next },
+			caret: {
+				row: context.target.row,
+				column: context.target.column,
+				offset: context.offset,
+			},
+		};
+	});
+}
+
+const collator = new Intl.Collator(undefined, {
+	numeric: true,
+	sensitivity: "base",
+});
+
+/**
+ * Orders the body rows by the target column's text, naturally ("item 2"
+ * before "item 10"). Empty cells go last either way; the header stays first.
+ * The caret stays in its row, wherever that row goes.
+ */
+export function sortColumn(
+	direction: SortDirection,
+	target?: TableTarget,
+): Command {
+	return tableCommand(target, (context) => {
+		const column = context.target.column;
+		const [header, ...body] = context.rows;
+		if (!header) return false;
+		const text = (row: Row) => row.cells[column]?.textContent.trim() ?? "";
+		const sign = direction === "asc" ? 1 : -1;
+		const sorted = body
+			.map((row, index) => ({ row, index, text: text(row) }))
+			.sort((a, b) => {
+				if (!a.text || !b.text) return (a.text ? 0 : 1) - (b.text ? 0 : 1);
+				return sign * collator.compare(a.text, b.text);
+			});
+		const rows = [header, ...sorted.map((entry) => entry.row)];
+		const caretRow =
+			context.target.row === 0
+				? 0
+				: 1 +
+					sorted.findIndex((entry) => entry.index === context.target.row - 1);
+		return {
+			edit: { rows, align: context.align },
+			caret: {
+				row: caretRow,
+				column: context.target.column,
+				offset: context.offset,
+			},
+		};
+	});
+}

@@ -63,3 +63,35 @@ test("deleting all content does not restore invisible reference definitions", ()
 		preserveMarkdownSource("Text\n\n[ref]: https://example.com\n", ""),
 	).toBe("");
 });
+
+test("removing the last blocks leaves the new last block ending as the file did", () => {
+	expect(preserveMarkdownSource("x\n\n| a |\n|---|\n", normalized("x\n"))).toBe(
+		"x\n",
+	);
+	expect(preserveMarkdownSource("*x*\n\ny", normalized("_x_\n"))).toBe("*x*");
+});
+
+test("a row added to, removed from or moved in an unaligned table leaves the other rows' source", () => {
+	const original = "| a | b |\n|:--|---|\n|  1  | 2 |\n| 3 |4|\n";
+	expect(
+		preserveMarkdownSource(
+			original,
+			normalized("| a | b |\n|:--|---|\n| 3 | 4 |\n| 1 | 2 |\n"),
+		),
+	).toBe("| a | b |\n|:--|---|\n| 3 |4|\n|  1  | 2 |\n");
+	expect(
+		preserveMarkdownSource(
+			original,
+			normalized("| a | b |\n|:--|---|\n| 1 | 2 |\n| x | y |\n| 3 | 4 |\n"),
+		),
+	).toBe("| a | b |\n|:--|---|\n|  1  | 2 |\n| x | y |\n| 3 |4|\n");
+});
+
+test("a column added to an unaligned table keeps its delimiter spelling", () => {
+	expect(
+		preserveMarkdownSource(
+			"| a | b |\n| :-- | --- |\n| 1 | 2 |\n",
+			normalized("| a | b | c |\n|:--|---|--:|\n| 1 | 2 | 3 |\n"),
+		),
+	).toBe("| a | b | c |\n| :-- | --- | --: |\n| 1 | 2 | 3 |\n");
+});
