@@ -1,4 +1,6 @@
 import {
+	ArrowDownToLine,
+	ArrowRightToLine,
 	CheckSquare,
 	Code2,
 	Heading1,
@@ -18,6 +20,7 @@ import {
 	Superscript,
 	Table,
 	TextQuote,
+	Trash2,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode, NodeType } from "@tiptap/pm/model";
@@ -526,6 +529,53 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 				editor.commands.setTextSelection($from.before(depth) + 3);
 				break;
 			}
+		},
+	},
+	// In a table cell, where no block can be inserted, "/" edits the table's
+	// rows and columns. Everything else a table can do is on its grips and
+	// its right-click menu.
+	{
+		id: "tableRowBelow",
+		label: "Insert row below",
+		description: "An empty row under this one",
+		icon: ArrowDownToLine,
+		keywords: ["row", "table", "insert", "add", "below"],
+		isAvailable: inTableCell,
+		insert: (editor) => {
+			editor.chain().focus().addTableRowAfter().run();
+		},
+	},
+	{
+		id: "tableColumnRight",
+		label: "Insert column right",
+		description: "An empty column after this one",
+		icon: ArrowRightToLine,
+		keywords: ["column", "col", "table", "insert", "add", "right"],
+		isAvailable: inTableCell,
+		insert: (editor) => {
+			editor.chain().focus().addTableColumnAfter().run();
+		},
+	},
+	{
+		id: "tableDeleteRow",
+		label: "Delete row",
+		description: "Remove this row",
+		icon: Trash2,
+		keywords: ["row", "table", "delete", "remove"],
+		isAvailable: inTableCell,
+		insert: (editor) => {
+			editor.chain().focus().deleteTableRow().run();
+		},
+	},
+	{
+		id: "tableDeleteColumn",
+		label: "Delete column",
+		description: "Remove this column",
+		icon: Trash2,
+		keywords: ["column", "col", "table", "delete", "remove"],
+		isAvailable: inTableCell,
+		insert: (editor) => {
+			editor.chain().focus().deleteTableColumn().run();
 		},
 	},
 ];

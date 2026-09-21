@@ -49,6 +49,15 @@ const COMMAND_GROUPS = [
 		],
 	},
 	{
+		label: "Table",
+		commandIds: [
+			"tableRowBelow",
+			"tableColumnRight",
+			"tableDeleteRow",
+			"tableDeleteColumn",
+		],
+	},
+	{
 		label: "Document",
 		commandIds: ["frontmatter"],
 	},

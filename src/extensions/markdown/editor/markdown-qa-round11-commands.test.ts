@@ -11,6 +11,7 @@ import {
 	SlashCommandsExtension,
 	slashCommandsPluginKey,
 } from "./extensions/slash-commands";
+import { TableControlsExtension } from "./extensions/table-controls";
 import { TableNavigationExtension } from "./extensions/table-navigation";
 import {
 	BLOCK_COMMANDS,
@@ -30,6 +31,7 @@ function load(markdown: string) {
 			History,
 			SlashCommandsExtension.configure({ onStateChange: () => {} }),
 			TableNavigationExtension,
+			TableControlsExtension,
 		],
 		content: astToTiptapDoc(parseMarkdown(markdown)) as any,
 	});
@@ -186,13 +188,51 @@ describe("turn into code", () => {
 describe("slash commands in a table cell", () => {
 	const cellMarkdown = "| a | b |\n| - | - |\n| x | y |\n";
 
-	test("only inline commands are offered", () => {
-		const editor = load(cellMarkdown);
-		caret(editor, "x");
-		const offered = BLOCK_COMMANDS.filter(
+	const offered = (editor: Editor) =>
+		BLOCK_COMMANDS.filter(
 			(command) => !command.isAvailable || command.isAvailable(editor),
 		).map((command) => command.id);
-		expect(offered).toEqual(["emoji", "footnote"]);
+
+	test("only inline commands and the table's own edits are offered", () => {
+		const editor = load(cellMarkdown);
+		caret(editor, "x");
+		expect(offered(editor)).toEqual([
+			"emoji",
+			"footnote",
+			"tableRowBelow",
+			"tableColumnRight",
+			"tableDeleteRow",
+			"tableDeleteColumn",
+		]);
+		// Outside a table there is no row or column to edit.
+		const prose = load("text\n");
+		prose.commands.setTextSelection(1);
+		expect(offered(prose).filter((id) => id.startsWith("table"))).toEqual([
+			"table",
+		]);
+	});
+
+	test("/row and /column edit the table the caret is in", () => {
+		const editor = load(cellMarkdown);
+		const rows = () => {
+			const out: string[] = [];
+			editor.state.doc.firstChild!.forEach((row) => {
+				const cells: string[] = [];
+				row.forEach((cell) => cells.push(cell.textContent));
+				out.push(cells.join("|"));
+			});
+			return out;
+		};
+		editor.commands.setTextSelection(pos(editor, "y"));
+		slash(editor, "row", "tableRowBelow");
+		expect(rows()).toEqual(["a|b", "x|y", "|"]);
+		expect(editor.state.selection.$from.parent.type.name).toBe("tableCell");
+		slash(editor, "column", "tableColumnRight");
+		expect(rows()).toEqual(["a|b|", "x|y|", "||"]);
+		slash(editor, "delete", "tableDeleteColumn");
+		expect(rows()).toEqual(["a|b", "x|y", "|"]);
+		slash(editor, "delete", "tableDeleteRow");
+		expect(md(editor)).toBe(cellMarkdown);
 	});
 
 	test("/table run in a cell leaves the table whole", () => {
