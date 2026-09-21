@@ -1168,7 +1168,8 @@ export const MarkdownWcShortcuts = Extension.create({
 			Enter: () => {
 				flushDomSelection();
 				// A new block is its own undo step: Mod-Z after typing into it
-				// takes back the typing, not the split as well.
+				// takes back the typing, not the split as well. History is closed
+				// before the split here and after it below, where Enter returns.
 				this.editor.view.dispatch(closeHistory(this.editor.state.tr));
 				if (
 					this.editor.state.selection instanceof NodeSelection &&
@@ -1362,7 +1363,11 @@ export const MarkdownWcShortcuts = Extension.create({
 			...keys,
 			Enter: () => {
 				try {
-					return enter();
+					const handled = enter();
+					if (handled) {
+						this.editor.view.dispatch(closeHistory(this.editor.state.tr));
+					}
+					return handled;
 				} catch (error) {
 					// A split the schema cannot take throws. The key stays ours:
 					// the browser's own Enter would edit the DOM behind

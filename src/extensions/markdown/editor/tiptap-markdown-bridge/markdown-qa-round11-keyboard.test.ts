@@ -291,3 +291,23 @@ describe("footnote definitions survive block-boundary keys", () => {
 		expect(md(editor)).toContain("[^2]: two");
 	});
 });
+describe("undo after Enter and typing", () => {
+	test("the first Mod-z takes back the typing, the second the new block", () => {
+		const editor = editorFor("para\n");
+		caret(editor, "para", "end");
+		key(editor, "Enter");
+		type(editor, "xy");
+		editor.commands.undo();
+		expect(md(editor)).toBe("para\n\n<span></span>\n");
+		editor.commands.undo();
+		expect(md(editor)).toBe("para\n");
+	});
+	test("in a list too", () => {
+		const editor = editorFor("- a\n");
+		caret(editor, "a", "end");
+		key(editor, "Enter");
+		type(editor, "xy");
+		editor.commands.undo();
+		expect(md(editor)).toBe("- a\n-\n");
+	});
+});
