@@ -378,3 +378,14 @@ describe("typed image syntax", () => {
 		expect(runs(editor)).toEqual([["![](assets/a.png)", ""]]);
 	});
 });
+
+// "***" and "___" stay literal on purpose (shortcuts.test.ts): a rule there
+// would fire at the start of "***bold italic***".
+describe("more CommonMark block shortcuts", () => {
+	test("3) starts a numbered list at 3", () => {
+		const editor = editorFor("");
+		type(editor, "3) three");
+		expect(editor.state.doc.firstChild?.type.name).toBe("orderedList");
+		expect(md(editor)).toBe("3. three\n");
+	});
+});

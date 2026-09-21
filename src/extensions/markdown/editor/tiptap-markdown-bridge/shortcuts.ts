@@ -385,11 +385,12 @@ export const MarkdownWcShortcuts = Extension.create({
 			rules.push(bullet("+"));
 		}
 
-		// Ordered list: 1. + space (captures custom start)
+		// Ordered list: 1. or 1) + space (captures custom start). The file
+		// writes it back with ".": the list keeps no delimiter of its own.
 		if ((schema.nodes as any).orderedList && (schema.nodes as any).listItem) {
 			rules.push(
 				wrappingInputRule({
-					find: /^(\d+)\.\s$/,
+					find: /^(\d+)[.)]\s$/,
 					type: (schema.nodes as any).orderedList,
 					getAttributes: (match) => ({ start: Number(match[1] || 1) }),
 				}),
