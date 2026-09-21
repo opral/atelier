@@ -30,25 +30,36 @@ export function preserveMarkdownSource(
 	const canonical = canonicalMarkdown;
 	const target = canonical(serialized);
 	if (canonical(original) === target) return original;
-	const segments = (text: string) => {
-		const nodes = parseMarkdownSource(text).children;
-		return nodes.map((node, index) => ({
-			key: canonical(serializeAst({ type: "root", children: [node] })),
-			text: text.slice(
-				index === 0 ? 0 : node.position.start.offset,
-				nodes[index + 1]?.position.start.offset ?? text.length,
-			),
-		}));
-	};
-	const available = new Map<string, string[]>();
-	for (const block of segments(original)) {
-		const queue = available.get(block.key) ?? [];
-		queue.push(block.text);
-		available.set(block.key, queue);
+	const keyOf = (node: any) =>
+		canonical(serializeAst({ type: "root", children: [node] }));
+	// Top-level definitions are their own segments here, attached to the
+	// block they follow: they are invisible in the editor and absent from its
+	// serialized document, and must stay where they were when that block is
+	// edited rather than move to the end of the file.
+	const resolved = parseMarkdownSource(original).children;
+	const leadingDefinitions: string[] = [];
+	const originals: (Segment & { key: string; definitions: string[] })[] = [];
+	for (const segment of segments(
+		original,
+		parseMarkdownSourceRaw(original).children,
+	)) {
+		if (segment.node.type === "definition") {
+			(originals.at(-1)?.definitions ?? leadingDefinitions).push(segment.text);
+			continue;
+		}
+		originals.push({
+			...segment,
+			key: keyOf(resolved[originals.length]),
+			definitions: [],
+		});
 	}
-	const next = segments(serialized);
-	// Definitions are invisible in the editor and absent from its serialized
-	// document. Keep their source even when their neighboring block was edited.
+	const available = new Map<string, number[]>();
+	originals.forEach((segment, index) => {
+		const queue = available.get(segment.key) ?? [];
+		queue.push(index);
+		available.set(segment.key, queue);
+	});
+	const next = segments(serialized, parseMarkdownSource(serialized).children);
 	const definitions: string[] = [];
 	const collectDefinitions = (node: any, depth: number): void => {
 		if (node.type === "definition") {
@@ -87,20 +98,63 @@ export function preserveMarkdownSource(
 		// A newly typed literal reference must not acquire a hidden old target.
 		return canonical(candidate) === target ? candidate : text;
 	};
+	const reused = next.map((segment) =>
+		available.get(keyOf(segment.node))?.shift(),
+	);
+	// An edit that changed blocks but added or removed none leaves one
+	// original block over for each edited one. Pair them in order, so an
+	// edited block keeps the blank lines and definitions that followed it.
+	const counterpart = [...reused];
+	const leftOver = originals.flatMap((_, index) =>
+		reused.includes(index) ? [] : [index],
+	);
+	const edited = next.flatMap((_, index) =>
+		reused[index] === undefined ? [index] : [],
+	);
+	if (leftOver.length === edited.length)
+		edited.forEach((index, order) => {
+			counterpart[index] = leftOver[order];
+		});
 	// Blocks the editor re-emits are written with only the escapes their
 	// meaning needs; the rest keep their source spelling.
-	const reused = next.map((block) => available.get(block.key)?.shift());
 	const definitionSource = definitions.join("\n");
-	const minimal = next.map((block, index) =>
-		reused[index] === undefined
-			? minimizeEscapes(block.text, definitionSource)
-			: block.text,
-	);
+	const emitted = (minimal: boolean) =>
+		next.map((segment, index) => {
+			const content = segment.text.slice(
+				0,
+				segment.text.length - segment.gap.length,
+			);
+			// The file's end is the editor's: an edited last block ends in one
+			// newline, as it always has, unless definitions follow it.
+			const pair = counterpart[index];
+			const between =
+				pair !== undefined &&
+				(originals[pair]!.definitions.length > 0 ||
+					(pair < originals.length - 1 && index < next.length - 1));
+			return (
+				(minimal ? minimizeEscapes(content, definitionSource) : content) +
+				(between ? originals[pair]!.gap : segment.gap)
+			);
+		});
+	const withSourceDefinitions = (texts: readonly string[]) =>
+		texts.map((text, index) => {
+			const pair = counterpart[index];
+			return (
+				(index === 0 ? leadingDefinitions.join("") : "") +
+				text +
+				(pair === undefined ? "" : originals[pair]!.definitions.join(""))
+			);
+		});
 	const assemble = (fresh: readonly string[]): string | null => {
-		const preserved = fresh.map((text, index) => reused[index] ?? text);
-		const candidate = withDefinitions(preserved.join(""));
+		const preserved = fresh.map((text, index) => {
+			const match = reused[index];
+			return match === undefined ? text : originals[match]!.text;
+		});
+		const candidate = withDefinitions(
+			withSourceDefinitions(preserved).join(""),
+		);
 		if (canonical(candidate) === target) return candidate;
-		const separated = preserved.map((text, index) => {
+		const separated = withSourceDefinitions(preserved).map((text, index) => {
 			// A formerly final block may now precede another block.
 			return index < next.length - 1 && !/\r?\n\r?\n$/.test(text)
 				? text + (text.endsWith("\n") ? "\n" : "\n\n")
@@ -111,7 +165,7 @@ export function preserveMarkdownSource(
 		// A moved block may depend on its old neighbors or reference definitions.
 		// Retain every independently safe spelling instead of reformatting the
 		// entire file because one source boundary could not be reused.
-		const safe = [...fresh];
+		const safe = withSourceDefinitions(fresh);
 		for (let index = 0; index < safe.length; index++) {
 			const previous = safe[index]!;
 			safe[index] = separated[index]!;
@@ -123,10 +177,29 @@ export function preserveMarkdownSource(
 	};
 	return matchLineEndings(
 		original,
-		assemble(minimal) ??
-			assemble(next.map((block) => block.text)) ??
-			serialized,
+		assemble(emitted(true)) ?? assemble(emitted(false)) ?? serialized,
 	);
+}
+
+type Segment = {
+	readonly node: any;
+	/** The block's source up to the next block. */
+	readonly text: string;
+	/** The whitespace between the block's content and the next block. */
+	readonly gap: string;
+};
+
+function segments(text: string, nodes: readonly any[]): Segment[] {
+	return nodes.map((node, index) => {
+		const start = index === 0 ? 0 : node.position.start.offset;
+		const end = nodes[index + 1]?.position.start.offset ?? text.length;
+		const contentEnd = Math.max(start, Math.min(node.position.end.offset, end));
+		return {
+			node,
+			text: text.slice(start, end),
+			gap: text.slice(contentEnd, end),
+		};
+	});
 }
 
 /** Re-emitted blocks use LF; a CRLF file keeps CRLF throughout. */

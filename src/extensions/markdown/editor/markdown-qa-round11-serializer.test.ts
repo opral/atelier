@@ -397,3 +397,28 @@ test("a CRLF file keeps CRLF in the edited block", async () => {
 		"Para endZ\r\n\r\n- a\r\n- b\r\n",
 	);
 });
+
+describe("the source around an edited block", () => {
+	test("blank lines after it stay", async () => {
+		expect(await typeAfter("A end\n\n\n\nB\n", "end")).toBe(
+			"A endZ\n\n\n\nB\n",
+		);
+		expect(await typeAfter("- a end\n- b\n\n\n\nB\n", "b")).toBe(
+			"- a end\n- bZ\n\n\n\nB\n",
+		);
+	});
+
+	test("a reference definition stays where it was", async () => {
+		expect(
+			await typeAfter(
+				"See [docs][d] end\n\n[d]: https://x.com\n\n## Next\n\nMore.\n",
+				"end",
+			),
+		).toBe(
+			"See [docs](https://x.com) endZ\n\n[d]: https://x.com\n\n## Next\n\nMore.\n",
+		);
+		expect(
+			await typeAfter("[d]: https://x.com\n\nSee [docs][d] end\n", "end"),
+		).toBe("[d]: https://x.com\n\nSee [docs](https://x.com) endZ\n");
+	});
+});
