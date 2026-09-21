@@ -8,6 +8,7 @@ import {
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
+import { canSplit } from "@tiptap/pm/transform";
 import { normalizeUrl } from "../normalize-url";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
@@ -865,7 +866,7 @@ export const MarkdownWcShortcuts = Extension.create({
 			}
 			return false;
 		};
-		return {
+		const keys: Record<string, () => boolean> = {
 			// Bold / Italic / Strike
 			"Mod-b": () => this.editor.chain().focus().toggleMark("bold").run(),
 			"Mod-i": () => this.editor.chain().focus().toggleMark("italic").run(),
@@ -1226,6 +1227,46 @@ export const MarkdownWcShortcuts = Extension.create({
 						.unsetMark("code")
 						.run();
 				}
+				if (!state.selection.empty) {
+					// A range that spans items has no single item to split: delete
+					// it first, in the same chain, and split the item the caret is
+					// left in. The item line splits even when the deletion emptied
+					// it, since Enter replaces the selection with a line break. A
+					// plain delete keeps the first item even when every item's text
+					// was selected; deleteSelection would take the list with it.
+					return this.editor
+						.chain()
+						.command(({ tr, commands }) => {
+							tr.delete(tr.selection.from, tr.selection.to);
+							// Two empty items are what Enter made, not a cleared
+							// document for the editor to reset to a paragraph.
+							tr.setMeta("preventClearDocument", true);
+							const $at = tr.selection.$from;
+							for (let d = $at.depth; d > 0; d--) {
+								const node = $at.node(d);
+								if (node.type.name !== "listItem") continue;
+								const checked = node.attrs?.checked;
+								const attrs =
+									checked === true || checked === false
+										? { ...node.attrs, checked: false }
+										: node.attrs;
+								const depth = $at.depth - d + 1;
+								// The item takes its attributes; the blocks inside it
+								// start fresh, like a split paragraph.
+								const types: { type: any; attrs?: any }[] = [
+									{ type: node.type, attrs },
+								];
+								for (let inner = d + 1; inner <= $at.depth; inner++)
+									types.push({ type: $at.node(inner).type });
+								if (!canSplit(tr.doc, $at.pos, depth, types)) return false;
+								tr.split($at.pos, depth, types);
+								return true;
+							}
+							return commands.splitBlock();
+						})
+						.unsetMark("code")
+						.run();
+				}
 				// If current paragraph is empty, exit the list (lift)
 				const para: any = $from.parent;
 				const isEmptyPara =
@@ -1287,6 +1328,22 @@ export const MarkdownWcShortcuts = Extension.create({
 					.splitListItem("listItem", isTask ? { checked: false } : undefined)
 					.unsetMark("code")
 					.run();
+			},
+		};
+		const enter = keys.Enter!;
+		return {
+			...keys,
+			Enter: () => {
+				try {
+					return enter();
+				} catch (error) {
+					// A split the schema cannot take throws. The key stays ours:
+					// the browser's own Enter would edit the DOM behind
+					// ProseMirror's back. The document keeps what was dispatched
+					// before the failure, which is never a half-applied step.
+					console.error("markdown: Enter failed", error);
+					return true;
+				}
 			},
 		};
 	},
