@@ -218,10 +218,38 @@ function markdownClipboardText(slice: Slice): string {
 		if (trailing && !markdown.endsWith(trailing)) markdown += trailing;
 		return markdown;
 	}
-	return serializeTiptapDocToMarkdown({
+	let markdown = serializeTiptapDocToMarkdown({
 		type: "doc",
 		content: slice.content.toJSON(),
 	});
+	// Blocks cut from the middle of a paragraph keep the spaces at the cut,
+	// so pasting them back rejoins "Body| text" instead of "Bodytext". The
+	// paste handler restores them onto the open edge blocks.
+	const first = openTextblock(slice.content, slice.openStart, "start");
+	const last = openTextblock(slice.content, slice.openEnd, "end");
+	const leading = first?.firstChild?.isText
+		? (first.firstChild.text?.match(/^[ \t]+/)?.[0] ?? "")
+		: "";
+	const trailing = last?.lastChild?.isText
+		? (last.lastChild.text?.match(/[ \t]+$/)?.[0] ?? "")
+		: "";
+	if (leading) markdown = leading + markdown;
+	if (trailing) markdown = markdown.replace(/\n$/, "") + trailing;
+	return markdown;
+}
+
+/** The textblock an open slice edge ends in, if the slice is open that far. */
+function openTextblock(
+	content: Slice["content"],
+	openDepth: number,
+	side: "start" | "end",
+): ProseMirrorNode | null {
+	let node = side === "start" ? content.firstChild : content.lastChild;
+	for (let depth = 1; node && depth <= openDepth; depth += 1) {
+		if (node.isTextblock) return node;
+		node = side === "start" ? node.firstChild : node.lastChild;
+	}
+	return null;
 }
 
 function handleExternalLinkClick(event: MouseEvent): void {

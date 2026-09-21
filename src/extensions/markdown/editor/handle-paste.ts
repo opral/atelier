@@ -3,7 +3,10 @@ import { deleteSelectedTableText } from "./extensions/table-selection";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
-import { markdownFromClipboardHtml } from "./clipboard-html";
+import {
+	markdownFromClipboardHtml,
+	ownClipboardSliceDepth,
+} from "./clipboard-html";
 import type { StoredPastedMarkdownImage } from "./store-pasted-image";
 import { closeHistory } from "@tiptap/pm/history";
 
@@ -209,38 +212,46 @@ export function handlePaste(args: {
 			);
 		}
 
-		if (
-			blocks.length === 1 &&
-			blocks[0].type === "paragraph" &&
-			!/[\r\n]/.test(text)
-		) {
-			// Markdown trims insignificant boundary spaces, but clipboard fragments
-			// such as "beautiful " need those spaces when inserted into a sentence.
-			const content = blocks[0].content ?? [];
-			const leading = text.match(/^[ \t]+/)?.[0] ?? "";
-			const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
-			const first = content[0];
-			const last = content.at(-1);
-			const existingLeading =
-				first?.type === "text" ? (first.text.match(/^[ \t]+/)?.[0] ?? "") : "";
-			const existingTrailing =
-				last?.type === "text" ? (last.text.match(/[ \t]+$/)?.[0] ?? "") : "";
-			if (leading.length > existingLeading.length)
-				content.unshift({
-					type: "text",
-					text: leading.slice(existingLeading.length),
-				});
-			if (trailing.length > existingTrailing.length)
-				content.push({
-					type: "text",
-					text: trailing.slice(existingTrailing.length),
-				});
-			blocks[0].content = content;
-		}
-		return insertPastedBlocks(editor, blocks);
+		// Markdown trims insignificant boundary spaces, but clipboard fragments
+		// such as "beautiful " need those spaces where they join the text
+		// around the caret.
+		const leading = text.match(/^[ \t]+/)?.[0] ?? "";
+		const trailing = text.match(/[ \t]+$/)?.[0] ?? "";
+		const firstTextblock = edgeInlineBlock(blocks[0], "start");
+		const lastTextblock = edgeInlineBlock(blocks.at(-1), "end");
+		if (leading && firstTextblock) padInline(firstTextblock, leading, "start");
+		if (trailing && lastTextblock) padInline(lastTextblock, trailing, "end");
+		if (blocks.length === 1 && blocks[0].type === "imageBlock")
+			return insertPastedBlocks(editor, blocks);
+		return insertMarkdownBlocks(editor, blocks, ownClipboardSliceDepth(html));
 	} finally {
 		editor.view?.dispatch(closeHistory(editor.state.tr));
 	}
+}
+
+/** The paragraph or heading at one edge, through lists and quotes. */
+function edgeInlineBlock(block: any, side: "start" | "end"): any | null {
+	let node = block;
+	while (node && node.type !== "paragraph" && node.type !== "heading") {
+		if (!/^(bulletList|orderedList|listItem|blockquote)$/.test(node.type))
+			return null;
+		node = side === "start" ? node.content?.[0] : node.content?.at(-1);
+	}
+	return node ?? null;
+}
+
+function padInline(block: any, space: string, side: "start" | "end"): void {
+	const content = block.content ?? [];
+	const edge = side === "start" ? content[0] : content.at(-1);
+	const existing =
+		edge?.type === "text"
+			? (edge.text.match(side === "start" ? /^[ \t]+/ : /[ \t]+$/)?.[0] ?? "")
+			: "";
+	if (space.length <= existing.length) return;
+	const text = { type: "text", text: space.slice(existing.length) };
+	if (side === "start") content.unshift(text);
+	else content.push(text);
+	block.content = content;
 }
 
 /**
@@ -411,6 +422,136 @@ function queueMarkdownImage({
 			finishPendingImagePaste(editor, pendingImagePaste);
 		}
 	});
+	return true;
+}
+
+/**
+ * Inserts parsed Markdown blocks the way a copied selection comes back: a
+ * paragraph or heading at an open edge joins the text on that side of the
+ * caret ("Hello |world" + two paragraphs keeps "Hello" and "world" in the
+ * first and last of them). Closed blocks would split the caret's block and
+ * leave its halves as separate blocks.
+ *
+ * A copy from this editor says how open it was; replaying that depth makes
+ * cut then paste an identity, exactly as ProseMirror's own paste would. Other
+ * Markdown is whole blocks, and the edges are opened where that reads right.
+ */
+function insertMarkdownBlocks(
+	editor: any,
+	blocks: any[],
+	ownSlice: { readonly openStart: number; readonly openEnd: number } | null,
+): boolean {
+	const state = editor?.state;
+	if (!state?.selection || blocks.length === 0) return false;
+	const nodes = blocks.map((block) => state.schema.nodeFromJSON(block));
+	const fragment = Fragment.fromArray(nodes);
+	const tr = state.tr;
+	if (!ownSlice && insertListIntoList(tr, fragment)) {
+		editor.view.dispatch(tr.scrollIntoView());
+		return true;
+	}
+	let openStart = isOpenEdge(nodes[0]) ? 1 : 0;
+	let openEnd = isOpenEdge(nodes.at(-1)) ? 1 : 0;
+	if (ownSlice) {
+		// The Markdown can come back shallower than the copy (an inline
+		// fragment drops its list or heading), so open no deeper than it goes.
+		const deepest = Slice.maxOpen(fragment);
+		openStart = Math.min(ownSlice.openStart, deepest.openStart);
+		openEnd = Math.min(ownSlice.openEnd, deepest.openEnd);
+	}
+	const first = nodes[0];
+	const { $from, $to } = tr.selection;
+	let { from, to } = tr.selection;
+	// With no text before the caret there is nothing to join: a first block
+	// of another type keeps it ("# Title" into an empty line stays a heading,
+	// a heading cut from the start of a block comes back as one) and no empty
+	// block is left in front of it. A lone paragraph, or any lone block from
+	// our own copy, is inline text and always joins.
+	if (
+		openStart <= 1 &&
+		$from.parent.isTextblock &&
+		$from.parentOffset === 0 &&
+		$from.depth > 0 &&
+		!(
+			first.type === $from.parent.type &&
+			first.attrs.level === $from.parent.attrs.level
+		) &&
+		!(nodes.length === 1 && (ownSlice || first.type.name === "paragraph")) &&
+		$from
+			.node($from.depth - 1)
+			.canReplaceWith(
+				$from.index($from.depth - 1),
+				$from.index($from.depth - 1),
+				first.type,
+			)
+	) {
+		from = $from.before();
+		openStart = 0;
+	}
+	// Likewise a closed last block (list, code, table) after the end of the
+	// caret's block must not leave an empty block behind it.
+	if (
+		!openEnd &&
+		$to.parent.isTextblock &&
+		$to.parentOffset === $to.parent.content.size &&
+		$to.depth > 0
+	) {
+		to = $to.after();
+	}
+	tr.replaceRange(from, to, new Slice(fragment, openStart, openEnd));
+	tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(to)), -1));
+	editor.view.dispatch(tr.scrollIntoView());
+	return true;
+}
+
+function isOpenEdge(node: any): boolean {
+	return node.type.name === "paragraph" || node.type.name === "heading";
+}
+
+/**
+ * Markdown list items are whole items: a list pasted into a list item joins
+ * its list as siblings instead of nesting inside the item, and replaces an
+ * item that is empty or whose text is selected.
+ */
+function insertListIntoList(tr: Transaction, fragment: Fragment): boolean {
+	const list = fragment.childCount === 1 ? fragment.firstChild : null;
+	const { $from, $to } = tr.selection;
+	const depth = $from.depth;
+	if (
+		!list ||
+		!/^(bulletList|orderedList)$/.test(list.type.name) ||
+		!$from.sameParent($to) ||
+		!$from.parent.isTextblock ||
+		depth < 2 ||
+		$from.node(depth - 1).type.name !== "listItem" ||
+		$from.index(depth - 1) !== 0
+	)
+		return false;
+	const item = $from.node(depth - 1);
+	const coversText =
+		$from.parentOffset === 0 && $to.parentOffset === $from.parent.content.size;
+	let at: number;
+	let end: number | null = null;
+	if (coversText && item.childCount === 1) {
+		// The item has nothing left once its text is replaced.
+		at = $from.before(depth - 1);
+		end = $from.after(depth - 1);
+	} else {
+		if (!tr.selection.empty) tr.deleteSelection();
+		const $caret = tr.selection.$from;
+		if ($caret.parentOffset === 0) at = $caret.before(depth - 1);
+		else if ($caret.parentOffset === $caret.parent.content.size)
+			at = $caret.after(depth - 1);
+		else {
+			// Mid-item: the item splits and the pasted items go between.
+			tr.split($caret.pos, 2);
+			at = $caret.pos + 2;
+		}
+	}
+	tr.replaceWith(at, end ?? at, list.content);
+	tr.setSelection(
+		TextSelection.near(tr.doc.resolve(at + list.content.size), -1),
+	);
 	return true;
 }
 

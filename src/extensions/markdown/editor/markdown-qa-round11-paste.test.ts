@@ -21,6 +21,8 @@ type TestEditor = ReturnType<typeof setup>;
 const md = (editor: TestEditor) =>
 	serializeTiptapDocToMarkdown(editor.getJSON());
 
+const reload = (markdown: string) => md(setup(markdown));
+
 function find(editor: TestEditor, text: string) {
 	let range = { from: -1, to: -1 };
 	editor.state.doc.descendants((node, pos) => {
@@ -64,6 +66,8 @@ function clip(
 }
 const paste = (editor: TestEditor, data: Record<string, string>) =>
 	clip("paste", editor, data);
+
+const cut = (editor: TestEditor) => clip("cut", editor);
 
 function undo(editor: TestEditor) {
 	editor.commands.undo();
@@ -212,4 +216,140 @@ describe("rich HTML paste", () => {
 		undo(editor);
 		expect(md(editor)).toBe("Start\n");
 	});
+});
+describe("multi-block paste joins the text around the caret", () => {
+	test("paragraphs pasted mid-sentence merge with both halves", () => {
+		const editor = setup("Hello world");
+		editor.commands.setTextSelection(find(editor, "world").from);
+		paste(editor, { "text/plain": "para one\n\npara two" });
+		expect(md(editor)).toBe("Hello para one\n\npara twoworld\n");
+		expect(editor.state.selection.from).toBe(find(editor, "world").from);
+	});
+
+	test("cutting across a heading and pasting back is an identity", () => {
+		const editor = setup("# Title\n\nBody text");
+		select(editor, find(editor, "tle").from, find(editor, "Body").to);
+		const data = cut(editor);
+		expect(md(editor)).toBe("# Ti text\n");
+		paste(editor, data);
+		expect(md(editor)).toBe("# Title\n\nBody text\n");
+	});
+
+	test("a heading pasted into an empty paragraph stays a heading", () => {
+		const editor = setup("Intro\n\nEnd");
+		editor.commands.setTextSelection(find(editor, "Intro").to);
+		editor.commands.splitBlock();
+		paste(editor, { "text/plain": "# Title\n\nBody" });
+		expect(md(editor)).toBe("Intro\n\n# Title\n\nBody\n\nEnd\n");
+	});
+
+	test("blocks pasted at the start of a paragraph keep their own type", () => {
+		const editor = setup("Intro\n\nEnd");
+		editor.commands.setTextSelection(find(editor, "End").from);
+		paste(editor, { "text/plain": "# Title\n\nBody " });
+		expect(md(editor)).toBe("Intro\n\n# Title\n\nBody End\n");
+	});
+
+	test("a paste replacing a cross-block selection stays one undo step", () => {
+		const editor = setup("Hello world");
+		editor.commands.setTextSelection(find(editor, "world").from);
+		paste(editor, { "text/plain": "para one\n\npara two" });
+		undo(editor);
+		expect(md(editor)).toBe("Hello world\n");
+	});
+});
+
+describe("lists pasted into lists become siblings", () => {
+	const list = { "text/plain": "- one\n- two" };
+
+	test("at the end of an item", () => {
+		const editor = setup("- alpha\n- beta");
+		editor.commands.setTextSelection(find(editor, "alpha").to);
+		paste(editor, list);
+		expect(md(editor)).toBe("- alpha\n- one\n- two\n- beta\n");
+		expect(reload(md(editor))).toBe(md(editor));
+	});
+
+	test("at the start of an item", () => {
+		const editor = setup("- alpha\n- beta");
+		editor.commands.setTextSelection(find(editor, "alpha").from);
+		paste(editor, list);
+		expect(md(editor)).toBe("- one\n- two\n- alpha\n- beta\n");
+		expect(reload(md(editor))).toBe(md(editor));
+	});
+
+	test("over the selected text of an item", () => {
+		const editor = setup("- alpha\n- beta");
+		select(editor, find(editor, "alpha").from, find(editor, "alpha").to);
+		paste(editor, list);
+		expect(md(editor)).toBe("- one\n- two\n- beta\n");
+	});
+
+	test("into an empty item", () => {
+		const editor = setup("- alpha\n- \n- beta");
+		editor.commands.setTextSelection(find(editor, "alpha").to + 4);
+		expect(editor.state.selection.$from.parent.content.size).toBe(0);
+		paste(editor, list);
+		expect(md(editor)).toBe("- alpha\n- one\n- two\n- beta\n");
+	});
+
+	test("cutting two items and pasting them back is an identity", () => {
+		const editor = setup("- one\n- two\n- three");
+		select(editor, find(editor, "two").from, find(editor, "three").to);
+		const data = cut(editor);
+		paste(editor, data);
+		expect(md(editor)).toBe("- one\n- two\n- three\n");
+	});
+
+	test("a list pasted mid-paragraph splits it around the list", () => {
+		const editor = setup("Hello world");
+		editor.commands.setTextSelection(find(editor, "world").from);
+		paste(editor, list);
+		expect(md(editor)).toBe("Hello\n\n- one\n- two\n\nworld\n");
+	});
+});
+
+describe("cut then paste back is an identity", () => {
+	test.each([
+		"# Title\n\nBody text here\n\nLast para",
+		"- one\n- two\n- three",
+		"Some **bold** and *italic* text\n\n## Sub\n\nmore",
+	])("for every text selection in %j", (markdown) => {
+		const probe = setup(markdown);
+		const expected = md(probe);
+		const positions: number[] = [];
+		probe.state.doc.descendants((node, pos) => {
+			if (!node.isTextblock) return true;
+			for (let offset = 0; offset <= node.content.size; offset += 1)
+				positions.push(pos + 1 + offset);
+			return false;
+		});
+		const failures: string[] = [];
+		for (const from of positions)
+			for (const to of positions) {
+				if (to <= from) continue;
+				const editor = setup(markdown);
+				select(editor, from, to);
+				paste(editor, cut(editor));
+				if (md(editor) !== expected)
+					failures.push(`${from}-${to}: ${md(editor)}`);
+				editor.destroy();
+			}
+		expect(failures).toEqual([]);
+	});
+
+	test("a list paste is one undo step", () => {
+		const editor = setup("- alpha\n- beta");
+		editor.commands.setTextSelection(find(editor, "alpha").to);
+		paste(editor, { "text/plain": "- one\n- two" });
+		undo(editor);
+		expect(md(editor)).toBe("- alpha\n- beta\n");
+	});
+});
+
+test("a list pasted mid-item splits the item around the pasted items", () => {
+	const editor = setup("- alpha\n- beta");
+	editor.commands.setTextSelection(find(editor, "pha").from);
+	paste(editor, { "text/plain": "- one\n- two" });
+	expect(md(editor)).toBe("- al\n- one\n- two\n- pha\n- beta\n");
 });

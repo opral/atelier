@@ -98,20 +98,6 @@ function createEditor(initialContent?: any): Editor {
 	});
 }
 
-function sendKey(editor: Editor, key: string): boolean {
-	const event = new KeyboardEvent("keydown", {
-		key,
-		bubbles: true,
-		cancelable: true,
-	});
-	let handled = false;
-	editor.view.someProp("handleKeyDown", (handler: any) => {
-		handled = handler(editor.view, event) || handled;
-		return handled;
-	});
-	return handled;
-}
-
 function textRange(editor: Editor, text: string): { from: number; to: number } {
 	let from = -1;
 	editor.state.doc.descendants((node, pos) => {
@@ -293,7 +279,7 @@ describe("handlePaste - selection replacement", () => {
 		editor.destroy();
 	});
 
-	test("preserves every paragraph when replacing an inline selection", async () => {
+	test("joins the first and last pasted paragraphs with the text around an inline selection", async () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
@@ -311,13 +297,13 @@ describe("handlePaste - selection replacement", () => {
 		});
 
 		expect(ok).toBe(true);
-		expect(editor.state.doc.childCount).toBe(4);
+		expect(editor.state.doc.childCount).toBe(2);
 		expect(
 			Array.from(
 				{ length: editor.state.doc.childCount },
 				(_, index) => editor.state.doc.child(index).textContent,
 			),
-		).toEqual(["Before ", "First paragraph", "Second paragraph", " after"]);
+		).toEqual(["Before First paragraph", "Second paragraph after"]);
 		editor.destroy();
 	});
 
@@ -339,8 +325,7 @@ describe("handlePaste - selection replacement", () => {
 		});
 
 		const markdown = buildMarkdownFromEditor(editor);
-		expect(markdown).toContain("Before\n\nIntroduction");
-		expect(markdown).toContain("- one");
+		expect(markdown).toContain("Before Introduction\n\n- one");
 		expect(markdown).toContain("- two");
 		expect(markdown).toContain("after");
 		editor.destroy();
@@ -364,8 +349,7 @@ describe("handlePaste - selection replacement", () => {
 		});
 
 		const markdown = buildMarkdownFromEditor(editor);
-		expect(markdown).toContain("Before\n\nIntroduction");
-		expect(markdown).toContain("```ts");
+		expect(markdown).toContain("Before Introduction\n\n```ts");
 		expect(markdown).toContain("const value = 1");
 		expect(markdown).toContain("after");
 		editor.destroy();
@@ -475,7 +459,7 @@ describe("handlePaste - edge cases", () => {
 		editor.destroy();
 	});
 
-	test("Backspace escapes an Apple Notes list pasted into an empty bullet", () => {
+	test("an Apple Notes list pasted into an empty bullet replaces that bullet", () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
@@ -502,13 +486,9 @@ describe("handlePaste - edge cases", () => {
 		});
 
 		expect(pasted).toBe(true);
-		const wrapper = editor.state.doc.child(0).child(0);
-		expect(wrapper.child(0).type.name).toBe("paragraph");
-		expect(wrapper.child(0).content.size).toBe(0);
-		expect(wrapper.child(1).type.name).toBe("bulletList");
-
-		editor.commands.setTextSelection(3);
-		expect(sendKey(editor, "Backspace")).toBe(true);
+		// The items join the bullet's list; no empty wrapper item is left to
+		// escape with Backspace.
+		expect(editor.state.doc.child(0).childCount).toBe(4);
 		expect(buildMarkdownFromEditor(editor)).toBe(
 			"- Images not loading\n" +
 				"- Html images not showing\n" +

@@ -22,6 +22,37 @@ export function markdownFromClipboardHtml(html: string): string | null {
 	return markdown.trim() ? markdown : null;
 }
 
+/**
+ * How far a copy from this editor was open at each edge, counted from the
+ * top of the copied content, or null for any other clipboard. ProseMirror
+ * records it in `data-pm-slice` after lifting single-child wrappers into the
+ * context list, while our text/plain Markdown keeps those wrappers, so they
+ * count toward the depth.
+ */
+export function ownClipboardSliceDepth(
+	html: string,
+): { readonly openStart: number; readonly openEnd: number } | null {
+	if (!/\sdata-pm-slice=/.test(html) || typeof DOMParser === "undefined")
+		return null;
+	const value = new DOMParser()
+		.parseFromString(html, "text/html")
+		.querySelector("[data-pm-slice]")
+		?.getAttribute("data-pm-slice");
+	const match = /^(\d+) (\d+)(?: -\d+)? (.*)$/s.exec(value ?? "");
+	if (!match) return null;
+	let wrappers = 0;
+	try {
+		const context = JSON.parse(match[3]!);
+		if (Array.isArray(context)) wrappers = Math.floor(context.length / 2);
+	} catch {
+		return null;
+	}
+	return {
+		openStart: Number(match[1]) + wrappers,
+		openEnd: Number(match[2]) + wrappers,
+	};
+}
+
 type Marks = {
 	readonly strong: boolean;
 	readonly emphasis: boolean;
