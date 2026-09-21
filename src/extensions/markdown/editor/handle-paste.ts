@@ -225,6 +225,19 @@ export function handlePaste(args: {
 		}
 
 		if (
+			blocks.length === 1 &&
+			blocks[0].type === "table" &&
+			selection?.$from?.sameParent(selection.$to) &&
+			selection.$from.parent.type.name === "tableCell"
+		) {
+			return pasteTableIntoTable(
+				editor,
+				blocks[0],
+				(ownClipboardSliceDepth(html)?.openStart ?? 0) > 0,
+			);
+		}
+
+		if (
 			selection?.$from?.sameParent(selection.$to) &&
 			selection.$from.parent.type.name === "tableCell" &&
 			(/[\r\n]/.test(text) ||
@@ -263,6 +276,93 @@ export function handlePaste(args: {
 	} finally {
 		editor.view?.dispatch(closeHistory(editor.state.tr));
 	}
+}
+
+/**
+ * Writes a pasted table into the grid from the caret's cell, adding rows
+ * and columns it needs. A table flattened into one cell would save as its
+ * Markdown source. Our own copy of text across cells is a run of text that
+ * starts at the caret and wraps to the first column on each later row, and
+ * joins the text left in its first and last cells, so cut then paste
+ * restores it. Any other table is a rectangle whose cells replace the ones
+ * under it, as in a spreadsheet.
+ */
+function pasteTableIntoTable(
+	editor: any,
+	pastedJson: any,
+	textRun: boolean,
+): boolean {
+	const { state } = editor;
+	const { $from, $to } = state.selection;
+	const cellDepth = $from.depth;
+	const table = $from.node(cellDepth - 2);
+	const tablePos = $from.before(cellDepth - 2);
+	const startRow = $from.index(cellDepth - 2);
+	const startColumn = $from.index(cellDepth - 1);
+	const pasted = state.schema.nodeFromJSON(pastedJson);
+
+	const grid: any[][] = [];
+	table.forEach((row: any) => {
+		const cells: any[] = [];
+		row.forEach((cell: any) => cells.push(cell));
+		grid.push(cells);
+	});
+	const cellType = state.schema.nodes.tableCell;
+	const emptyCell = (isHeader: boolean) =>
+		cellType.create({ isHeader, align: null });
+	let lastCell = { row: startRow, column: startColumn };
+	pasted.forEach((row: any, _pos: number, rowOffset: number) => {
+		const rowIndex = startRow + rowOffset;
+		const firstColumn = textRun && rowOffset > 0 ? 0 : startColumn;
+		row.forEach((cell: any, _cellPos: number, cellOffset: number) => {
+			const column = firstColumn + cellOffset;
+			while (grid.length <= rowIndex) grid.push([]);
+			for (const cells of grid)
+				while (cells.length <= column) cells.push(emptyCell(cells === grid[0]));
+			const target = grid[rowIndex]![column];
+			let content = cell.content;
+			if (textRun && rowOffset === 0 && cellOffset === 0)
+				content = $from.parent.content
+					.cut(0, $from.parentOffset)
+					.append(content)
+					.append($to.parent.content.cut($to.parentOffset));
+			else if (textRun) content = content.append(target.content);
+			grid[rowIndex]![column] = target.type.create(target.attrs, content);
+			lastCell = { row: rowIndex, column };
+		});
+	});
+	const width = Math.max(...grid.map((cells) => cells.length));
+	for (const cells of grid)
+		while (cells.length < width) cells.push(emptyCell(cells === grid[0]));
+
+	const rows = grid.map((cells, index) =>
+		(table.maybeChild(index)?.type ?? state.schema.nodes.tableRow).create(
+			table.maybeChild(index)?.attrs ?? null,
+			cells,
+		),
+	);
+	const align = Array.from(
+		{ length: width },
+		(_, index) => table.attrs.align?.[index] ?? null,
+	);
+	const tr = state.tr.replaceWith(
+		tablePos,
+		tablePos + table.nodeSize,
+		table.type.create({ ...table.attrs, align }, rows),
+	);
+	// Leave the caret after the last pasted cell's own text.
+	let cellPos = tablePos + 1;
+	for (let row = 0; row < lastCell.row; row += 1)
+		cellPos += rows[row]!.nodeSize;
+	cellPos += 1;
+	for (let column = 0; column < lastCell.column; column += 1)
+		cellPos += grid[lastCell.row]![column].nodeSize;
+	const lastPasted = pasted.child(lastCell.row - startRow).lastChild;
+	tr.setSelection(
+		TextSelection.create(tr.doc, cellPos + 1 + (lastPasted?.content.size ?? 0)),
+	);
+	editor.view.dispatch(tr.scrollIntoView());
+	return true;
 }
 
 /**

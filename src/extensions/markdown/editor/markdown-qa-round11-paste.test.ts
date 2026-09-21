@@ -494,3 +494,34 @@ describe("pasting only line breaks", () => {
 		expect(md(editor)).toBe("```\na\nb\n```\n");
 	});
 });
+
+describe("tables", () => {
+	const table = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+
+	test("cutting across cells and pasting back restores the grid", () => {
+		const editor = setup(table);
+		const expected = md(editor);
+		select(editor, find(editor, "b").from, find(editor, "1").to);
+		const data = cut(editor);
+		paste(editor, data);
+		expect(md(editor)).toBe(expected);
+		undo(editor);
+		expect(md(editor)).toBe("| a |   |\n| - | - |\n|   | 2 |\n");
+	});
+
+	test("cutting part of two cells and pasting back restores both", () => {
+		const editor = setup("| ab | cd |\n| --- | --- |\n| 1 | 2 |");
+		select(editor, find(editor, "ab").from + 1, find(editor, "cd").from + 1);
+		paste(editor, cut(editor));
+		expect(md(editor)).toBe("| ab | cd |\n| -- | -- |\n| 1  | 2  |\n");
+	});
+
+	test("a Markdown table fills the cells from the caret and grows the grid", () => {
+		const editor = setup(table);
+		editor.commands.setTextSelection(find(editor, "2").from);
+		paste(editor, { "text/plain": "| x | y |\n| - | - |\n| z | w |" });
+		expect(md(editor)).toBe(
+			"| a | b |   |\n| - | - | - |\n| 1 | x | y |\n|   | z | w |\n",
+		);
+	});
+});
