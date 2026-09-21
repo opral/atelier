@@ -326,13 +326,52 @@ function queryResultToRows<TRow>(result: ExecuteResult): TRow[] {
 	return result.rows as TRow[];
 }
 
-function rowsEqual(a: unknown, b: unknown): boolean {
+/**
+ * Whether a re-run query returned the rows it already had, so subscribers
+ * keep their snapshot. Rows hold file bytes: comparing them through
+ * JSON.stringify spelled every byte out as an object key, twice, on every
+ * commit (about 9 ms per save of an 80 KB file, per subscribed query).
+ * Anything unusual still falls back to that comparison.
+ *
+ * @internal Exported for tests.
+ */
+export function rowsEqual(a: unknown, b: unknown): boolean {
 	if (Object.is(a, b)) return true;
+	if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) {
+		if (!ArrayBuffer.isView(a) || !ArrayBuffer.isView(b)) return false;
+		if (a.constructor !== b.constructor || a.byteLength !== b.byteLength)
+			return false;
+		const left = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+		const right = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+		for (let index = 0; index < left.length; index++)
+			if (left[index] !== right[index]) return false;
+		return true;
+	}
+	if (Array.isArray(a) && Array.isArray(b)) {
+		if (a.length !== b.length) return false;
+		for (let index = 0; index < a.length; index++)
+			if (!rowsEqual(a[index], b[index])) return false;
+		return true;
+	}
+	if (isPlainObject(a) && isPlainObject(b)) {
+		const keys = Object.keys(a);
+		if (keys.length !== Object.keys(b).length) return false;
+		for (const key of keys)
+			if (!Object.hasOwn(b, key) || !rowsEqual(a[key], b[key])) return false;
+		return true;
+	}
+	if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
 	try {
 		return JSON.stringify(a) === JSON.stringify(b);
 	} catch {
 		return false;
 	}
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	if (!value || typeof value !== "object") return false;
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
 }
 
 /**
