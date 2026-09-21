@@ -1,4 +1,5 @@
 // Avoid tight compile-time coupling to mdast types; operate on structural shape
+import { serializeInlineNode } from "../markdown";
 
 const SPREAD_META_KEY = "__mdwc_spread";
 export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__atelier_empty_scaffold";
@@ -380,15 +381,25 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 				const ln = n as any;
 				const href = ln.url || null;
 				const title = ln.title ?? null;
-				out.push(
-					...flattenInline(
-						(ln.children || []) as any,
-						addMark(active, {
-							type: "link",
-							attrs: { href, title, data: ln.data ?? null },
-						}),
-					),
+				const content = flattenInline(
+					(ln.children || []) as any,
+					addMark(active, {
+						type: "link",
+						attrs: { href, title, data: ln.data ?? null },
+					}),
 				);
+				// A link is a mark on its text, so a link with no visible text
+				// (`[](#top)`, `[ ](url)`) had nothing to hold it and vanished on
+				// the next save. Keep it as its source, like inline HTML.
+				if (!content.some(isVisibleInline)) {
+					out.push({
+						type: "markdownInlineHtml",
+						attrs: { value: serializeInlineNode(ln), data: null },
+						...(active.length ? { marks: [...active] } : {}),
+					});
+					break;
+				}
+				out.push(...content);
 				break;
 			}
 			case "image": {
@@ -478,6 +489,11 @@ function softLineBreakText(value: string, active: PMMark[]): PMNode[] {
 		}
 	}
 	return out;
+}
+
+function isVisibleInline(node: PMNode): boolean {
+	if (node.type === "text") return /\S/.test(node.text ?? "");
+	return node.type !== "hardBreak";
 }
 
 function addMark(active: PMMark[], mark: PMMark): PMMark[] {

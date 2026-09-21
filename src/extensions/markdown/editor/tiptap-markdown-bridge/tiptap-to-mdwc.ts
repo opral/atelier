@@ -438,10 +438,28 @@ function buildMarkedInline(items: InlineItem[]): any[] {
 					reach(b, index) - reach(a, index) ||
 					MARK_NESTING_RANK[a.type] - MARK_NESTING_RANK[b.type],
 			);
-		for (const mark of opening) {
+		const push = (mark: PMMark) => {
 			const node = markToMdast(mark);
 			children().push(node);
 			open.push({ mark, node });
+		};
+		for (const mark of opening) {
+			if (mark.type !== "link") {
+				push(mark);
+				continue;
+			}
+			// Emphasis that ends inside a link would have to close the link
+			// with it, and the rest of the link text would become a second
+			// link to the same URL. Close the emphasis first and reopen it
+			// inside the link instead: `*a* [*b* c](u)`.
+			const linkReach = reach(mark, index);
+			let base = open.length;
+			while (base > 0 && reach(open[base - 1]!.mark, index) < linkReach)
+				base -= 1;
+			const reopen = open.slice(base).map((entry) => entry.mark);
+			open.length = base;
+			push(mark);
+			for (const inner of reopen) push(inner);
 		}
 		children().push(items[index]!.leaf);
 	}

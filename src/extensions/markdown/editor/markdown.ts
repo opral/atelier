@@ -148,27 +148,42 @@ function normalizeIdentifier(identifier: string): string {
 
 export function serializeAst(ast: any): string {
 	return normalizeSerializedMarkdown(
-		toMarkdown(prepareAstForMarkdown(ast), {
-			extensions: [
-				gfmToMarkdown(),
-				taskListItemToMarkdown(),
-				frontmatterToMarkdown(["yaml"]),
-			],
-			bullet: "-",
-			listItemIndent: "one",
-			// "---" as a document's first line re-parses as a YAML frontmatter
-			// fence and swallows everything up to the next rule; "***" cannot.
-			rule: "*",
-			ruleRepetition: 3,
-			ruleSpaces: false,
-			// "_" cannot open intraword emphasis, so the serializer would fall
-			// back to hex entities for foo*bar*baz; "*" works in every position.
-			emphasis: "*",
-			strong: "*",
-			fence: "`",
-			fences: true,
-		}),
+		toMarkdown(prepareAstForMarkdown(ast), serializeOptions()),
 	);
+}
+
+/**
+ * One inline node's Markdown, as written in the middle of a line. Unlike
+ * serializeAst it keeps whitespace at the node's edges.
+ */
+export function serializeInlineNode(node: any): string {
+	return toMarkdown(
+		{ type: "paragraph", children: [node] } as any,
+		serializeOptions(),
+	).replace(/\n$/, "");
+}
+
+function serializeOptions(): any {
+	return {
+		extensions: [
+			gfmToMarkdown(),
+			taskListItemToMarkdown(),
+			frontmatterToMarkdown(["yaml"]),
+		],
+		bullet: "-",
+		listItemIndent: "one",
+		// "---" as a document's first line re-parses as a YAML frontmatter
+		// fence and swallows everything up to the next rule; "***" cannot.
+		rule: "*",
+		ruleRepetition: 3,
+		ruleSpaces: false,
+		// "_" cannot open intraword emphasis, so the serializer would fall
+		// back to hex entities for foo*bar*baz; "*" works in every position.
+		emphasis: "*",
+		strong: "*",
+		fence: "`",
+		fences: true,
+	};
 }
 
 function taskListItemToMarkdown(): any {

@@ -165,6 +165,20 @@ describe("marks nest by span, not in a fixed order", () => {
 					else token.marks.add(kind);
 				}
 			}
+			// A link over nothing but a space is kept as its source instead
+			// (see "links with no visible text"), so none is generated here.
+			tokens.forEach((token, index) => {
+				for (const mark of token.marks)
+					if (
+						token.text === " " &&
+						mark.startsWith("link:") &&
+						!(
+							tokens[index - 1]?.marks.has(mark) ||
+							tokens[index + 1]?.marks.has(mark)
+						)
+					)
+						token.marks.delete(mark);
+			});
 			const content: JSONContent[] = [{ type: "text", text: "x " }];
 			for (const token of tokens) {
 				content.push({
@@ -190,6 +204,7 @@ describe("marks nest by span, not in a fixed order", () => {
 			expect(markSets(reloaded.getJSON()), markdown).toEqual(
 				markSets(editor.getJSON()),
 			);
+			for (const done of editors.splice(0)) done.destroy();
 		}
 	});
 });
@@ -298,5 +313,18 @@ describe("canonical stability", () => {
 	])("%j", (markdown) => {
 		const once = throughEditor(markdown);
 		expect(throughEditor(once)).toBe(once);
+	});
+});
+
+describe("links with no visible text", () => {
+	test.each([
+		"Anchor [](https://x.com/a) end",
+		"[](#top) end",
+		"Anchor [ ](https://x.com/a) end",
+		"[ ](https://x.com/a) end",
+		'Titled [](https://x.com "t") end',
+		"**[](#top)** end",
+	])("%j survives an edit", async (markdown) => {
+		expect(await typeAfter(markdown, "end")).toBe(`${markdown}Z\n`);
 	});
 });
