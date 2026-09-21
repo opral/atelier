@@ -11,6 +11,7 @@ import {
 } from "@tiptap/pm/model";
 import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
+import { assignMissingDataIds } from "./tiptap-markdown-bridge/assign-data-id";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import {
@@ -533,9 +534,21 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			TableNavigationExtension,
 			FocusedControlGuardExtension,
 		],
+		// Nothing listens for its "delete" events, and it re-maps every step of
+		// every transaction to emit them.
+		enableCoreExtensions: { delete: false },
 		editable,
 		content:
 			initialContent ?? (astToTiptapDoc(ast, { defaultBlock }) as JSONContent),
+		onBeforeCreate: ({ editor }) => {
+			// The schema exists now and the document does not yet.
+			const content = editor.options.content;
+			if (content && typeof content === "object" && !Array.isArray(content))
+				editor.options.content = assignMissingDataIds(
+					content as JSONContent,
+					editor.schema,
+				);
+		},
 		onCreate: ({ editor }) => {
 			currentEditor = editor as Editor;
 			// TipTap emits create on a later timer. Edits can arrive first; they
