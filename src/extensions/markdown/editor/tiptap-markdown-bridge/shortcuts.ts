@@ -317,12 +317,16 @@ export const MarkdownWcShortcuts = Extension.create({
 		if ((schema.marks as any).bold) {
 			rules.push(
 				// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
+				// They open after a space or an opening bracket, quote or dash,
+				// as in "(**a**)", never inside a word: "2*3*4" stays text. The
+				// lookbehind keeps that character out of the match, so the rule
+				// never deletes it along with the delimiters.
 				markInputRule({
-					find: /(?:^|\s)(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
+					find: /(?<=^|[\s([{"'“‘—–-])(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
 					type: (schema.marks as any).bold,
 				}),
 				markInputRule({
-					find: /(?:^|\s)(?:__(\S(?:[^_]*\S)?)__)$/,
+					find: /(?<=^|[\s([{"'“‘—–-])(?:__(\S(?:[^_]*\S)?)__)$/,
 					type: (schema.marks as any).bold,
 				}),
 			);
@@ -331,11 +335,11 @@ export const MarkdownWcShortcuts = Extension.create({
 		if ((schema.marks as any).italic) {
 			rules.push(
 				markInputRule({
-					find: /(?:^|\s)(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
+					find: /(?<=^|[\s([{"'“‘—–-])(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
 					type: (schema.marks as any).italic,
 				}),
 				markInputRule({
-					find: /(?:^|\s)(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
+					find: /(?<=^|[\s([{"'“‘—–-])(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
 					type: (schema.marks as any).italic,
 				}),
 			);
@@ -344,7 +348,7 @@ export const MarkdownWcShortcuts = Extension.create({
 		if ((schema.marks as any).strike) {
 			rules.push(
 				markInputRule({
-					find: /(?:^|\s)(?:~~(\S(?:[^~]*\S)?)~~)$/,
+					find: /(?<=^|[\s([{"'“‘—–-])(?:~~(\S(?:[^~]*\S)?)~~)$/,
 					type: (schema.marks as any).strike,
 				}),
 			);
@@ -353,7 +357,7 @@ export const MarkdownWcShortcuts = Extension.create({
 		if ((schema.marks as any).code) {
 			rules.push(
 				markInputRule({
-					find: /(?:^|\s)(?:`([^`]+)`)$/,
+					find: /(?<=^|[\s([{"'“‘—–-])(?:`([^`]+)`)$/,
 					type: (schema.marks as any).code,
 				}),
 			);

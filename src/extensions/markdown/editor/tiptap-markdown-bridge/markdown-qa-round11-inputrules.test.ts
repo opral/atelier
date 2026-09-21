@@ -201,3 +201,31 @@ describe("inline code edges", () => {
 		expect(md(editor)).toBe("**`x`** and [`y`](https://y.io)\n");
 	});
 });
+
+describe("emphasis after opening punctuation", () => {
+	test("brackets, quotes and dashes may open a delimiter run", () => {
+		const editor = editorFor("");
+		type(editor, '(**bold**) "*quote*" (`code`) [~~s~~] —_i_');
+		expect(runs(editor)).toEqual([
+			["(", ""],
+			["bold", "bold"],
+			[') "', ""],
+			["quote", "italic"],
+			['" (', ""],
+			["code", "code"],
+			[") [", ""],
+			["s", "strike"],
+			["] —", ""],
+			["i", "italic"],
+		]);
+	});
+
+	test.each(["2*3*4", "snake_case_name", "a*b*c", "foo__bar__", "file_*name*"])(
+		"%s stays literal",
+		(text) => {
+			const editor = editorFor("");
+			type(editor, text);
+			expect(runs(editor)).toEqual([[text, ""]]);
+		},
+	);
+});
