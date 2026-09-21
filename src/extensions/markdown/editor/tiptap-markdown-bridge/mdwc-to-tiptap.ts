@@ -416,9 +416,12 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 					});
 					break;
 				}
+				// Inline HTML inside a link or emphasis keeps those marks, the way
+				// an image does; without them the link around a badge was lost.
 				out.push({
 					type: "markdownInlineHtml",
 					attrs: { value: html.value ?? "", data: html.data ?? null },
+					...(active.length ? { marks: [...active] } : {}),
 				});
 				break;
 			}
