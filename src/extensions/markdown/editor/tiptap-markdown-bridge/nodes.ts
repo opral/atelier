@@ -9,6 +9,7 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { codeLanguageLabel } from "./code-language-label";
+import { isSafeHref } from "../normalize-url";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
 import {
 	isPdfAssetSrc,
@@ -820,7 +821,11 @@ export function markdownWcNodes(
 				return {
 					href: {
 						default: null,
-						parseHTML: (el: any) => el.getAttribute("href"),
+						// Pasted HTML is the other way a target gets in.
+						parseHTML: (el: any) => {
+							const href = el.getAttribute("href");
+							return href && isSafeHref(href) ? href : null;
+						},
 					},
 					title: {
 						default: null,
@@ -835,7 +840,10 @@ export function markdownWcNodes(
 			renderHTML({ mark }) {
 				const attrs: any = {};
 				const href = (mark as any).attrs?.href;
-				if (href) attrs.href = href;
+				// The mark keeps what the file says, so saving never rewrites it,
+				// but a `javascript:` or `data:` target is drawn without an href:
+				// a click in a read-only document would navigate to it natively.
+				if (href && isSafeHref(String(href))) attrs.href = href;
 				const title = (mark as any).attrs?.title;
 				if (title) attrs.title = title;
 				return ["a", attrs, 0];
