@@ -48,7 +48,7 @@ function findJoinPosition(doc: ProseMirrorNode): number | null {
 }
 
 /** A bullet list is a task list when any of its items carries a checkbox. */
-function syncTaskListFlags(tr: Transaction): void {
+export function syncTaskListFlags(tr: Transaction): void {
 	tr.doc.descendants((node, pos) => {
 		if (node.type.name !== "bulletList") return;
 		let isTaskList = false;

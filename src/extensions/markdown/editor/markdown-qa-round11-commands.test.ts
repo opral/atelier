@@ -9,11 +9,7 @@ import { buildMarkdownFromEditor } from "./build-markdown-from-editor";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { SlashCommandsExtension } from "./extensions/slash-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
-import {
-	BLOCK_COMMANDS,
-	SELECTION_BLOCK_OPTIONS,
-	getActiveBlock,
-} from "./block-commands";
+import { BLOCK_COMMANDS, SELECTION_BLOCK_OPTIONS } from "./block-commands";
 import { normalizeUrl } from "./normalize-url";
 
 const editors: Editor[] = [];
@@ -160,5 +156,152 @@ describe("link targets", () => {
 	});
 });
 
-// Keeps the harness helpers referenced until later findings use them.
-void [select, key, slash, turnInto, getActiveBlock, TextSelection];
+const undo = (editor: Editor) => editor.commands.undo();
+
+describe("turn into code", () => {
+	test("a paragraph with a line break keeps the break", () => {
+		const editor = load("alpha\\\nbeta\n");
+		caret(editor, "alpha");
+		turnInto(editor, "code");
+		expect(md(editor)).toBe("```\nalpha\nbeta\n```\n");
+	});
+
+	test("several paragraphs become one code block, undone in one step", () => {
+		const editor = load("alpha\n\nbeta\n\ngamma\n");
+		select(editor, "alpha", "beta");
+		turnInto(editor, "code");
+		expect(md(editor)).toBe("```\nalpha\nbeta\n```\n\ngamma\n");
+		undo(editor);
+		expect(md(editor)).toBe("alpha\n\nbeta\n\ngamma\n");
+	});
+});
+
+describe("slash commands in a table cell", () => {
+	const cellMarkdown = "| a | b |\n| - | - |\n| x | y |\n";
+
+	test("only inline commands are offered", () => {
+		const editor = load(cellMarkdown);
+		caret(editor, "x");
+		const offered = BLOCK_COMMANDS.filter(
+			(command) => !command.isAvailable || command.isAvailable(editor),
+		).map((command) => command.id);
+		expect(offered).toEqual(["emoji", "footnote"]);
+	});
+
+	test("/table run in a cell leaves the table whole", () => {
+		const editor = load(cellMarkdown);
+		caret(editor, "x");
+		slash(editor, "table", "table");
+		let tables = 0;
+		editor.state.doc.descendants((node) => {
+			if (node.type.name === "table") tables += 1;
+		});
+		expect(tables).toBe(1);
+	});
+});
+
+describe("list commands convert the block", () => {
+	test("/todo at the start of a paragraph makes it a task", () => {
+		const editor = load("alpha\n");
+		editor.commands.setTextSelection(1);
+		slash(editor, "todo", "taskList");
+		expect(md(editor)).toBe("- [ ] alpha\n");
+	});
+
+	test("/todo in a bullet item makes that item a task", () => {
+		const editor = load("- alpha\n- beta\n");
+		editor.commands.setTextSelection(pos(editor, "beta"));
+		slash(editor, "todo", "taskList");
+		expect(md(editor)).toBe("- alpha\n- [ ] beta\n");
+	});
+
+	test("numbered inside a numbered list changes nothing", () => {
+		const markdown = "1. alpha\n2. beta\n3. gamma\n";
+		const editor = load(markdown);
+		caret(editor, "beta");
+		expect(key(editor, "7", { mod: true, shift: true })).toBe(true);
+		expect(md(editor)).toBe(markdown);
+		slash(editor, "num", "orderedList");
+		expect(md(editor)).toBe(markdown);
+	});
+
+	test("To-do over two paragraphs converts both", () => {
+		const editor = load("alpha\n\nbeta\n");
+		select(editor, "alpha", "beta");
+		turnInto(editor, "task-list");
+		expect(md(editor)).toBe("- [ ] alpha\n- [ ] beta\n");
+		const other = load("alpha\n\nbeta\n");
+		select(other, "alpha", "beta");
+		expect(key(other, "9", { mod: true, shift: true })).toBe(true);
+		expect(md(other)).toBe("- [ ] alpha\n- [ ] beta\n");
+	});
+
+	test("Numbered on two paragraphs makes one list", () => {
+		const editor = load("alpha\n\nbeta\n");
+		select(editor, "alpha", "beta");
+		turnInto(editor, "ordered-list");
+		expect(md(editor)).toBe("1. alpha\n2. beta\n");
+	});
+
+	test("converting a nested item leaves its next sibling a sibling", () => {
+		const editor = load("- alpha\n  - beta\n  - gamma\n");
+		caret(editor, "beta");
+		turnInto(editor, "ordered-list");
+		expect(md(editor)).toBe("- alpha\n  1. beta\n  - gamma\n");
+		expect(editor.state.selection.$from.parent.textContent).toBe("beta");
+		undo(editor);
+		expect(md(editor)).toBe("- alpha\n  - beta\n  - gamma\n");
+	});
+
+	test("a paragraph bulleted with the list after it joins that list", () => {
+		const editor = load("alpha\n\n- beta\n- gamma\n");
+		select(editor, "alpha", "gamma");
+		turnInto(editor, "bullet-list");
+		expect(md(editor)).toBe("- alpha\n- beta\n- gamma\n");
+	});
+
+	test("a heading becomes a list item", () => {
+		for (const run of [
+			(editor: Editor) => turnInto(editor, "bullet-list"),
+			(editor: Editor) => key(editor, "8", { mod: true, shift: true }),
+			(editor: Editor) => slash(editor, "bullet", "bulletList"),
+		]) {
+			const editor = load("## alpha\n");
+			caret(editor, "alpha");
+			run(editor);
+			expect(md(editor)).toBe("- alpha\n");
+		}
+		const numbered = load("## alpha\n");
+		caret(numbered, "alpha");
+		turnInto(numbered, "ordered-list");
+		expect(md(numbered)).toBe("1. alpha\n");
+		const task = load("## alpha\n");
+		caret(task, "alpha");
+		turnInto(task, "task-list");
+		expect(md(task)).toBe("- [ ] alpha\n");
+	});
+});
+
+describe("a heading inside a list item", () => {
+	for (const [value, expected] of [
+		["paragraph", "alpha\n\n- beta\n"],
+		["heading-1", "# alpha\n\n- beta\n"],
+		["heading-3", "### alpha\n\n- beta\n"],
+		["blockquote", "> ## alpha\n\n- beta\n"],
+		["code", "```\nalpha\n```\n\n- beta\n"],
+	] as const) {
+		test(`turns into ${value} without an empty span`, () => {
+			const editor = load("- ## alpha\n- beta\n");
+			caret(editor, "alpha");
+			turnInto(editor, value);
+			expect(md(editor)).toBe(expected);
+		});
+	}
+
+	test("turns into a numbered item without an empty span", () => {
+		const editor = load("- ## alpha\n- beta\n");
+		caret(editor, "alpha");
+		turnInto(editor, "ordered-list");
+		expect(md(editor)).not.toContain("<span");
+	});
+});

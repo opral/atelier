@@ -771,6 +771,10 @@ export function markdownWcNodes(
 			group: "inline",
 			inline: true,
 			selectable: false,
+			// Turning a paragraph into code keeps its breaks as newlines, and
+			// code turned back into text keeps its lines as breaks. Without it
+			// setBlockType dropped the break and joined the lines.
+			linebreakReplacement: true,
 			addAttributes() {
 				return { data: { default: null }, soft: { default: false } };
 			},

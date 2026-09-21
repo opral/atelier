@@ -16,8 +16,11 @@ import {
 	TextQuote,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode, NodeType } from "@tiptap/pm/model";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import type { ComponentType } from "react";
+import { syncTaskListFlags } from "./extensions/join-adjacent-lists";
+import { LIST_LEADING_PARAGRAPH_DATA_KEY } from "./tiptap-markdown-bridge/mdwc-to-tiptap";
 
 export type BlockCommand = {
 	id: string;
@@ -38,35 +41,202 @@ function unquoted(editor: Editor) {
 	return editor.isActive("blockquote") ? chain.lift("blockquote") : chain;
 }
 
+const LIST_TYPES = new Set(["bulletList", "orderedList"]);
+
+/** The caret sits in a table cell, whose content is one line of inline text. */
+function inTableCell(editor: Editor): boolean {
+	return editor.state.selection.$from.parent.type.name === "tableCell";
+}
+
+/** Block commands have no place in a cell; there they would split the table. */
+const outsideTableCell = (editor: Editor) => !inTableCell(editor);
+
+/** The checkbox an item carries once it is in the target list. */
+function itemChecked(
+	item: ProseMirrorNode,
+	listType: string,
+	checked: boolean | null,
+): boolean | null {
+	if (listType !== "bulletList" || checked === null) return null;
+	// An item that is already a task keeps its tick.
+	return typeof item.attrs.checked === "boolean" ? item.attrs.checked : checked;
+}
+
 /**
- * Turns the selected item into the target list type on its own, the way
- * Notion converts one block: the item leaves its list (splitting it) and
- * starts a list of the target type. Wrapping in place would nest the item
- * inside its predecessor; converting the parent list would change siblings.
+ * Gives items `from`..`to` (indices) of the list at `listPos` the target
+ * type. The list is split around them so the items before and after keep
+ * their type and stay where they are; nested children travel with their
+ * item. Returns the position of the list that now holds the items.
+ */
+function retypeItems(
+	tr: Transaction,
+	listPos: number,
+	from: number,
+	to: number,
+	listType: NodeType,
+	checked: boolean | null,
+): number {
+	let list = tr.doc.nodeAt(listPos)!;
+	if (list.type !== listType) {
+		const offset = (index: number) => {
+			let at = listPos + 1;
+			for (let i = 0; i < index; i += 1) at += list.child(i).nodeSize;
+			return at;
+		};
+		if (to < list.childCount - 1) tr.split(offset(to + 1), 1);
+		if (from > 0) {
+			const at = offset(from);
+			tr.split(at, 1);
+			// The split closes the list before the item and opens the new one.
+			listPos = at + 1;
+		}
+		tr.setNodeMarkup(listPos, listType, {});
+		list = tr.doc.nodeAt(listPos)!;
+		from = 0;
+		to = list.childCount - 1;
+	}
+	let at = listPos + 1;
+	list.forEach((item, _offset, index) => {
+		const next = itemChecked(item, listType.name, checked);
+		if (index >= from && index <= to && item.attrs.checked !== next) {
+			tr.setNodeMarkup(at, undefined, { ...item.attrs, checked: next });
+		}
+		at += item.nodeSize;
+	});
+	return listPos;
+}
+
+/**
+ * Turns the selected blocks into items of the target list, the way Notion
+ * converts blocks, in one transaction and so one undo step.
+ *
+ * - Items of one list are retyped on their own; the list splits around them,
+ *   so their siblings keep their type and their place. Wrapping in place
+ *   nested the item inside its predecessor, and lifting it first pulled the
+ *   next sibling in under it.
+ * - Across blocks, paragraphs, headings and code blocks become one item
+ *   each and lists have their items retyped; the results form one list.
+ * - Items already of the target kind are left as they are, so Numbered on a
+ *   numbered item changes nothing, as in the toolbar.
  */
 export function convertListItem(
 	editor: Editor,
-	listType: "bulletList" | "orderedList",
-	itemAttrs?: Record<string, unknown>,
+	listTypeName: "bulletList" | "orderedList",
+	itemAttrs?: { checked?: boolean | null },
 ): boolean {
-	const inList = editor.isActive("listItem");
-	const chain = editor.chain().focus() as any;
-	if (inList) chain.liftListItem("listItem");
-	if (!chain.wrapInList(listType).run()) return false;
-	if (!itemAttrs) return true;
-	const { state, view } = editor;
-	const $from = state.selection.$from;
-	for (let depth = $from.depth; depth > 0; depth -= 1) {
-		if ($from.node(depth).type.name !== "listItem") continue;
-		view.dispatch(
-			state.tr.setNodeMarkup($from.before(depth), undefined, {
-				...$from.node(depth).attrs,
-				...itemAttrs,
-			}),
+	if (inTableCell(editor)) return false;
+	const checked = itemAttrs?.checked ?? null;
+	return editor
+		.chain()
+		.focus()
+		.command(({ tr }) => convertRange(tr, listTypeName, checked))
+		.run();
+}
+
+function convertRange(
+	tr: Transaction,
+	listTypeName: string,
+	checked: boolean | null,
+): boolean {
+	const { schema } = tr.doc.type;
+	const listType = schema.nodes[listTypeName]!;
+	const itemType = schema.nodes.listItem!;
+	const paragraph = schema.nodes.paragraph!;
+	const { $from, $to } = tr.selection;
+
+	// The deepest list holding both ends: its items are what is converted.
+	for (let depth = Math.min($from.depth, $to.depth); depth > 0; depth -= 1) {
+		const node = $from.node(depth);
+		if (!LIST_TYPES.has(node.type.name) || $to.node(depth) !== node) continue;
+		retypeItems(
+			tr,
+			$from.before(depth),
+			$from.index(depth),
+			$to.index(depth),
+			listType,
+			checked,
 		);
-		break;
+		syncTaskListFlags(tr);
+		return true;
 	}
+
+	const range = $from.blockRange($to);
+	if (!range) return false;
+	const container = range.parent;
+	const starts: number[] = [];
+	let at = range.start;
+	for (let index = range.startIndex; index <= range.endIndex; index += 1) {
+		starts.push(at);
+		if (index < range.endIndex) at += container.child(index).nodeSize;
+	}
+
+	// Each converted list, with the step count when it was placed, so its
+	// position can be carried through the conversions made before it.
+	const lists: { pos: number; steps: number }[] = [];
+	for (let index = range.endIndex - 1; index >= range.startIndex; index -= 1) {
+		const child = container.child(index);
+		const start = starts[index - range.startIndex]!;
+		const end = starts[index - range.startIndex + 1]!;
+		if (LIST_TYPES.has(child.type.name)) {
+			// Only the items the selection reaches, at either end.
+			const inside = (pos: number) => pos > start && pos < end;
+			const first = inside($from.pos) ? $from.index(range.depth + 1) : 0;
+			const last = inside($to.pos)
+				? $to.index(range.depth + 1)
+				: child.childCount - 1;
+			const pos = retypeItems(tr, start, first, last, listType, checked);
+			lists.push({ pos, steps: tr.steps.length });
+		} else if (child.isTextblock) {
+			if (child.type !== paragraph) tr.setBlockType(start, end, paragraph);
+			const blockRange = tr.doc
+				.resolve(start)
+				.blockRange(tr.doc.resolve(start + tr.doc.nodeAt(start)!.nodeSize));
+			if (!blockRange) continue;
+			tr.wrap(blockRange, [
+				{ type: listType },
+				{
+					type: itemType,
+					attrs: { checked: itemChecked(child, listTypeName, checked) },
+				},
+			]);
+			lists.push({ pos: start, steps: tr.steps.length });
+		}
+	}
+	if (lists.length === 0) return false;
+
+	// Lists that now touch are one list: join them, last boundary first so
+	// the earlier positions hold.
+	const positions = lists
+		.map(({ pos, steps }) => tr.mapping.slice(steps).map(pos, 1))
+		.sort((a, b) => a - b);
+	for (let index = positions.length - 1; index > 0; index -= 1) {
+		const boundary = positions[index]!;
+		const $boundary = tr.doc.resolve(boundary);
+		if (
+			$boundary.nodeBefore?.type === listType &&
+			$boundary.nodeAfter?.type === listType &&
+			boundary - $boundary.nodeBefore.nodeSize === positions[index - 1]
+		) {
+			tr.join(boundary);
+		}
+	}
+	syncTaskListFlags(tr);
 	return true;
+}
+
+/**
+ * The empty paragraph the bridge puts first in an item that starts with a
+ * heading, quote or code block. It exists only because ProseMirror needs an
+ * item to open with a paragraph; outside a list it would be saved as
+ * `<span></span>`.
+ */
+function isListScaffold(node: ProseMirrorNode | null | undefined): boolean {
+	return Boolean(
+		node &&
+		node.type.name === "paragraph" &&
+		node.childCount === 0 &&
+		node.attrs.data?.[LIST_LEADING_PARAGRAPH_DATA_KEY],
+	);
 }
 
 /** A code block becomes one paragraph per line; blank lines are dropped. */
@@ -88,6 +258,53 @@ function codeBlockToParagraphs(editor: Editor): boolean {
 	return true;
 }
 
+/** A textblock's text for a code block: its line breaks become newlines. */
+function codeText(node: ProseMirrorNode): string {
+	return node.textBetween(0, node.content.size, undefined, (leaf) =>
+		leaf.type.name === "hardBreak" ? "\n" : "",
+	);
+}
+
+/**
+ * Turns the selection into code. Several selected blocks become one code
+ * block, a line each, as in Notion; converting each on its own made a fence
+ * per paragraph. A single block keeps its line breaks as lines (the hard
+ * break is the schema's line break replacement).
+ */
+function toCodeBlock(editor: Editor): boolean {
+	return unquoted(editor)
+		.command(({ tr }) => {
+			const { $from, $to } = tr.selection;
+			const codeBlock = tr.doc.type.schema.nodes.codeBlock!;
+			const range = $from.blockRange($to);
+			const blocks: ProseMirrorNode[] = [];
+			if (range) {
+				for (let index = range.startIndex; index < range.endIndex; index += 1) {
+					blocks.push(range.parent.child(index));
+				}
+			}
+			if (!range || blocks.length < 2 || !blocks.every((b) => b.isTextblock)) {
+				tr.setBlockType($from.pos, $to.pos, codeBlock);
+				return true;
+			}
+			const text = blocks.map(codeText).join("\n");
+			tr.replaceWith(
+				range.start,
+				range.end,
+				codeBlock.create(null, text ? tr.doc.type.schema.text(text) : null),
+			);
+			tr.setSelection(
+				TextSelection.create(
+					tr.doc,
+					range.start + 1,
+					range.start + 1 + text.length,
+				),
+			);
+			return true;
+		})
+		.run();
+}
+
 export const BLOCK_COMMANDS: BlockCommand[] = [
 	{
 		id: "paragraph",
@@ -95,6 +312,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Paragraph",
 		icon: Pilcrow,
 		keywords: ["p", "text", "paragraph"],
+		isAvailable: outsideTableCell,
 		insert: (editor) =>
 			codeBlockToParagraphs(editor) ||
 			unquoted(editor).setNode("paragraph").run(),
@@ -109,6 +327,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: PanelTopDashed,
 		keywords: ["yaml", "metadata", "fields", "properties"],
 		isAvailable: (editor) =>
+			!inTableCell(editor) &&
 			editor.state.doc.firstChild?.type.name !== "markdownFrontmatter",
 		insert: (editor) => {
 			editor.commands.setFrontmatter();
@@ -120,6 +339,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Large heading",
 		icon: Heading1,
 		keywords: ["h1", "#", "title"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => unquoted(editor).setNode("heading", { level: 1 }).run(),
 		toggle: (editor) => unquoted(editor).setNode("heading", { level: 1 }).run(),
 	},
@@ -129,6 +349,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Section heading",
 		icon: Heading2,
 		keywords: ["h2", "##", "subtitle"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => unquoted(editor).setNode("heading", { level: 2 }).run(),
 		toggle: (editor) => unquoted(editor).setNode("heading", { level: 2 }).run(),
 	},
@@ -138,6 +359,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Subheading",
 		icon: Heading3,
 		keywords: ["h3", "###"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => unquoted(editor).setNode("heading", { level: 3 }).run(),
 		toggle: (editor) => unquoted(editor).setNode("heading", { level: 3 }).run(),
 	},
@@ -147,6 +369,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Unordered list",
 		icon: List,
 		keywords: ["ul", "-", "unordered", "bullets"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => {
 			convertListItem(editor, "bulletList", { checked: null });
 		},
@@ -157,6 +380,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Ordered list",
 		icon: ListOrdered,
 		keywords: ["ol", "1.", "numbered", "ordered"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => {
 			convertListItem(editor, "orderedList", { checked: null });
 		},
@@ -167,22 +391,9 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Checklist",
 		icon: CheckSquare,
 		keywords: ["todo", "checkbox", "checklist", "task", "[]"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => {
-			editor
-				.chain()
-				.focus()
-				.insertContent({
-					type: "bulletList",
-					attrs: { isTaskList: true },
-					content: [
-						{
-							type: "listItem",
-							attrs: { checked: false },
-							content: [{ type: "paragraph" }],
-						},
-					],
-				})
-				.run();
+			convertListItem(editor, "bulletList", { checked: false });
 		},
 	},
 	{
@@ -204,6 +415,8 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 			"picture",
 			"clip",
 		],
+		// An embedded image is a block of its own.
+		isAvailable: outsideTableCell,
 		insert: (editor) => {
 			editor.commands.openEmbedFileMenu();
 		},
@@ -224,12 +437,13 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Code snippet",
 		icon: Code2,
 		keywords: ["code", "```", "pre", "snippet"],
-		insert: (editor) => unquoted(editor).setNode("codeBlock").run(),
+		isAvailable: outsideTableCell,
+		insert: (editor) => toCodeBlock(editor),
 		toggle: (editor) => {
 			if (editor.isActive("codeBlock")) {
 				editor.chain().focus().lift("codeBlock").run();
 			} else {
-				unquoted(editor).setNode("codeBlock").run();
+				toCodeBlock(editor);
 			}
 		},
 	},
@@ -239,6 +453,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Quoted text",
 		icon: TextQuote,
 		keywords: [">", "quote", "blockquote"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => editor.chain().focus().wrapIn("blockquote").run(),
 		toggle: (editor) => {
 			if (editor.isActive("blockquote")) {
@@ -265,6 +480,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Horizontal line",
 		icon: Minus,
 		keywords: ["hr", "---", "divider", "line", "separator"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => {
 			// The caret continues in a paragraph below; leaving the rule selected
 			// would let the next keystroke replace it.
@@ -281,7 +497,9 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		description: "Table grid",
 		icon: Table,
 		keywords: ["table", "grid"],
+		isAvailable: outsideTableCell,
 		insert: (editor) => {
+			if (inTableCell(editor)) return;
 			const rows = [];
 			for (let r = 0; r < 3; r++) {
 				const cells = [];
@@ -476,11 +694,45 @@ export type SelectionBlockOption = {
 	apply: (editor: Editor) => void;
 };
 
-/** Lifts the caret's item out of every enclosing list. */
+/**
+ * Lifts the caret's item out of every enclosing list, in one transaction.
+ * The item's empty leading scaffold, if it had one, goes with the list.
+ */
 function leaveLists(editor: Editor) {
-	for (let guard = 0; guard < 16 && editor.isActive("listItem"); guard += 1) {
-		if (!editor.chain().focus().liftListItem("listItem").run()) break;
+	const { $from } = editor.state.selection;
+	let levels = 0;
+	let scaffold: number | null = null;
+	for (let depth = $from.depth; depth > 0; depth -= 1) {
+		const node = $from.node(depth);
+		if (node.type.name !== "listItem") continue;
+		if (
+			levels === 0 &&
+			isListScaffold(node.firstChild) &&
+			$from.index(depth) > 0
+		) {
+			scaffold = $from.start(depth);
+		}
+		levels += 1;
 	}
+	if (levels === 0) return;
+	let chain = editor.chain().focus();
+	for (let level = 0; level < levels; level += 1) {
+		chain = chain.liftListItem("listItem");
+	}
+	chain
+		.command(({ tr }) => {
+			if (scaffold === null) return true;
+			const at = tr.mapping.map(scaffold, 1);
+			const $at = tr.doc.resolve(at);
+			if (
+				isListScaffold($at.nodeAfter) &&
+				$at.parent.type.name !== "listItem"
+			) {
+				tr.delete(at, at + $at.nodeAfter!.nodeSize);
+			}
+			return true;
+		})
+		.run();
 }
 
 /** The block kind under the caret, lists included. */
