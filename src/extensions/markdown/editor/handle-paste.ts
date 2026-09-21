@@ -96,7 +96,10 @@ export function handlePaste(args: {
 		});
 	}
 
-	const plainText: string = event?.clipboardData?.getData?.("text/plain") ?? "";
+	// Windows line endings would otherwise reach code blocks as a stray "\r".
+	const plainText: string = (
+		event?.clipboardData?.getData?.("text/plain") ?? ""
+	).replace(/\r\n?/g, "\n");
 	let html: string = event?.clipboardData?.getData?.("text/html") ?? "";
 	if (!plainText && !html.trim()) return false;
 	let text = plainText;
@@ -186,6 +189,12 @@ export function handlePaste(args: {
 				!footnotes.borrowed.has(footnoteKey(block.attrs?.label)),
 		);
 		if (blocks.length === 0) return true;
+		if (selection?.$from?.parent.type.name === "heading") {
+			// A heading holds one line; a soft break in it saves as a setext
+			// heading. Later lines of the first pasted paragraph follow it.
+			const lines = splitFirstLine(blocks[0]);
+			if (lines) blocks.splice(0, 1, ...lines);
+		}
 		if (
 			blocks[0]?.type === "markdownFrontmatter" &&
 			!replacesDocumentStart(editor.state)
@@ -454,6 +463,30 @@ function replacesDocumentStart(state: any): boolean {
 		(existing?.type.name !== "markdownFrontmatter" ||
 			(selection.from === 0 && selection.to >= existing.nodeSize))
 	);
+}
+
+/** A paragraph split after its first line, or null if it has one line. */
+function splitFirstLine(block: any): any[] | null {
+	if (block?.type !== "paragraph" || !Array.isArray(block.content)) return null;
+	const first: any[] = [];
+	const rest: any[] = [];
+	let broken = false;
+	for (const node of block.content) {
+		if (broken) rest.push(node);
+		else if (node.type === "hardBreak") broken = true;
+		else if (node.type === "text" && node.text.includes("\n")) {
+			const index = node.text.indexOf("\n");
+			if (index > 0) first.push({ ...node, text: node.text.slice(0, index) });
+			if (index < node.text.length - 1)
+				rest.push({ ...node, text: node.text.slice(index + 1) });
+			broken = true;
+		} else first.push(node);
+	}
+	if (!broken || rest.length === 0) return null;
+	return [
+		{ ...block, content: first },
+		{ type: "paragraph", content: rest },
+	];
 }
 
 /** The paragraph or heading at one edge, through lists and quotes. */

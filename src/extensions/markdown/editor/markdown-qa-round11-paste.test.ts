@@ -555,3 +555,18 @@ test("copying from a nested item into the next item gives plain list Markdown", 
 	select(editor, find(editor, "child").from, find(editor, "two").to);
 	expect(clip("copy", editor)["text/plain"]).toBe("- child\n- two\n");
 });
+
+test("CRLF text pasted into a code block has no carriage returns", () => {
+	const editor = setup("```\nstart\n```");
+	editor.commands.setTextSelection(find(editor, "start").to);
+	paste(editor, { "text/plain": "\r\none\r\ntwo" });
+	expect(editor.state.doc.textContent).toBe("start\none\ntwo");
+});
+
+test("lines pasted at the end of a heading after the first become a paragraph", () => {
+	const editor = setup("# Title\n\nBody");
+	editor.commands.setTextSelection(find(editor, "Title").to);
+	paste(editor, { "text/plain": " one\ntwo\nthree" });
+	expect(md(editor)).toBe("# Title one\n\ntwo\nthree\n\nBody\n");
+	expect(reload(md(editor))).toBe(md(editor));
+});
