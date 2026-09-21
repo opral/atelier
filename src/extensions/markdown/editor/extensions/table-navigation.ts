@@ -1,5 +1,6 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, Selection, TextSelection } from "@tiptap/pm/state";
+import { isBlankLine } from "../table-commands";
 import { deleteSelectedTableText } from "./table-selection";
 
 /**
@@ -235,9 +236,27 @@ export const TableNavigationExtension = Extension.create({
 			) {
 				return deleteEmptyTable(editor, context) || true;
 			}
-			return direction < 0
-				? context.$from.parentOffset === 0
-				: context.$from.parentOffset === context.$from.parent.content.size;
+			const atEnd =
+				context.$from.parentOffset === context.$from.parent.content.size;
+			// Delete at the end of the last cell takes a blank line below the
+			// table away, the way Backspace there comes back into the table.
+			if (
+				direction > 0 &&
+				atEnd &&
+				context.rowIndex === context.table.childCount - 1 &&
+				context.cellIndex === context.row.childCount - 1
+			) {
+				const after = context.tablePos + context.table.nodeSize;
+				const next = editor.state.doc.resolve(after).nodeAfter;
+				if (isBlankLine(next))
+					editor.view.dispatch(
+						editor.state.tr
+							.delete(after, after + next.nodeSize)
+							.scrollIntoView(),
+					);
+				return true;
+			}
+			return direction < 0 ? context.$from.parentOffset === 0 : atEnd;
 		};
 
 		// A table whose cells are all empty goes with Backspace in its first

@@ -129,15 +129,63 @@ describe("Backspace across block boundaries", () => {
 		expect(editor.state.selection.$from.parentOffset).toBe(1);
 	});
 
-	test("a table above is selected, not merged into", () => {
+	// The user asked for Notion's behaviour: Backspace below a table goes
+	// into its last cell, never selects the table, and never deletes it.
+	test("a table above is entered at its last cell, not merged into or selected", () => {
 		const editor = editorFor("| a | b |\n| - | - |\n| c | d |\n\nafter\n");
 		caret(editor, "after", 0);
 		expect(key(editor, "Backspace")).toBe(true);
-		expect(editor.state.selection).toBeInstanceOf(NodeSelection);
-		expect((editor.state.selection as NodeSelection).node.type.name).toBe(
-			"table",
-		);
-		expect(md(editor)).toContain("| c | d |");
+		expect(editor.state.selection).toBeInstanceOf(TextSelection);
+		expect(editor.state.selection.$from.parent.textContent).toBe("d");
+		expect(editor.state.selection.$from.parentOffset).toBe(1);
+		expect(md(editor)).toBe("| a | b |\n| - | - |\n| c | d |\n\nafter\n");
+	});
+
+	test("an empty line below a table goes and the caret ends in the last cell", () => {
+		const editor = editorFor("| a | b |\n| - | - |\n| c | d |\n\n## Next\n");
+		const tableEnd = editor.state.doc.child(0).nodeSize;
+		editor
+			.chain()
+			.insertContentAt(tableEnd, { type: "paragraph" })
+			.setTextSelection(tableEnd + 1)
+			.run();
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(editor.state.selection).toBeInstanceOf(TextSelection);
+		expect(editor.state.selection.$from.parent.textContent).toBe("d");
+		expect(editor.state.selection.$from.parentOffset).toBe(1);
+		expect(editor.state.doc.childCount).toBe(2);
+	});
+
+	test("a blank line of spaces below a table goes as an empty one does", () => {
+		const editor = editorFor("| a |\n| - |\n| c |\n\nafter\n");
+		const tableEnd = editor.state.doc.child(0).nodeSize;
+		editor
+			.chain()
+			.insertContentAt(tableEnd, {
+				type: "paragraph",
+				content: [{ type: "text", text: "  " }],
+			})
+			.setTextSelection(tableEnd + 1)
+			.run();
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(editor.state.selection.$from.parent.textContent).toBe("c");
+		expect(md(editor)).toBe("| a |\n| - |\n| c |\n\nafter\n");
+	});
+
+	test("two Backspaces from below never delete a table", () => {
+		const editor = editorFor("| a |\n| - |\n|  |\n\n## after\n");
+		caret(editor, "after", 0);
+		for (let press = 0; press < 4; press++) key(editor, "Backspace");
+		expect(editor.state.doc.firstChild?.type.name).toBe("table");
+	});
+
+	test("Delete above a table enters its first cell instead of selecting it", () => {
+		const editor = editorFor("before\n\n| a | b |\n| - | - |\n| c | d |\n");
+		caret(editor, "before", "end");
+		expect(key(editor, "Delete")).toBe(true);
+		expect(editor.state.selection).toBeInstanceOf(TextSelection);
+		expect(editor.state.selection.$from.parent.textContent).toBe("a");
+		expect(editor.state.selection.$from.parentOffset).toBe(0);
 	});
 
 	test("a rule above is selected first", () => {

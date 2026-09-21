@@ -472,3 +472,22 @@ export function sortColumn(
 		};
 	});
 }
+
+/**
+ * A paragraph with nothing a reader would see: no text but white space and
+ * line breaks. Keys that leave a table remove such a line rather than keep
+ * an invisible one around it.
+ */
+export function isBlankLine(node: ProseMirrorNode | null | undefined): boolean {
+	if (node?.type.name !== "paragraph") return false;
+	let blank = true;
+	node.forEach((child) => {
+		if (
+			child.isText
+				? /\S/.test(child.text ?? "")
+				: child.type.name !== "hardBreak"
+		)
+			blank = false;
+	});
+	return blank;
+}

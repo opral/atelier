@@ -446,13 +446,60 @@ describe("targets and undo", () => {
 });
 
 describe("keyboard", () => {
+	function key(editor: Editor, name: string) {
+		const event = new KeyboardEvent("keydown", {
+			key: name,
+			bubbles: true,
+			cancelable: true,
+		});
+		let handled = false;
+		editor.view.someProp("handleKeyDown", (handler: any) => {
+			handled = handler(editor.view, event) || handled;
+			return handled;
+		});
+		return handled;
+	}
+
+	// Notion's behaviour, which the user asked for: keys from below a table
+	// come into it and never select or delete it.
+	test("Backspace on an empty line below a table: the line goes, the caret ends the last cell", async () => {
+		const { editor, saved } = await open(`${TABLE}\n## Next\n`);
+		const end = tableNode(editor).nodeSize;
+		editor
+			.chain()
+			.insertContentAt(end, { type: "paragraph" })
+			.setTextSelection(end + 1)
+			.run();
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(caret(editor)).toMatchObject({ text: "4", offset: 1, row: 2 });
+		expect(editor.state.doc.childCount).toBe(2);
+		// The next one is the browser's: it deletes the "4" before the caret.
+		expect(key(editor, "Backspace")).toBe(false);
+		expect(tableNode(editor)).not.toBeNull();
+		expect(await saved()).toBe(`${TABLE}\n## Next\n`);
+	});
+
+	test("Delete at the end of the last cell takes a blank line below, and nothing else", async () => {
+		const { editor } = await open(`${TABLE}\n## Next\n`);
+		const end = tableNode(editor).nodeSize;
+		editor.commands.insertContentAt(end, { type: "paragraph" });
+		caretIn(editor, "4", 1);
+		expect(key(editor, "Delete")).toBe(true);
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(caret(editor)).toMatchObject({ text: "4", offset: 1 });
+		expect(key(editor, "Delete")).toBe(true);
+		expect(editor.state.doc.childCount).toBe(2);
+		expect(editor.state.doc.lastChild!.textContent).toBe("Next");
+		expect(grid(editor)).toEqual(["a|b", "1|2", "3|4"]);
+	});
+
 	function press(editor: Editor, binding: string) {
 		const parts = binding.split("-");
-		const key = parts.pop()!;
+		const name = parts.pop()!;
 		const mods = new Set(parts);
 		const mac = /Mac/.test(navigator.platform);
 		const event = new KeyboardEvent("keydown", {
-			key,
+			key: name,
 			bubbles: true,
 			cancelable: true,
 			shiftKey: mods.has("Shift"),

@@ -25,6 +25,7 @@ import {
 import { canSplit } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { normalizeUrl } from "../normalize-url";
+import { isBlankLine } from "../table-commands";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
@@ -1048,10 +1049,15 @@ export const MarkdownWcShortcuts = Extension.create({
 		/**
 		 * Backspace at the start of a paragraph looks at the block above it in
 		 * the same container, at any depth, and at what that block ends with:
-		 * text folds onto the last line of a list or quote above it; a table, a
-		 * rule, or an image is selected first so one keystroke never deletes
-		 * it; a code block or a footnote is entered, never joined with prose.
-		 * An empty line after any of them simply goes.
+		 * text folds onto the last line of a list or quote above it; a rule or
+		 * an image is selected first so one keystroke never deletes it; a
+		 * table, a code block or a footnote is entered, never joined with
+		 * prose. An empty line after any of them simply goes.
+		 *
+		 * A table is entered the way Notion enters one, as the user asked: the
+		 * caret goes to the end of its last cell, and a blank line it leaves
+		 * goes with it. Selecting the table first, as a rule is, left the
+		 * caret nowhere to be seen, and the next Backspace deleted the table.
 		 */
 		const backspaceAcrossBlockAbove = ($from: any) => {
 			const { state, view } = this.editor;
@@ -1067,14 +1073,26 @@ export const MarkdownWcShortcuts = Extension.create({
 				return false;
 			}
 			const blockStart = $from.before(depth);
+			const lastAbove = edgeBlock(previous, blockStart - previous.nodeSize, -1);
+			if (lastAbove.node.type.name === "table") {
+				// The end of the last cell: inside the table, its last row and
+				// that row's last cell.
+				const cellEnd = lastAbove.pos + lastAbove.node.nodeSize - 3;
+				const tr = state.tr;
+				if (isBlankLine($from.parent))
+					tr.delete(blockStart, $from.after(depth));
+				tr.setSelection(TextSelection.create(tr.doc, cellEnd));
+				view.dispatch(tr.scrollIntoView());
+				return true;
+			}
 			if ($from.parent.content.size === 0) {
 				const tr = state.tr.delete(blockStart, $from.after(depth));
 				tr.setSelection(Selection.near(tr.doc.resolve(blockStart), -1));
 				view.dispatch(tr.scrollIntoView());
 				return true;
 			}
-			const last = edgeBlock(previous, blockStart - previous.nodeSize, -1);
-			if (last.node.type.name === "table" || isAtomBlock(last.node)) {
+			const last = lastAbove;
+			if (isAtomBlock(last.node)) {
 				view.dispatch(
 					state.tr.setSelection(NodeSelection.create(state.doc, last.pos)),
 				);
@@ -1096,9 +1114,9 @@ export const MarkdownWcShortcuts = Extension.create({
 		 * Delete at the end of a textblock joins the next textblock's text onto
 		 * this line, whatever structure lies between (the end of a list, a
 		 * nested item, a quote). The next block is found the way Backspace
-		 * finds the one above: a table, a rule or an image is selected, a code
-		 * block or a footnote is left alone, and nothing reaches out of a
-		 * footnote or a table cell.
+		 * finds the one above: a rule or an image is selected, a table is
+		 * entered at its first cell, a code block or a footnote is left alone,
+		 * and nothing reaches out of a footnote or a table cell.
 		 */
 		const deleteAcrossBlockBelow = ($from: any) => {
 			const { state, view } = this.editor;
@@ -1138,7 +1156,17 @@ export const MarkdownWcShortcuts = Extension.create({
 				return true;
 			}
 			const first = edgeBlock(next, nextPos, 1);
-			if (first.node.type.name === "table" || isAtomBlock(first.node)) {
+			// A table below is entered at its first cell, as Backspace enters
+			// one above at its last; it is never selected to be deleted.
+			if (first.node.type.name === "table") {
+				view.dispatch(
+					state.tr
+						.setSelection(TextSelection.create(state.doc, first.pos + 3))
+						.scrollIntoView(),
+				);
+				return true;
+			}
+			if (isAtomBlock(first.node)) {
 				view.dispatch(
 					state.tr.setSelection(NodeSelection.create(state.doc, first.pos)),
 				);
