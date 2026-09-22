@@ -320,4 +320,44 @@ describe("declarative extension hydration", () => {
 		expect(mounted.getByText("Interactive document")).toBeVisible();
 		mounted.unmount();
 	});
+
+	// The prepared picture is drawn differently from the surface it stands
+	// in for (a plain table for a canvas grid), so on a quick open it flashed
+	// for a frame or two. It stays out of sight for a moment and is only
+	// seen when the surface takes longer than that.
+	test("keeps the prepared picture out of sight on a quick open", async () => {
+		vi.useFakeTimers();
+		try {
+			const tree = (ready: boolean) => (
+				<PreparedFileSurface
+					initial={<h1>Formatted document</h1>}
+					readySelector=".ready-editor"
+					holdInitialMs={400}
+				>
+					{ready ? (
+						<div className="ready-editor">Interactive document</div>
+					) : null}
+				</PreparedFileSurface>
+			);
+			const mounted = render(tree(false));
+			const initial = () =>
+				mounted.container.querySelector("[data-atelier-initial-content]");
+			expect(initial()).toHaveClass("invisible");
+			act(() => vi.advanceTimersByTime(399));
+			expect(initial()).toHaveClass("invisible");
+			act(() => vi.advanceTimersByTime(1));
+			expect(initial()).not.toHaveClass("invisible");
+			// A quick open never shows it at all.
+			const quick = render(tree(false));
+			quick.rerender(tree(true));
+			await act(async () => {});
+			expect(
+				quick.container.querySelector("[data-atelier-initial-content]"),
+			).toBeNull();
+			quick.unmount();
+			mounted.unmount();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });

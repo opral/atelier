@@ -326,7 +326,7 @@
 		   would ring every frontmatter in every diff. The panel's fields carry
 		   their own added, removed and modified marks. */
 		.markdown-view:not(.markdown-review)
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			:is(
 				.markdown-frontmatter[data-selected="true"],
 				.markdown-frontmatter.ProseMirror-selectednode
@@ -335,6 +335,10 @@
 			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
+		/* Every selected-block ring below asks for a focused editor: a document
+		   opens with its selection on the first block, and an unfocused one
+		   showed a ring around its opening frontmatter, table or image. */
+
 		/* Backspace or Delete beside a table, rule or embed, an arrow key onto
 		   one, or a click selects the whole block, and the next key removes or
 		   replaces it. Nothing showed that, so a second Backspace deleted a
@@ -342,7 +346,7 @@
 		   (frontmatter above, tables and rules just below, images and videos
 		   further down) keep it. */
 		.markdown-view:not(.markdown-review)
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			:is(
 				.markdown-wc-unsupported-block,
 				.ProseMirror
@@ -364,14 +368,14 @@
 		   anything drawn outside it: the grid itself shows the selection, its
 		   edge in the ring colour and its cells tinted like selected text. */
 		.markdown-view:not(.markdown-review)
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			table.ProseMirror-selectednode
 			> tbody {
 			border-color: var(--atelier-ring);
 		}
 
 		.markdown-view:not(.markdown-review)
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			table.ProseMirror-selectednode
 			tr {
 			background-color: var(--atelier-bg-selection);
@@ -380,7 +384,7 @@
 		/* A rule is one line: it is shown selected as a band around the line,
 		   tinted like selected text, with the ring at its edge. */
 		.markdown-view:not(.markdown-review)
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			hr.ProseMirror-selectednode {
 			border-radius: 1px;
 			box-shadow:
@@ -1173,7 +1177,7 @@
 		/* The image has no border to colour, so the selection is a ring, the
 		   same one a selected video gets. */
 		.markdown-view
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			[data-markdown-image-block].ProseMirror-selectednode:is(
 				img,
 				.markdown-pdf-embed
@@ -1183,7 +1187,7 @@
 		}
 
 		.markdown-view
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			.markdown-image-embed.ProseMirror-selectednode
 			> .markdown-image-block-content {
 			border-color: var(--atelier-ring);
@@ -1589,7 +1593,7 @@
 		}
 
 		.markdown-view
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			.markdown-video-embed.ProseMirror-selectednode
 			> .markdown-video-frame {
 			box-shadow: 0 0 0 2px var(--atelier-ring);

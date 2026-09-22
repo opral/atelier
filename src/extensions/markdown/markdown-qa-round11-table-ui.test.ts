@@ -66,3 +66,26 @@ test("the alignment the keys are on is a focus ring, the chosen one a fill", () 
 	expect(checked["box-shadow"]).not.toContain("inset");
 	expect(checked.background).toBe("var(--atelier-panel)");
 });
+
+/**
+ * A document opens with its selection on the first block. A selected-block
+ * ring that did not ask for focus drew itself around an unfocused
+ * document's opening frontmatter, table or image — a flash of chrome on
+ * every open. Every rule that paints a selected block in the ring or the
+ * selection tint is scoped to a focused editor.
+ */
+test("selected-block rings show only in a focused editor", () => {
+	const unscoped: string[] = [];
+	sheet.walkRules((rule: Rule) => {
+		if (!/ProseMirror-selectednode|data-selected="true"/.test(rule.selector))
+			return;
+		if (/:not\([^)]*ProseMirror-selectednode/.test(rule.selector)) return;
+		let paints = false;
+		rule.walkDecls((decl) => {
+			if (/--atelier-(ring|bg-selection)/.test(decl.value)) paints = true;
+		});
+		if (paints && !rule.selector.includes(".ProseMirror-focused"))
+			unscoped.push(rule.selector.replace(/\s+/g, " "));
+	});
+	expect(unscoped).toEqual([]);
+});

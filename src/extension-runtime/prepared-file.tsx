@@ -1,5 +1,11 @@
 import { DocumentLoading } from "../components/document-loading";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
 import type {
 	AtelierExtensionLoader,
 	AtelierJsonValue,
@@ -81,6 +87,9 @@ export function preparedFile(
 		: null;
 }
 
+/** See `holdInitialMs`: long enough for a quick open, short of feeling slow. */
+const PREPARED_PICTURE_HOLD_MS = 400;
+
 /**
  * Retain the formatted document until the interactive surface is populated.
  *
@@ -95,6 +104,7 @@ export function PreparedFileSurface({
 	readySelector,
 	documentKey = "",
 	diff = false,
+	holdInitialMs = PREPARED_PICTURE_HOLD_MS,
 }: {
 	readonly initial: ReactNode;
 	readonly children: ReactNode;
@@ -107,10 +117,27 @@ export function PreparedFileSurface({
 	 * instead of painting a page that is about to be replaced.
 	 */
 	readonly diff?: boolean;
+	/**
+	 * How long the prepared picture stays out of sight. It is never drawn
+	 * exactly like the interactive surface — a plain table for a canvas grid,
+	 * frontmatter as YAML for a property panel, text without its gutter — so
+	 * on an open that is quick anyway it flashed for a frame or two before
+	 * the surface replaced it. The picture is for the open that is not.
+	 */
+	readonly holdInitialMs?: number;
 }) {
 	const [readyFor, setReadyFor] = useState<string | null>(null);
+	const [revealedFor, setRevealedFor] = useState<string | null>(
+		holdInitialMs ? null : documentKey,
+	);
 	const editor = useRef<HTMLDivElement>(null);
 	const interactive = readyFor === documentKey;
+	const initialRevealed = !holdInitialMs || revealedFor === documentKey;
+	useEffect(() => {
+		if (!holdInitialMs || interactive) return;
+		const timer = setTimeout(() => setRevealedFor(documentKey), holdInitialMs);
+		return () => clearTimeout(timer);
+	}, [documentKey, holdInitialMs, interactive]);
 	// A layout effect, so a surface that is populated in the same commit — a
 	// comparison's frame waiting for its sides — is shown before the browser
 	// paints, never the prepared picture for one frame first.
@@ -144,7 +171,7 @@ export function PreparedFileSurface({
 		>
 			{!interactive ? (
 				<div
-					className="min-h-0 flex-1 overflow-auto"
+					className={`min-h-0 flex-1 overflow-auto${initialRevealed ? "" : " invisible"}`}
 					data-atelier-initial-content=""
 					data-atelier-awaiting-diff={diff || undefined}
 				>

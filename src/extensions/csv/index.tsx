@@ -1203,8 +1203,23 @@ function CsvTable({
 		[reviewData],
 	);
 	// The table is on screen once it has something to paint: its grid, or
-	// its review once the sides are read.
-	useDocumentReady(!reviewPending);
+	// its review once the sides are read. Glide draws its canvas on an
+	// animation frame after it mounts, so the grid counts as painted two
+	// frames later — declared ready at mount, the frame showed an empty grid
+	// (header strip, no rows) between the prepared table and the real one.
+	const [gridPainted, setGridPainted] = useState(false);
+	useEffect(() => {
+		if (gridPainted) return;
+		let second = 0;
+		const first = requestAnimationFrame(() => {
+			second = requestAnimationFrame(() => setGridPainted(true));
+		});
+		return () => {
+			cancelAnimationFrame(first);
+			cancelAnimationFrame(second);
+		};
+	}, [gridPainted]);
+	useDocumentReady(!reviewPending && (reviewModel !== null || gridPainted));
 	// The table's controls go into the frame's strip — the table on screen
 	// only; one out of sight, on its way, keeps its controls to itself.
 	const frame = useContext(CsvFrameContext);
