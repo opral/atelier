@@ -11,9 +11,12 @@ function fileIdParameters(fileIds: readonly string[], firstParameter: number) {
 	return fileIds.map((_, index) => `$${firstParameter + index}`).join(", ");
 }
 
+// A file's own row lives in no file, so its reference names none.
 function rowRefParameters(fileIds: readonly string[], firstParameter: number) {
 	return fileIds
-		.map((_, index) => `lix_row_ref('lix_file', $${firstParameter + index})`)
+		.map(
+			(_, index) => `lix_row_ref('lix_file', NULL, $${firstParameter + index})`,
+		)
 		.join(", ");
 }
 
