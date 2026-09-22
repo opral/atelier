@@ -483,7 +483,8 @@ describe("SqlExplorerView", () => {
 	});
 
 	test("row references retain their type through aliases and open with an exact copy", async () => {
-		const query = "SELECT lix_row_ref('lix_key_value', 'hello') AS target";
+		const query =
+			"SELECT lix_row_ref('lix_key_value', NULL, 'hello') AS target";
 		const result = await lix.execute(query);
 		const reference = result.rows[0]!.target;
 		const writeText = vi.fn().mockResolvedValue(undefined);

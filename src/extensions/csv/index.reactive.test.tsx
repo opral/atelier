@@ -1386,6 +1386,10 @@ async function renderMetadataCsv(
 		</LixProvider>,
 	);
 	await screen.findByTestId("csv-data-grid");
+	// The grid is shown, controls and all, once it has painted.
+	await waitFor(() =>
+		expect(document.querySelector(".csv-view[data-document]")).not.toBeNull(),
+	);
 	return {
 		lix,
 		fileId,
@@ -2316,6 +2320,11 @@ test("saved views persist on plain CSV without changing bytes and survive column
 		);
 		try {
 			await screen.findByTestId("csv-data-grid");
+			await waitFor(() =>
+				expect(
+					document.querySelector(".csv-view[data-document]"),
+				).not.toBeNull(),
+			);
 			expect(latestDataEditorProps.current?.rows).toBe(2);
 			fireEvent.click(screen.getByRole("button", { name: "Views" }));
 			fireEvent.click(screen.getByRole("button", { name: "Needs follow-up" }));

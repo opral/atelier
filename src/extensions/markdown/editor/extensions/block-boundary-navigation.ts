@@ -71,8 +71,16 @@ export const BlockBoundaryNavigationExtension = Extension.create({
 			if (!onEdge) return false;
 			const target =
 				direction < 0 ? $from.before($from.depth) : $from.after($from.depth);
-			if (direction < 0 ? target <= 0 : target >= state.doc.content.size)
-				return false;
+			if (direction < 0 ? target <= 0 : target >= state.doc.content.size) {
+				// At the edge of the document there is nowhere to go: open a
+				// line there, as a selected table or rule does.
+				const paragraph = state.schema.nodes.paragraph;
+				if (!paragraph) return false;
+				const tr = state.tr.insert(target, paragraph.create());
+				tr.setSelection(TextSelection.create(tr.doc, target + 1));
+				view.dispatch(tr.scrollIntoView());
+				return true;
+			}
 			view.dispatch(
 				state.tr
 					.setSelection(Selection.near(state.doc.resolve(target), direction))

@@ -3,9 +3,15 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Editor, type Extensions, type JSONContent } from "@tiptap/core";
 import History from "@tiptap/extension-history";
 import Placeholder from "@tiptap/extension-placeholder";
-import type { Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
+import {
+	DOMSerializer,
+	type Fragment,
+	type Node as ProseMirrorNode,
+	type Slice,
+} from "@tiptap/pm/model";
 import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { MarkdownWc, astToTiptapDoc } from "./tiptap-markdown-bridge";
+import { assignMissingDataIds } from "./tiptap-markdown-bridge/assign-data-id";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown, serializeAst } from "./markdown";
 import {
@@ -20,16 +26,22 @@ import { EmojiCommandsExtension } from "./extensions/emoji-commands";
 import { EmbedFileCommandsExtension } from "./extensions/embed-file-commands";
 import { MentionCommandsExtension } from "./extensions/mention-commands";
 import { TableNavigationExtension } from "./extensions/table-navigation";
+import { TableControlsExtension } from "./extensions/table-controls";
 import { FocusedControlGuardExtension } from "./extensions/focused-control-guard";
+import { ClickBelowDocumentExtension } from "./extensions/click-below-document";
+import { SelectionBlockHighlightExtension } from "./extensions/selection-block-highlight";
+import { CodeLanguageMenuExtension } from "./extensions/code-language-menu";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
 import type { AtelierDocumentLinks } from "@/extension-api";
 import { createDocumentExistence } from "./document-existence";
-import { preserveMarkdownSource } from "./preserve-markdown-source";
+import {
+	buildNormalizedMarkdownIncrementally,
+	createIncrementalMarkdownSource,
+	type IncrementalMarkdownSource,
+} from "./incremental-markdown-save";
 import { upsertMarkdownFile } from "./upsert-markdown-file";
 import {
-	buildNormalizedMarkdownFromEditor,
-	buildNormalizedMarkdownFromTiptapDoc,
 	normalizePersistedMarkdown,
 	serializeTiptapDocToMarkdown,
 } from "./build-markdown-from-editor";
@@ -38,6 +50,7 @@ import {
 	type MarkdownWorkspaceFileOpener,
 } from "./markdown-asset";
 import { renderPdfPreview } from "@/extensions/pdf/pdf-preview";
+import { OWN_CLIPBOARD_ATTRIBUTE } from "./clipboard-html";
 import { storePastedMarkdownImage } from "./store-pasted-image";
 import { bindDocumentLinks } from "./document-links";
 
@@ -80,6 +93,8 @@ type MarkdownPersistenceBaseline = {
 	documentRevision: number;
 	acknowledgedRevision: number;
 	observationGeneration: number;
+	/** Keeps `expectedFileMarkdown`'s spelling without re-reading it per save. */
+	source: IncrementalMarkdownSource;
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
@@ -95,9 +110,12 @@ export function acknowledgeMarkdownEditorPersistence(
 	const baseline = persistenceBaselines.get(editor);
 	if (!baseline) return;
 	baseline.observationGeneration += 1;
-	baseline.lastAcknowledgedMarkdown = buildNormalizedMarkdownFromEditor(editor);
+	baseline.lastAcknowledgedMarkdown = buildNormalizedMarkdownIncrementally(
+		editor.state.doc,
+	);
 	baseline.expectedFileMarkdown = markdown;
 	baseline.acknowledgedRevision = baseline.documentRevision;
+	baseline.source.prime(markdown, editor.state.doc);
 }
 
 /**
@@ -218,10 +236,92 @@ function markdownClipboardText(slice: Slice): string {
 		if (trailing && !markdown.endsWith(trailing)) markdown += trailing;
 		return markdown;
 	}
-	return serializeTiptapDocToMarkdown({
+	let markdown = serializeTiptapDocToMarkdown({
 		type: "doc",
-		content: slice.content.toJSON(),
+		content:
+			slice.openStart > 0
+				? liftOpenNestedItems(slice.content.toJSON())
+				: slice.content.toJSON(),
 	});
+	// Blocks cut from the middle of a paragraph keep the spaces at the cut,
+	// so pasting them back rejoins "Body| text" instead of "Bodytext". The
+	// paste handler restores them onto the open edge blocks.
+	const first = openTextblock(slice.content, slice.openStart, "start");
+	const last = openTextblock(slice.content, slice.openEnd, "end");
+	const leading = first?.firstChild?.isText
+		? (first.firstChild.text?.match(/^[ \t]+/)?.[0] ?? "")
+		: "";
+	const trailing = last?.lastChild?.isText
+		? (last.lastChild.text?.match(/[ \t]+$/)?.[0] ?? "")
+		: "";
+	if (leading) markdown = leading + markdown;
+	if (trailing) markdown = markdown.replace(/\n$/, "") + trailing;
+	return markdown;
+}
+
+/**
+ * A selection that starts inside a nested list item opens its parent item
+ * without that item's own text, which would serialize as "- - child".
+ * Lift the nested items into the outer list instead.
+ */
+function liftOpenNestedItems(content: JSONContent[]): JSONContent[] {
+	const [list, ...rest] = content;
+	const [item, ...items] = list?.content ?? [];
+	const nested = item?.content?.length === 1 ? item.content[0] : null;
+	if (
+		!list ||
+		!/^(bulletList|orderedList)$/.test(list.type ?? "") ||
+		item?.type !== "listItem" ||
+		!nested ||
+		!/^(bulletList|orderedList)$/.test(nested.type ?? "")
+	)
+		return content;
+	const [lifted] = liftOpenNestedItems([nested]);
+	return [
+		{ ...list, content: [...(lifted?.content ?? []), ...items] },
+		...rest,
+	];
+}
+
+/**
+ * The schema's own HTML for a copy, with every top-level element marked as
+ * ours. Only then is the Markdown in text/plain the source of a paste; other
+ * ProseMirror editors also write data-pm-slice, and their plain text is not
+ * Markdown, so their HTML is converted instead.
+ */
+const markdownClipboardSerializer = {
+	serializeFragment(
+		fragment: Fragment,
+		options: { document?: Document } = {},
+		target?: HTMLElement | DocumentFragment,
+	) {
+		const schema = fragment.firstChild?.type.schema;
+		const dom = schema
+			? DOMSerializer.fromSchema(schema).serializeFragment(
+					fragment,
+					options,
+					target,
+				)
+			: (target ?? (options.document ?? document).createDocumentFragment());
+		for (const child of Array.from(dom.childNodes))
+			if (child.nodeType === 1)
+				(child as Element).setAttribute(OWN_CLIPBOARD_ATTRIBUTE, "");
+		return dom;
+	},
+} as unknown as DOMSerializer;
+
+/** The textblock an open slice edge ends in, if the slice is open that far. */
+function openTextblock(
+	content: Slice["content"],
+	openDepth: number,
+	side: "start" | "end",
+): ProseMirrorNode | null {
+	let node = side === "start" ? content.firstChild : content.lastChild;
+	for (let depth = 1; node && depth <= openDepth; depth += 1) {
+		if (node.isTextblock) return node;
+		node = side === "start" ? node.firstChild : node.lastChild;
+	}
+	return null;
 }
 
 function handleExternalLinkClick(event: MouseEvent): void {
@@ -282,6 +382,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		documentRevision: 0,
 		acknowledgedRevision: 0,
 		observationGeneration: 0,
+		source: createIncrementalMarkdownSource(),
 	};
 	const persistWindowMs = persistDebounceMs ?? 20;
 	const persistOnce = async (): Promise<number | undefined> => {
@@ -289,15 +390,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		if (!snapshot) return undefined;
 		const { revision, doc } = snapshot;
 		if (containsMarkdownReviewProjection(doc)) return revision;
-		const normalizedMarkdown = buildNormalizedMarkdownFromTiptapDoc(doc);
-		const markdown = preserveMarkdownSource(
-			persistenceBaseline.expectedFileMarkdown,
-			normalizedMarkdown,
-		);
 		if (revision === persistenceBaseline.acknowledgedRevision) {
 			pendingPersistenceSnapshot = null;
 			return revision;
 		}
+		const normalizedMarkdown = buildNormalizedMarkdownIncrementally(doc);
 		if (normalizedMarkdown === persistenceBaseline.lastAcknowledgedMarkdown) {
 			persistenceBaseline.acknowledgedRevision = revision;
 			if (pendingPersistenceSnapshot?.revision === revision) {
@@ -305,6 +402,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 			return revision;
 		}
+		const preserved = persistenceBaseline.source.preserve(
+			persistenceBaseline.expectedFileMarkdown,
+			doc,
+			normalizedMarkdown,
+		);
+		const markdown = preserved.markdown;
 		const observationGeneration = persistenceBaseline.observationGeneration;
 		const receipt = await upsertMarkdownFile({
 			lix,
@@ -322,6 +425,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			persistenceBaseline.lastAcknowledgedMarkdown = normalizedMarkdown;
 			persistenceBaseline.expectedFileMarkdown = markdown;
 			persistenceBaseline.acknowledgedRevision = revision;
+			preserved.accept();
 		}
 		if (pendingPersistenceSnapshot?.revision === revision) {
 			pendingPersistenceSnapshot = null;
@@ -374,13 +478,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			}
 			return node.type.name === "paragraph" ? "Press ‘/’ for commands" : "";
 		},
+		// When it shows is the stylesheet's call (src/index.css): on the empty
+		// line under a focused caret, and in an empty document even unfocused.
 		showOnlyWhenEditable: true,
 		showOnlyCurrent: true,
 		includeChildren: false,
-		shouldShow: ({ editor, node }: { editor: Editor; node: any }) =>
-			editor.isFocused &&
-			(node.type.name === "paragraph" || node.type.name === "heading") &&
-			node.childCount === 0,
 	};
 
 	const markdownExtensions = MarkdownWc({
@@ -443,18 +545,34 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				onStateChange: () => {},
 			}),
 			TableNavigationExtension,
+			TableControlsExtension,
 			FocusedControlGuardExtension,
+			ClickBelowDocumentExtension,
+			SelectionBlockHighlightExtension,
+			CodeLanguageMenuExtension,
 		],
+		// Nothing listens for its "delete" events, and it re-maps every step of
+		// every transaction to emit them.
+		enableCoreExtensions: { delete: false },
 		editable,
 		content:
 			initialContent ?? (astToTiptapDoc(ast, { defaultBlock }) as JSONContent),
+		onBeforeCreate: ({ editor }) => {
+			// The schema exists now and the document does not yet.
+			const content = editor.options.content;
+			if (content && typeof content === "object" && !Array.isArray(content))
+				editor.options.content = assignMissingDataIds(
+					content as JSONContent,
+					editor.schema,
+				);
+		},
 		onCreate: ({ editor }) => {
 			currentEditor = editor as Editor;
 			// TipTap emits create on a later timer. Edits can arrive first; they
 			// must not become the acknowledged baseline before being persisted.
 			if (persistenceBaseline.documentRevision === 0) {
 				persistenceBaseline.lastAcknowledgedMarkdown =
-					buildNormalizedMarkdownFromEditor(editor);
+					buildNormalizedMarkdownIncrementally(editor.state.doc);
 			}
 			persistenceBaselines.set(editor, persistenceBaseline);
 			onCreate?.({ editor });
@@ -488,6 +606,8 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			cleanupExternalLinkClick?.();
 			cleanupExternalLinkClick = null;
 			documentExistence.close();
+			// A save still draining after this falls back to the whole document.
+			persistenceBaseline.source.dispose();
 			destroyed = true;
 			currentEditor = null;
 			// Destruction only releases TipTap. A save window or serialized drain already
@@ -499,6 +619,7 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			scrollThreshold: { top: 72, bottom: 96, left: 0, right: 0 },
 			scrollMargin: { top: 88, bottom: 128, left: 0, right: 0 },
 			clipboardTextSerializer: (slice: any) => markdownClipboardText(slice),
+			clipboardSerializer: markdownClipboardSerializer,
 			handlePaste: (_view: any, event: ClipboardEvent) => {
 				if (!currentEditor) return false;
 				return defaultHandlePaste({
@@ -600,6 +721,11 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		},
 	});
 	persistenceBaselines.set(editorInstance, persistenceBaseline);
+	// Align the file with the document before the first save needs it.
+	persistenceBaseline.source.prime(
+		initialFileMarkdown,
+		editorInstance.state.doc,
+	);
 	const editorDom = editorInstance.view.dom;
 	const cleanupDocumentLinks =
 		sourceFilePath && openWorkspaceFile

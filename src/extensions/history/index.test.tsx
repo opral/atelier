@@ -285,7 +285,8 @@ describe("HistoryView", () => {
 				screen.queryByRole("button", { name: "Working changes" }),
 			).toBeNull(),
 		);
-		expect(screen.getByText("Latest checkpoint")).toBeVisible();
+		// Working changes and checkpoints update through separate observers.
+		expect(await screen.findByText("Latest checkpoint")).toBeVisible();
 		view.unmount();
 		await lix.close();
 	});

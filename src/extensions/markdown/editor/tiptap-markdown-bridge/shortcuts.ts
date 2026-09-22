@@ -1,27 +1,384 @@
 import {
+	CommandManager,
+	type Editor,
 	Extension,
 	InputRule,
+	createChainableState,
+	getTextContentFromNodes,
 	markInputRule,
 	textblockTypeInputRule,
 	wrappingInputRule,
 } from "@tiptap/core";
 import { exitCode, newlineInCode } from "@tiptap/pm/commands";
-import { closeHistory } from "@tiptap/pm/history";
-import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
+import { closeHistory, undo } from "@tiptap/pm/history";
+import type { Schema } from "@tiptap/pm/model";
+import {
+	type EditorState,
+	NodeSelection,
+	Plugin,
+	PluginKey,
+	type PluginSpec,
+	Selection,
+	TextSelection,
+	type Transaction,
+} from "@tiptap/pm/state";
+import { canSplit } from "@tiptap/pm/transform";
+import type { EditorView } from "@tiptap/pm/view";
 import { normalizeUrl } from "../normalize-url";
+import { isBlankLine } from "../table-commands";
 import { footnoteTabTarget } from "../extensions/footnote-navigation";
 import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
+import { LIST_LEADING_PARAGRAPH_DATA_KEY } from "./mdwc-to-tiptap";
 import { focusIsOnEditorControl } from "../focused-control";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
 const DIVIDER_PATTERN = /^---$/;
 
+// A URL may start after whitespace or an opening bracket or quote, as in
+// "(https://a.b)" or "see "www.c.d"".
+const TYPED_URL = String.raw`(?:^|[\s(\[{"'“‘])((?:https?:\/\/|www\.)[^\s<]+)`;
+
+/**
+ * The part of a typed URL that is the link, by GFM's autolink rules:
+ * sentence punctuation after it ("see https://a.b.") and a closing paren
+ * that has no opening one inside the URL ("(https://a.b)") are not part of
+ * it. Returns null when nothing but the scheme is left.
+ */
+function typedUrl(candidate: string): string | null {
+	let url = candidate;
+	for (;;) {
+		const last = url.at(-1);
+		if (last && `.,;:!?'"*_~”’`.includes(last)) {
+			url = url.slice(0, -1);
+			continue;
+		}
+		if (last === ")" && url.split(")").length > url.split("(").length) {
+			url = url.slice(0, -1);
+			continue;
+		}
+		break;
+	}
+	return /^(?:https?:\/\/|www\.)[^\s./?#:]/.test(url) ? url : null;
+}
+
+/**
+ * Links a URL that ends right at the caret, for Enter: a URL that ends the
+ * line never gets the space that links it as you type, yet GFM makes it a
+ * link when the file is read again, so the editor and the file disagreed.
+ */
+function linkTypedUrlBeforeCaret(state: EditorState): Transaction | null {
+	const { selection, schema } = state;
+	const linkType = schema.marks.link;
+	const $from = selection.$from;
+	if (!linkType || !selection.empty || !$from.parent.isTextblock) return null;
+	if ($from.parent.type.spec.code) return null;
+	const before = $from.nodeBefore;
+	if (!before?.isText || before.marks.some((mark) => mark.type.spec.code)) {
+		return null;
+	}
+	const match = new RegExp(`${TYPED_URL}$`).exec(
+		$from.parent.textBetween(0, $from.parentOffset, undefined, "\uFFFC"),
+	);
+	const typed = match?.[1] ?? "";
+	const url = typedUrl(typed);
+	const href = url && normalizeUrl(url);
+	if (!url || !href) return null;
+	const urlStart = $from.pos - typed.length;
+	if (state.doc.rangeHasMark(urlStart, $from.pos, linkType)) return null;
+	return state.tr.addMark(
+		urlStart,
+		urlStart + url.length,
+		linkType.create({ href }),
+	);
+}
+
 function codeFenceLanguage(value: string): string | null | undefined {
 	const match = value.match(CODE_FENCE_PATTERN);
 	if (!match) return undefined;
 	return match[2] || null;
+}
+
+/**
+ * Inline autoformats: emphasis, code, links. The character that completes
+ * one ("**b**", "`c`", the space after a URL) is typed first, as ordinary
+ * typing, and the format follows as its own undo step. Undo right after
+ * then gives back exactly what was typed, closing delimiter included, and
+ * redo formats it again. The rule runner in @tiptap/core formats instead
+ * of inserting that character, so undo lost it ("**b*").
+ */
+function inlineInputRules(schema: Schema): InputRule[] {
+	const rules: InputRule[] = [];
+
+	// Image: "![alt](src)". A line that is nothing but the image becomes an
+	// image block, the way the file reads it back; inside text it stays an
+	// inline image. The source is kept as typed: it is usually a path in
+	// the workspace, which normalizeUrl would turn into a web address.
+	if (schema.nodes.image) {
+		rules.push(
+			new InputRule({
+				find: /!\[([^\]]*)\]\(([^()\s]+)\)$/,
+				handler: ({ state, range, match }) => {
+					const src = String(match[2] ?? "");
+					const alt = match[1] || null;
+					const { tr } = state;
+					const $start = tr.doc.resolve(range.from);
+					const paragraph = $start.parent;
+					const imageBlock = schema.nodes.imageBlock;
+					const index = $start.index($start.depth - 1);
+					const wholeLine =
+						paragraph.type.name === "paragraph" &&
+						range.from === $start.start() &&
+						range.to === $start.end();
+					if (
+						imageBlock &&
+						wholeLine &&
+						$start
+							.node($start.depth - 1)
+							.canReplaceWith(index, index + 1, imageBlock)
+					) {
+						const blockFrom = $start.before();
+						const image = imageBlock.create({
+							src,
+							alt,
+							data: paragraph.attrs?.data ?? null,
+						});
+						tr.replaceWith(blockFrom, $start.after(), [
+							image,
+							schema.nodes.paragraph!.create(),
+						]);
+						tr.setSelection(
+							TextSelection.create(tr.doc, blockFrom + image.nodeSize + 1),
+						);
+						return;
+					}
+					tr.replaceWith(
+						range.from,
+						range.to,
+						schema.nodes.image!.create({ src, alt }),
+					);
+				},
+			}),
+		);
+	}
+
+	// Inline link: typing "[label](url)" converts to linked text; after "!"
+	// it is an image, handled above.
+	if ((schema.marks as any).link) {
+		rules.push(
+			new InputRule({
+				find: /(?<!!)\[([^\]]+)\]\(([^()\s]+)\)$/,
+				handler: ({ state, range, match }) => {
+					const linkType = (state.schema.marks as any).link;
+					if (!linkType) return null;
+					const label = String((match && match[1]) || "");
+					const href = normalizeUrl(String((match && match[2]) || ""));
+					if (!label || !href) return null;
+					const { tr } = state;
+					tr.insertText(label, range.from, range.to);
+					tr.addMark(
+						range.from,
+						range.from + label.length,
+						linkType.create({ href }),
+					);
+					// Don't carry the link mark into whatever is typed next.
+					tr.removeStoredMark(linkType);
+				},
+			}),
+		);
+	}
+
+	if ((schema.marks as any).bold) {
+		rules.push(
+			// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
+			// They open after a space or an opening bracket, quote or dash,
+			// as in "(**a**)", never inside a word: "2*3*4" stays text. The
+			// lookbehind keeps that character out of the match, so the rule
+			// never deletes it along with the delimiters.
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
+				type: (schema.marks as any).bold,
+			}),
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:__(\S(?:[^_]*\S)?)__)$/,
+				type: (schema.marks as any).bold,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).italic) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
+				type: (schema.marks as any).italic,
+			}),
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
+				type: (schema.marks as any).italic,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).strike) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:~~(\S(?:[^~]*\S)?)~~)$/,
+				type: (schema.marks as any).strike,
+			}),
+		);
+	}
+
+	if ((schema.marks as any).code) {
+		rules.push(
+			markInputRule({
+				find: /(?<=^|[\s([{"'“‘—–-])(?:`([^`]+)`)$/,
+				type: (schema.marks as any).code,
+			}),
+		);
+	}
+
+	// A URL followed by a space becomes a link, as in Notion; the space
+	// itself, and punctuation that ends the sentence, stay outside the link.
+	if ((schema.marks as any).link) {
+		rules.push(
+			new InputRule({
+				find: new RegExp(`${TYPED_URL}\\s$`),
+				handler: ({ state, range, match }) => {
+					const typed = String(match[1] ?? "");
+					const url = typedUrl(typed);
+					const href = url && normalizeUrl(url);
+					if (!url || !href) return null;
+					const linkType = (state.schema.marks as any).link;
+					const tr = state.tr;
+					// The typed space is already in the document, right before range.to.
+					const urlStart = range.to - 1 - typed.length;
+					const urlEnd = urlStart + url.length;
+					tr.addMark(urlStart, urlEnd, linkType.create({ href }));
+					tr.removeStoredMark(linkType);
+				},
+			}),
+		);
+	}
+
+	return rules;
+}
+
+function inlineInputRulesPlugin(editor: Editor, rules: InputRule[]) {
+	const plugin: Plugin = new Plugin({
+		// Backspace right after a format runs @tiptap/core's undoInputRule,
+		// which looks for plugins marked like this one and reverts the
+		// transaction kept in their state.
+		isInputRules: true,
+		state: {
+			init: () => null,
+			apply(tr, previous) {
+				const stored = tr.getMeta(plugin);
+				if (stored) return stored;
+				return tr.selectionSet || tr.docChanged ? null : previous;
+			},
+		},
+		props: {
+			handleTextInput(view, from, to, text) {
+				if (view.composing || to > view.state.doc.content.size) return false;
+				const $from = view.state.doc.resolve(from);
+				const inCode =
+					$from.parent.type.spec.code ||
+					($from.nodeBefore ?? $from.nodeAfter)?.marks.some(
+						(mark) => mark.type.spec.code,
+					);
+				if (inCode) return false;
+				const textBefore = getTextContentFromNodes($from) + text;
+				const matching = rules
+					.map((rule) => ({
+						rule,
+						match: (rule.find as RegExp).exec(textBefore),
+					}))
+					.filter(({ match }) => match);
+				if (matching.length === 0) return false;
+
+				view.dispatch(view.state.tr.insertText(text, from, to));
+				for (const { rule, match } of matching) {
+					const tr = view.state.tr;
+					const state = createChainableState({
+						state: view.state,
+						transaction: tr,
+					});
+					const range = {
+						from: from - (match![0].length - text.length),
+						to: from + text.length,
+					};
+					const { commands, chain, can } = new CommandManager({
+						editor,
+						state,
+					});
+					const result = rule.handler({
+						state,
+						range,
+						match: match!,
+						commands,
+						chain,
+						can,
+					});
+					if (result === null || !tr.steps.length) continue;
+					// Nothing is left to put back after the steps are inverted:
+					// the typed character is already in the document.
+					tr.setMeta(plugin, {
+						transform: tr,
+						from: range.to,
+						to: range.to,
+						text: "",
+					});
+					view.dispatch(closeHistory(tr));
+					// What is typed next starts another undo step.
+					view.dispatch(closeHistory(view.state.tr));
+					break;
+				}
+				return true;
+			},
+		},
+	} as PluginSpec<unknown>);
+	return plugin;
+}
+
+const blockAutoformatKey = new PluginKey<{ typed: string } | null>(
+	"markdownBlockAutoformat",
+);
+
+/**
+ * Remembers a block autoformat ("## ", "- ", "> ", "```js ") until anything
+ * else happens, so the Backspace right after it can take it back. The ids
+ * given to the new block arrive as an appended transaction; that one does
+ * not count. (@tiptap/core's own record of the rule is cleared by it, which
+ * is why Backspace there used to leave an empty paragraph.)
+ */
+function blockAutoformatPlugin() {
+	return new Plugin({
+		key: blockAutoformatKey,
+		state: {
+			init: () => null,
+			apply(tr, previous: { typed: string } | null) {
+				const autoformat = tr.getMeta(blockAutoformatKey);
+				if (autoformat) return autoformat;
+				if (tr.getMeta("appendedTransaction")) return previous;
+				return tr.docChanged || tr.selectionSet ? null : previous;
+			},
+		},
+	});
+}
+
+/**
+ * Backspace right after a block autoformat gives the typed marker back, as
+ * it already does after "---" and after inline autoformats: the conversion
+ * is its own undo step, so undoing it restores the marker, and the
+ * character that completed it is typed again.
+ */
+function restoreBlockMarker(view: EditorView): boolean {
+	const autoformat = blockAutoformatKey.getState(view.state);
+	if (!autoformat || !view.state.selection.empty) return false;
+	if (!undo(view.state, view.dispatch)) return false;
+	view.dispatch(view.state.tr.insertText(autoformat.typed).scrollIntoView());
+	return true;
 }
 
 // Markdown-like typing shortcuts and editor keybindings
@@ -73,11 +430,12 @@ export const MarkdownWcShortcuts = Extension.create({
 			rules.push(bullet("+"));
 		}
 
-		// Ordered list: 1. + space (captures custom start)
+		// Ordered list: 1. or 1) + space (captures custom start). The file
+		// writes it back with ".": the list keeps no delimiter of its own.
 		if ((schema.nodes as any).orderedList && (schema.nodes as any).listItem) {
 			rules.push(
 				wrappingInputRule({
-					find: /^(\d+)\.\s$/,
+					find: /^(\d+)[.)]\s$/,
 					type: (schema.nodes as any).orderedList,
 					getAttributes: (match) => ({ start: Number(match[1] || 1) }),
 				}),
@@ -112,24 +470,45 @@ export const MarkdownWcShortcuts = Extension.create({
 						if ($from.parentOffset !== paragraph.content.size) return null;
 						const horizontalRule = (state.schema.nodes as any).horizontalRule;
 						const trailingParagraph = (state.schema.nodes as any).paragraph;
-						return commands.command(({ state, tr, dispatch }: any) => {
-							const selectionFrom = state.selection.$from;
-							const blockFrom = selectionFrom.before(selectionFrom.depth);
-							const blockTo = selectionFrom.after(selectionFrom.depth);
-							const divider = horizontalRule.create({
-								autoInput: true,
-								data: paragraph.attrs?.data ?? null,
-							});
-							tr.replaceWith(blockFrom, blockTo, [
-								divider,
-								trailingParagraph.create(),
-							]);
-							tr.setSelection(
-								TextSelection.create(tr.doc, blockFrom + divider.nodeSize + 1),
-							);
-							if (dispatch) dispatch(tr.scrollIntoView());
-							return true;
-						});
+						return commands.command(
+							({ state: chained, tr, dispatch, commands: chain }: any) => {
+								// In an empty list item the dashes mean a rule under the list,
+								// as in Notion, not a rule inside the item: the item leaves
+								// every list it is in first, splitting a list around it.
+								const item = $from.node($from.depth - 1);
+								if (item?.type?.name === "listItem" && item.childCount === 1) {
+									const inItem = () =>
+										tr.selection.$from.node(tr.selection.$from.depth - 1)?.type
+											?.name === "listItem";
+									while (inItem()) {
+										// The command state refreshes its selection only when its
+										// `tr` is read; without that the next lift works from the
+										// selection before the previous one.
+										void chained.tr;
+										if (!chain.liftListItem("listItem")) return false;
+									}
+								}
+								const selectionFrom = tr.selection.$from;
+								const blockFrom = selectionFrom.before(selectionFrom.depth);
+								const blockTo = selectionFrom.after(selectionFrom.depth);
+								const divider = horizontalRule.create({
+									autoInput: true,
+									data: paragraph.attrs?.data ?? null,
+								});
+								tr.replaceWith(blockFrom, blockTo, [
+									divider,
+									trailingParagraph.create(),
+								]);
+								tr.setSelection(
+									TextSelection.create(
+										tr.doc,
+										blockFrom + divider.nodeSize + 1,
+									),
+								);
+								if (dispatch) dispatch(tr.scrollIntoView());
+								return true;
+							},
+						);
 					},
 				}),
 			);
@@ -146,10 +525,15 @@ export const MarkdownWcShortcuts = Extension.create({
 						handler: ({ state, range, match, commands }) => {
 							const checked = /x/i.test(String((match && match[1]) || ""));
 							const $from: any = (state as any).selection.$from;
-							// Check if we're inside an existing bullet list
+							// Inside an existing list the item itself becomes the task.
+							// A numbered one too: GFM writes it "2. [ ] b", and wrapping
+							// it in a bullet list left an empty numbered item behind.
 							for (let d = $from.depth; d > 0; d--) {
 								const n = $from.node(d);
-								if (n?.type?.name === "bulletList") {
+								if (
+									n?.type?.name === "bulletList" ||
+									n?.type?.name === "orderedList"
+								) {
 									return commands.command(({ state, tr, dispatch }: any) => {
 										const selectionFrom = state.selection.$from;
 										let listItemDepth = -1;
@@ -221,114 +605,30 @@ export const MarkdownWcShortcuts = Extension.create({
 			}
 		}
 
-		// Inline link: typing "[label](url)" converts to linked text.
-		if ((schema.marks as any).link) {
-			rules.push(
-				new InputRule({
-					find: /\[([^\]]+)\]\(([^()\s]+)\)$/,
-					// @ts-expect-error - typings are outdated
-					handler: ({ state, range, match, commands }) => {
-						const linkType = (state.schema.marks as any).link;
-						if (!linkType) return null;
-						const label = String((match && match[1]) || "");
-						const href = normalizeUrl(String((match && match[2]) || ""));
-						if (!label || !href) return null;
-						return commands.command(({ tr, dispatch }: any) => {
-							tr.insertText(label, range.from, range.to);
-							tr.addMark(
-								range.from,
-								range.from + label.length,
-								linkType.create({ href }),
-							);
-							// Don't carry the link mark into whatever is typed next.
-							tr.removeStoredMark(linkType);
-							if (dispatch) dispatch(tr);
-							return true;
-						});
-					},
-				}),
-			);
-		}
-
-		if ((schema.marks as any).bold) {
-			rules.push(
-				// Delimiters must hug the text (CommonMark): "1 * 2 * 3" stays text.
-				markInputRule({
-					find: /(?:^|\s)(?:\*\*(\S(?:[^*]*\S)?)\*\*)$/,
-					type: (schema.marks as any).bold,
-				}),
-				markInputRule({
-					find: /(?:^|\s)(?:__(\S(?:[^_]*\S)?)__)$/,
-					type: (schema.marks as any).bold,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).italic) {
-			rules.push(
-				markInputRule({
-					find: /(?:^|\s)(?:\*([^*\s](?:[^*]*[^*\s])?)\*)$/,
-					type: (schema.marks as any).italic,
-				}),
-				markInputRule({
-					find: /(?:^|\s)(?:_([^_\s](?:[^_]*[^_\s])?)_)$/,
-					type: (schema.marks as any).italic,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).strike) {
-			rules.push(
-				markInputRule({
-					find: /(?:^|\s)(?:~~(\S(?:[^~]*\S)?)~~)$/,
-					type: (schema.marks as any).strike,
-				}),
-			);
-		}
-
-		if ((schema.marks as any).code) {
-			rules.push(
-				markInputRule({
-					find: /(?:^|\s)(?:`([^`]+)`)$/,
-					type: (schema.marks as any).code,
-				}),
-			);
-		}
-
-		// A URL followed by a space becomes a link, as in Notion; the space
-		// itself stays outside the link.
-		if ((schema.marks as any).link) {
-			rules.push(
-				new InputRule({
-					find: /(?:^|\s)((?:https?:\/\/|www\.)[^\s<]+)\s$/,
-					handler: ({ state, range, match }) => {
-						const url = String(match[1] ?? "");
-						const href = normalizeUrl(url);
-						if (!href) return null;
-						const linkType = (state.schema.marks as any).link;
-						const tr = state.tr;
-						const urlEnd = range.to;
-						const urlStart = urlEnd - url.length;
-						tr.addMark(urlStart, urlEnd, linkType.create({ href }));
-						tr.insertText(" ", urlEnd);
-						tr.removeStoredMark(linkType);
-					},
-				}),
-			);
-		}
-
 		// Every conversion is its own undo step: Mod-Z after "# " gives the
-		// typed "#" back instead of erasing it with the heading.
+		// typed "#" back instead of erasing it with the heading. The
+		// conversion also notes what was typed to complete it, for Backspace.
 		return rules.map(
 			(rule) =>
 				new InputRule({
 					find: rule.find,
 					handler: (props) => {
-						closeHistory(props.state.tr);
+						const { tr } = props.state;
+						closeHistory(tr);
+						tr.setMeta(blockAutoformatKey, {
+							typed: props.match[0].slice(props.range.to - props.range.from),
+						});
 						return rule.handler(props);
 					},
 				}),
 		);
+	},
+
+	addProseMirrorPlugins() {
+		return [
+			inlineInputRulesPlugin(this.editor, inlineInputRules(this.editor.schema)),
+			blockAutoformatPlugin(),
+		];
 	},
 
 	addKeyboardShortcuts() {
@@ -571,19 +871,35 @@ export const MarkdownWcShortcuts = Extension.create({
 				return true;
 			}
 
-			if (direction < 0) return false;
-			return exitCode(state, (transaction) => view.dispatch(transaction));
+			if (direction > 0) {
+				return exitCode(state, (transaction) => view.dispatch(transaction));
+			}
+			// A code block that opens the document gets a line above it, as a
+			// table or a rule there does; otherwise nothing could be typed
+			// above it.
+			if ($from.depth !== 1) return false;
+			const paragraph = state.schema.nodes.paragraph;
+			if (!paragraph) return false;
+			const tr = state.tr.insert(boundary, paragraph.create());
+			tr.setSelection(TextSelection.create(tr.doc, boundary + 1));
+			view.dispatch(tr.scrollIntoView());
+			return true;
 		};
 
+		// A footnote's note is left by the same keys as a quote.
 		const blockquoteDepth = ($from: any): number => {
 			for (let depth = $from.depth - 1; depth > 0; depth--) {
-				if ($from.node(depth)?.type?.name === "blockquote") return depth;
+				const name = $from.node(depth)?.type?.name;
+				if (name === "blockquote" || name === "footnoteDef") return depth;
 			}
 			return -1;
 		};
 
 		// Nested lists own their empty-item keys before the enclosing quote exits.
-		const escapeEmptyBlockquote = () => {
+		// Enter on any empty quoted line leaves the quote there; Backspace only
+		// on its first or last line. An empty line in the middle is one Enter
+		// took back, and splitting the quote in two would not undo it.
+		const escapeEmptyBlockquote = (edgesOnly = false) => {
 			const { state } = this.editor;
 			const { selection } = state;
 			if (!selection.empty) return false;
@@ -591,8 +907,26 @@ export const MarkdownWcShortcuts = Extension.create({
 			const { $from } = selection as any;
 			if (
 				$from.parent?.type?.name !== "paragraph" ||
-				$from.parent.content.size !== 0 ||
-				$from.node($from.depth - 1)?.type?.name !== "blockquote"
+				$from.parent.content.size !== 0
+			) {
+				return false;
+			}
+			const index = $from.index($from.depth - 1);
+			const wrapper = $from.node($from.depth - 1);
+			// A footnote is left from an empty last line, below its note, by
+			// Enter only: its first line carries the label, and Backspace on
+			// an empty line in it takes the line back.
+			if (wrapper?.type?.name === "footnoteDef") {
+				if (edgesOnly || index === 0 || index !== wrapper.childCount - 1) {
+					return false;
+				}
+				return this.editor.commands.lift("footnoteDef");
+			}
+			if (wrapper?.type?.name !== "blockquote") return false;
+			if (
+				edgesOnly &&
+				index !== 0 &&
+				index !== $from.node($from.depth - 1).childCount - 1
 			) {
 				return false;
 			}
@@ -658,28 +992,6 @@ export const MarkdownWcShortcuts = Extension.create({
 				this.editor.view.dispatch(tr),
 			);
 
-		/** Position just inside the end of the last textblock within [from, to). */
-		const lastTextblockEndIn = (from: number, to: number) => {
-			let end = -1;
-			this.editor.state.doc.nodesBetween(from, to, (node, pos) => {
-				if (node.isTextblock) end = pos + 1 + node.content.size;
-			});
-			return end;
-		};
-		/** Position just inside the start of the first textblock at or after pos. */
-		const firstTextblockStartFrom = (pos: number) => {
-			let start = -1;
-			const { doc } = this.editor.state;
-			doc.nodesBetween(pos, doc.content.size, (node, nodePos) => {
-				if (start >= 0) return false;
-				if (node.isTextblock && nodePos + 1 > pos) {
-					start = nodePos + 1;
-					return false;
-				}
-				return true;
-			});
-			return start;
-		};
 		const isAtomBlock = (node: any) =>
 			node && node.isBlock && !node.isTextblock && (node.isAtom || node.isLeaf);
 		/**
@@ -707,92 +1019,176 @@ export const MarkdownWcShortcuts = Extension.create({
 			return true;
 		};
 		/**
-		 * Backspace at the start of a top-level block looks at what is above:
-		 * text folds onto the block above it; a table, a rule, or an image is
-		 * selected first so one keystroke never deletes it; a code block is
-		 * never joined with prose.
+		 * Blocks a keystroke at a block boundary never merges with or deletes:
+		 * a table, a rule or an image is selected first, a code block or a
+		 * footnote is entered or left alone.
+		 */
+		const isOpaqueBlock = (node: any) =>
+			node.type.name === "table" ||
+			node.type.name === "codeBlock" ||
+			node.type.name === "footnoteDef" ||
+			isAtomBlock(node);
+		/** Containers whose edge no join crosses. */
+		const isClosedContainer = (node: any) =>
+			node.type.name === "footnoteDef" || node.type.name === "tableCell";
+		/**
+		 * The block a keystroke meets at the near edge of `node` (at `pos`):
+		 * lists, items and quotes are only wrappers around it. So is the empty
+		 * line the editor puts first in an item that starts with a table or
+		 * another block: it is not in the file, and Delete joining into it
+		 * merged the item into the one above and wrote `<span></span>`.
+		 */
+		const edgeBlock = (node: any, pos: number, direction: -1 | 1) => {
+			while (!node.isTextblock && !isOpaqueBlock(node) && node.childCount) {
+				if (direction > 0) {
+					pos += 1;
+					const first = node.firstChild;
+					if (
+						node.type.name === "listItem" &&
+						node.childCount > 1 &&
+						first.content.size === 0 &&
+						first.attrs.data?.[LIST_LEADING_PARAGRAPH_DATA_KEY]
+					) {
+						pos += first.nodeSize;
+						node = node.child(1);
+					} else node = first;
+				} else {
+					pos += node.nodeSize - 1 - node.lastChild.nodeSize;
+					node = node.lastChild;
+				}
+			}
+			return { node, pos };
+		};
+		/**
+		 * Backspace at the start of a paragraph looks at the block above it in
+		 * the same container, at any depth, and at what that block ends with:
+		 * text folds onto the last line of a list or quote above it; a rule or
+		 * an image is selected first so one keystroke never deletes it; a
+		 * table, a code block or a footnote is entered, never joined with
+		 * prose. An empty line after any of them simply goes.
+		 *
+		 * A table is entered the way Notion enters one, as the user asked: the
+		 * caret goes to the end of its last cell, and a blank line it leaves
+		 * goes with it. Selecting the table first, as a rule is, left the
+		 * caret nowhere to be seen, and the next Backspace deleted the table.
 		 */
 		const backspaceAcrossBlockAbove = ($from: any) => {
 			const { state, view } = this.editor;
-			if ($from.depth !== 1 || $from.parentOffset !== 0) return false;
-			const index = $from.index(0);
-			if (index === 0) return false;
-			const previous = state.doc.child(index - 1);
-			const blockStart = $from.before(1);
-			if (previous.type.name === "table" || isAtomBlock(previous)) {
-				view.dispatch(
-					state.tr.setSelection(
-						NodeSelection.create(state.doc, blockStart - previous.nodeSize),
-					),
-				);
-				return true;
-			}
-			if (previous.type.name === "codeBlock") {
-				view.dispatch(
-					state.tr.setSelection(
-						TextSelection.create(state.doc, blockStart - 1),
-					),
-				);
-				return true;
-			}
-			if (
-				previous.type.name !== "bulletList" &&
-				previous.type.name !== "orderedList" &&
-				previous.type.name !== "blockquote"
-			) {
+			if ($from.parentOffset !== 0) return false;
+			const depth = $from.depth;
+			const container = $from.node(depth - 1);
+			const index = $from.index(depth - 1);
+			// The first line of a footnote has nothing in the footnote to join
+			// with; joining out of it would turn the definition into text.
+			if (index === 0) return isClosedContainer(container);
+			const previous = container.child(index - 1);
+			if (previous.isTextblock && previous.type.name !== "codeBlock") {
 				return false;
 			}
+			const blockStart = $from.before(depth);
+			const lastAbove = edgeBlock(previous, blockStart - previous.nodeSize, -1);
+			if (lastAbove.node.type.name === "table") {
+				// The end of the last cell: inside the table, its last row and
+				// that row's last cell.
+				const cellEnd = lastAbove.pos + lastAbove.node.nodeSize - 3;
+				const tr = state.tr;
+				if (isBlankLine($from.parent))
+					tr.delete(blockStart, $from.after(depth));
+				tr.setSelection(TextSelection.create(tr.doc, cellEnd));
+				view.dispatch(tr.scrollIntoView());
+				return true;
+			}
 			if ($from.parent.content.size === 0) {
-				// An empty paragraph after the block simply goes; the caret
-				// lands at the end of the block above.
-				const tr = state.tr.delete(blockStart, $from.after(1));
+				const tr = state.tr.delete(blockStart, $from.after(depth));
 				tr.setSelection(Selection.near(tr.doc.resolve(blockStart), -1));
 				view.dispatch(tr.scrollIntoView());
 				return true;
 			}
-			const joinAt = lastTextblockEndIn(
-				blockStart - previous.nodeSize,
-				blockStart,
-			);
-			if (joinAt < 0) return false;
-			view.dispatch(state.tr.delete(joinAt, $from.pos).scrollIntoView());
+			const last = lastAbove;
+			if (isAtomBlock(last.node)) {
+				view.dispatch(
+					state.tr.setSelection(NodeSelection.create(state.doc, last.pos)),
+				);
+				return true;
+			}
+			const lastEnd = last.pos + last.node.nodeSize - 1;
+			if (isOpaqueBlock(last.node)) {
+				view.dispatch(
+					state.tr
+						.setSelection(Selection.near(state.doc.resolve(lastEnd), -1))
+						.scrollIntoView(),
+				);
+				return true;
+			}
+			view.dispatch(state.tr.delete(lastEnd, $from.pos).scrollIntoView());
 			return true;
 		};
 		/**
 		 * Delete at the end of a textblock joins the next textblock's text onto
 		 * this line, whatever structure lies between (the end of a list, a
-		 * nested item, a quote). Atoms and code blocks are selected or left
-		 * alone instead.
+		 * nested item, a quote). The next block is found the way Backspace
+		 * finds the one above: a rule or an image is selected, a table is
+		 * entered at its first cell, a code block or a footnote is left alone,
+		 * and nothing reaches out of a footnote or a table cell.
 		 */
 		const deleteAcrossBlockBelow = ($from: any) => {
 			const { state, view } = this.editor;
 			if (!$from.parent.isTextblock) return false;
 			if ($from.parentOffset !== $from.parent.content.size) return false;
-			const afterBlock = $from.after($from.depth);
-			const nextNode = state.doc.nodeAt(afterBlock);
-			// The very next sibling decides for atoms and tables.
-			if (
-				nextNode &&
-				(nextNode.type.name === "table" || isAtomBlock(nextNode))
-			) {
+			let depth = $from.depth;
+			while ($from.indexAfter(depth - 1) === $from.node(depth - 1).childCount) {
+				if (isClosedContainer($from.node(depth - 1))) return true;
+				depth -= 1;
+				if (depth === 0) return false;
+			}
+			const nextPos = $from.after(depth);
+			const next = state.doc.nodeAt(nextPos)!;
+			const current = $from.parent;
+			// An empty line goes itself rather than pulling the next block up
+			// into it: a heading below keeps its level, a paragraph after a
+			// list stays out of it. An item or a quote it alone fills goes too.
+			if (current.type.name === "paragraph" && current.content.size === 0) {
+				let removeDepth = $from.depth;
+				while (
+					removeDepth > depth &&
+					$from.node(removeDepth - 1).childCount === 1
+				) {
+					removeDepth -= 1;
+				}
+				const from = $from.before(removeDepth);
+				const tr = state.tr.delete(from, $from.after(removeDepth));
+				tr.setSelection(Selection.near(tr.doc.resolve(from), 1));
+				view.dispatch(tr.scrollIntoView());
+				return true;
+			}
+			// An empty line below goes, whatever this line is.
+			if (next.type.name === "paragraph" && next.content.size === 0) {
 				view.dispatch(
-					state.tr.setSelection(NodeSelection.create(state.doc, afterBlock)),
+					state.tr.delete(nextPos, nextPos + next.nodeSize).scrollIntoView(),
 				);
 				return true;
 			}
-			const nextStart = firstTextblockStartFrom($from.pos);
-			if (nextStart < 0) return false;
-			const $next = state.doc.resolve(nextStart);
-			for (let depth = $next.depth; depth > 0; depth -= 1) {
-				if ($next.node(depth).type.name === "codeBlock") return true;
-			}
-			if ($next.parent.content.size === 0 && $next.depth === 1) {
+			const first = edgeBlock(next, nextPos, 1);
+			// A table below is entered at its first cell, as Backspace enters
+			// one above at its last; it is never selected to be deleted.
+			if (first.node.type.name === "table") {
 				view.dispatch(
-					state.tr.delete(nextStart - 1, nextStart + 1).scrollIntoView(),
+					state.tr
+						.setSelection(TextSelection.create(state.doc, first.pos + 3))
+						.scrollIntoView(),
 				);
 				return true;
 			}
-			view.dispatch(state.tr.delete($from.pos, nextStart).scrollIntoView());
+			if (isAtomBlock(first.node)) {
+				view.dispatch(
+					state.tr.setSelection(NodeSelection.create(state.doc, first.pos)),
+				);
+				return true;
+			}
+			if (current.type.name === "codeBlock" || isOpaqueBlock(first.node)) {
+				return true;
+			}
+			view.dispatch(state.tr.delete($from.pos, first.pos + 1).scrollIntoView());
 			return true;
 		};
 		const isEmptyItem = (node: any) =>
@@ -852,7 +1248,48 @@ export const MarkdownWcShortcuts = Extension.create({
 			}
 			return false;
 		};
-		return {
+		/**
+		 * Tab over several lines of code indents each of them, the way a code
+		 * editor does, instead of replacing them with one tab; Shift-Tab takes
+		 * one indent off each line the selection touches, the caret's line
+		 * when it is collapsed. The indent is the tab Tab types; two spaces
+		 * (the view's tab size) count as one on the way out.
+		 */
+		const indentCodeLines = (direction: -1 | 1) => {
+			const { state, view } = this.editor;
+			const { $from, $to } = state.selection;
+			if ($from.parent.type.name !== "codeBlock" || !$from.sameParent($to)) {
+				return false;
+			}
+			const text = $from.parent.textContent;
+			const fromOffset = $from.parentOffset;
+			const toOffset = $to.parentOffset;
+			if (direction > 0 && !text.slice(fromOffset, toOffset).includes("\n")) {
+				return false;
+			}
+			const lineStarts: number[] = [];
+			let lineStart = text.lastIndexOf("\n", fromOffset - 1) + 1;
+			for (;;) {
+				lineStarts.push(lineStart);
+				const lineEnd = text.indexOf("\n", lineStart);
+				// A selection that ends at the start of a line leaves that line.
+				if (lineEnd < 0 || lineEnd + 1 >= toOffset) break;
+				lineStart = lineEnd + 1;
+			}
+			const start = $from.start();
+			const tr = state.tr;
+			for (const offset of lineStarts.reverse()) {
+				if (direction > 0) {
+					tr.insertText("\t", start + offset);
+					continue;
+				}
+				const indent = /^(\t| {1,2})/.exec(text.slice(offset))?.[0];
+				if (indent) tr.delete(start + offset, start + offset + indent.length);
+			}
+			if (tr.docChanged) view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+		const keys: Record<string, () => boolean> = {
 			// Bold / Italic / Strike
 			"Mod-b": () => this.editor.chain().focus().toggleMark("bold").run(),
 			"Mod-i": () => this.editor.chain().focus().toggleMark("italic").run(),
@@ -890,6 +1327,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				const { state } = this.editor;
 				const $from: any = state.selection.$from;
 				// A code block indents, as in Notion (tab-size 2 in the view).
+				if (indentCodeLines(1)) return true;
 				if ($from.parent?.type?.name === "codeBlock") {
 					return this.editor.chain().focus().insertContent("\t").run();
 				}
@@ -919,7 +1357,12 @@ export const MarkdownWcShortcuts = Extension.create({
 			},
 
 			"Shift-Tab": () => {
-				return outdentListItem();
+				if (focusIsOnEditorControl(this.editor.view)) return false;
+				if (indentCodeLines(-1)) return true;
+				// Like Tab, the key stays in the document when there is nothing
+				// to outdent; focus leaving backwards is no better than forwards.
+				outdentListItem();
+				return true;
 			},
 
 			"Shift-Enter": insertHardBreak,
@@ -932,7 +1375,8 @@ export const MarkdownWcShortcuts = Extension.create({
 
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
-				if (escapeEmptyBlockquote()) return true;
+				if (restoreBlockMarker(this.editor.view)) return true;
+				if (escapeEmptyBlockquote(true)) return true;
 				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
 				const { selection } = state;
@@ -940,21 +1384,29 @@ export const MarkdownWcShortcuts = Extension.create({
 				const $from: any = selection.$from;
 				// A heading turns back into text first, like Notion; the merge
 				// into the block above is the next keystroke.
+				// An empty line above goes before that, so Backspace undoes Enter
+				// at the start of a heading.
 				if (
 					$from.parent?.type?.name === "heading" &&
 					$from.parentOffset === 0 &&
 					$from.parent.content.size > 0
 				) {
+					if (removeEmptyBlockAbove($from, -1)) return true;
 					return this.editor.commands.setNode("paragraph");
 				}
 				// Backspace at the top of the body selects the frontmatter first;
 				// deleting a whole YAML block on one keystroke is too easy to do
 				// by accident.
+				// An empty line below it goes first, like below any block.
 				if (
 					$from.depth === 1 &&
 					$from.parentOffset === 0 &&
 					$from.index(0) === 1 &&
-					state.doc.firstChild?.type.name === "markdownFrontmatter"
+					state.doc.firstChild?.type.name === "markdownFrontmatter" &&
+					!(
+						$from.parent.type.name === "paragraph" &&
+						$from.parent.content.size === 0
+					)
 				) {
 					this.editor.view.dispatch(
 						state.tr.setSelection(NodeSelection.create(state.doc, 0)),
@@ -1000,7 +1452,9 @@ export const MarkdownWcShortcuts = Extension.create({
 					return this.editor.commands.lift("blockquote");
 				}
 				if (listItemDepth < 0) return backspaceAcrossBlockAbove($from);
-				if ($from.node(listItemDepth).firstChild !== para) return false;
+				if ($from.node(listItemDepth).firstChild !== para) {
+					return backspaceAcrossBlockAbove($from);
+				}
 				// Backspace at the start of an item's text lifts the item out of
 				// the list (a nested item outdents one level), the way Notion turns
 				// a bullet back into text. The browser default would instead fold
@@ -1096,7 +1550,6 @@ export const MarkdownWcShortcuts = Extension.create({
 				) {
 					return false;
 				}
-				if ($from.parent.type.name === "codeBlock") return false;
 				return deleteAcrossBlockBelow($from);
 			},
 
@@ -1124,7 +1577,12 @@ export const MarkdownWcShortcuts = Extension.create({
 			Enter: () => {
 				flushDomSelection();
 				// A new block is its own undo step: Mod-Z after typing into it
-				// takes back the typing, not the split as well.
+				// takes back the typing, not the split as well. History is closed
+				// before the split here and after it below, where Enter returns.
+				// A URL at the caret becomes a link first, as its own undo step
+				// like every other autoformat.
+				const linkUrl = linkTypedUrlBeforeCaret(this.editor.state);
+				if (linkUrl) this.editor.view.dispatch(closeHistory(linkUrl));
 				this.editor.view.dispatch(closeHistory(this.editor.state.tr));
 				if (
 					this.editor.state.selection instanceof NodeSelection &&
@@ -1179,19 +1637,76 @@ export const MarkdownWcShortcuts = Extension.create({
 					}
 				}
 				if (!inListItem) {
-					// Enter replaces a range selection before splitting the remaining block.
-					// Running both commands in one chain keeps the split position mapped to
-					// the document produced by the deletion.
-					// The second half of a split heading is text, and inline code
-					// does not carry into the new block.
-					const splitsHeading =
-						$from.parent.type.name === "heading" &&
-						$from.parentOffset < $from.parent.content.size;
-					const chain = state.selection.empty
-						? this.editor.chain().splitBlock()
-						: this.editor.chain().deleteSelection().splitBlock();
-					if (splitsHeading) chain.setNode("paragraph");
-					return chain.unsetMark("code").run();
+					// Enter replaces a range selection before splitting the remaining
+					// block. Running both in one chain keeps the split position mapped
+					// to the document produced by the deletion, and the caret is read
+					// from that document, not from the one before it.
+					const chain = this.editor.chain();
+					if (!state.selection.empty) chain.deleteSelection();
+					return chain
+						.command(({ tr, commands }) => {
+							const $at = tr.selection.$from;
+							const block = $at.parent;
+							// Enter at the start of a line opens an empty line above it
+							// and leaves the line as it was: a heading stays a heading.
+							if ($at.parentOffset === 0 && block.content.size > 0) {
+								const paragraph = tr.doc.type.schema.nodes.paragraph!;
+								const index = $at.index(-1);
+								if ($at.node(-1).canReplaceWith(index, index, paragraph)) {
+									tr.insert($at.before(), paragraph.create());
+									return true;
+								}
+							}
+							// The second half of a split heading is text.
+							const splitsHeading =
+								block.type.name === "heading" &&
+								$at.parentOffset < block.content.size;
+							if (!commands.splitBlock()) return false;
+							if (splitsHeading) commands.setNode("paragraph");
+							return true;
+						})
+						.unsetMark("code")
+						.run();
+				}
+				if (!state.selection.empty) {
+					// A range that spans items has no single item to split: delete
+					// it first, in the same chain, and split the item the caret is
+					// left in. The item line splits even when the deletion emptied
+					// it, since Enter replaces the selection with a line break. A
+					// plain delete keeps the first item even when every item's text
+					// was selected; deleteSelection would take the list with it.
+					return this.editor
+						.chain()
+						.command(({ tr, commands }) => {
+							tr.delete(tr.selection.from, tr.selection.to);
+							// Two empty items are what Enter made, not a cleared
+							// document for the editor to reset to a paragraph.
+							tr.setMeta("preventClearDocument", true);
+							const $at = tr.selection.$from;
+							for (let d = $at.depth; d > 0; d--) {
+								const node = $at.node(d);
+								if (node.type.name !== "listItem") continue;
+								const checked = node.attrs?.checked;
+								const attrs =
+									checked === true || checked === false
+										? { ...node.attrs, checked: false }
+										: node.attrs;
+								const depth = $at.depth - d + 1;
+								// The item takes its attributes; the blocks inside it
+								// start fresh, like a split paragraph.
+								const types: { type: any; attrs?: any }[] = [
+									{ type: node.type, attrs },
+								];
+								for (let inner = d + 1; inner <= $at.depth; inner++)
+									types.push({ type: $at.node(inner).type });
+								if (!canSplit(tr.doc, $at.pos, depth, types)) return false;
+								tr.split($at.pos, depth, types);
+								return true;
+							}
+							return commands.splitBlock();
+						})
+						.unsetMark("code")
+						.run();
 				}
 				// If current paragraph is empty, exit the list (lift)
 				const para: any = $from.parent;
@@ -1205,6 +1720,24 @@ export const MarkdownWcShortcuts = Extension.create({
 				const newItemAttrs = isTask
 					? { ...item.attrs, checked: false }
 					: item.attrs;
+				if (
+					state.selection.empty &&
+					paragraphIndex > 0 &&
+					$from.parentOffset === 0 &&
+					$from.depth === itemDepth + 1
+				) {
+					// Enter at the start of a continuation line gives the line an
+					// item of its own. A split there would leave an empty line at
+					// the end of the item above, which Markdown cannot keep.
+					const types = [{ type: item.type, attrs: newItemAttrs }];
+					const at = $from.before();
+					if (canSplit(state.doc, at, 1, types)) {
+						this.editor.view.dispatch(
+							state.tr.split(at, 1, types).scrollIntoView(),
+						);
+						return true;
+					}
+				}
 				if (
 					state.selection.empty &&
 					paragraphIndex === 0 &&
@@ -1254,6 +1787,26 @@ export const MarkdownWcShortcuts = Extension.create({
 					.splitListItem("listItem", isTask ? { checked: false } : undefined)
 					.unsetMark("code")
 					.run();
+			},
+		};
+		const enter = keys.Enter!;
+		return {
+			...keys,
+			Enter: () => {
+				try {
+					const handled = enter();
+					if (handled) {
+						this.editor.view.dispatch(closeHistory(this.editor.state.tr));
+					}
+					return handled;
+				} catch (error) {
+					// A split the schema cannot take throws. The key stays ours:
+					// the browser's own Enter would edit the DOM behind
+					// ProseMirror's back. The document keeps what was dispatched
+					// before the failure, which is never a half-applied step.
+					console.error("markdown: Enter failed", error);
+					return true;
+				}
 			},
 		};
 	},

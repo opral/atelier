@@ -1,4 +1,5 @@
 // Avoid tight compile-time coupling to mdast types; operate on structural shape
+import { serializeInlineNode } from "../markdown";
 
 const SPREAD_META_KEY = "__mdwc_spread";
 export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__atelier_empty_scaffold";
@@ -6,6 +7,8 @@ export const LIST_LEADING_PARAGRAPH_DATA_KEY =
 	"__atelier_list_leading_paragraph";
 export const CODE_META_DATA_KEY = "__mdwc_code_meta";
 export const EMPTY_MARKDOWN_PARAGRAPH_DATA_KEY = "__atelier_empty_paragraph";
+/** The source spelling of a line break written as HTML (`<br/>`). */
+export const HTML_BREAK_DATA_KEY = "__atelier_html_break";
 
 type PMMark = {
 	type: "bold" | "italic" | "strike" | "code" | "link";
@@ -207,6 +210,10 @@ function astBlockToPM(
 		case "table": {
 			const n = node as any;
 			const align = Array.isArray(n.align) ? n.align : [];
+			// GFM ignores cells past the header's width, so the editor does not
+			// show them either; the table would otherwise gain a header column.
+			// preserveMarkdownSource keeps their source when the table is saved.
+			const width = n.children?.[0]?.children?.length ?? 0;
 			return {
 				type: "table",
 				attrs: {
@@ -216,8 +223,9 @@ function astBlockToPM(
 				content: (n.children || []).map((row: any, rowIndex: number) => ({
 					type: "tableRow",
 					attrs: { data: buildNodeData(row.data) },
-					content: (row.children || []).map(
-						(cell: any, columnIndex: number) => ({
+					content: (row.children || [])
+						.slice(0, width)
+						.map((cell: any, columnIndex: number) => ({
 							type: "tableCell",
 							attrs: {
 								isHeader: rowIndex === 0,
@@ -225,8 +233,7 @@ function astBlockToPM(
 								data: buildNodeData(cell.data),
 							},
 							content: flattenInline((cell.children || []) as any, []),
-						}),
-					),
+						})),
 				})),
 			};
 		}
@@ -378,15 +385,25 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 				const ln = n as any;
 				const href = ln.url || null;
 				const title = ln.title ?? null;
-				out.push(
-					...flattenInline(
-						(ln.children || []) as any,
-						addMark(active, {
-							type: "link",
-							attrs: { href, title, data: ln.data ?? null },
-						}),
-					),
+				const content = flattenInline(
+					(ln.children || []) as any,
+					addMark(active, {
+						type: "link",
+						attrs: { href, title, data: ln.data ?? null },
+					}),
 				);
+				// A link is a mark on its text, so a link with no visible text
+				// (`[](#top)`, `[ ](url)`) had nothing to hold it and vanished on
+				// the next save. Keep it as its source, like inline HTML.
+				if (!content.some(isVisibleInline)) {
+					out.push({
+						type: "markdownInlineHtml",
+						attrs: { value: serializeInlineNode(ln), data: null },
+						...(active.length ? { marks: [...active] } : {}),
+					});
+					break;
+				}
+				out.push(...content);
 				break;
 			}
 			case "image": {
@@ -412,13 +429,20 @@ function flattenInline(nodes: any[], active: PMMark[]): PMNode[] {
 				if (isHtmlHardBreak(html)) {
 					out.push({
 						type: "hardBreak",
-						attrs: { data: html.data ?? null } as any,
+						attrs: {
+							data: buildNodeData(html.data, {
+								[HTML_BREAK_DATA_KEY]: html.value,
+							}),
+						} as any,
 					});
 					break;
 				}
+				// Inline HTML inside a link or emphasis keeps those marks, the way
+				// an image does; without them the link around a badge was lost.
 				out.push({
 					type: "markdownInlineHtml",
 					attrs: { value: html.value ?? "", data: html.data ?? null },
+					...(active.length ? { marks: [...active] } : {}),
 				});
 				break;
 			}
@@ -469,6 +493,11 @@ function softLineBreakText(value: string, active: PMMark[]): PMNode[] {
 		}
 	}
 	return out;
+}
+
+function isVisibleInline(node: PMNode): boolean {
+	if (node.type === "text") return /\S/.test(node.text ?? "");
+	return node.type !== "hardBreak";
 }
 
 function addMark(active: PMMark[], mark: PMMark): PMMark[] {

@@ -29,7 +29,8 @@ import { useEditorCtx } from "../editor/editor-context";
 import { buildMarkdownFromEditor } from "../editor/build-markdown-from-editor";
 import {
 	TOOLBAR_BLOCK_OPTIONS,
-	type ToolbarBlockType,
+	type ActiveBlockType,
+	unlistedBlock,
 	computeTaskListActive,
 	convertListItem,
 	getActiveBlock,
@@ -46,7 +47,7 @@ import {
 export { iconButtonActiveClass, iconButtonClass };
 
 type FormatState = {
-	block: ToolbarBlockType;
+	block: ActiveBlockType;
 	isBold: boolean;
 	isItalic: boolean;
 	isStrike: boolean;
@@ -223,11 +224,15 @@ export function FormattingToolbar({
 		const active = TOOLBAR_BLOCK_OPTIONS.find(
 			(option) => option.value === displayedFormatState.block,
 		);
-		return active?.label ?? "Text";
+		return (
+			active?.label ??
+			unlistedBlock(displayedFormatState.block)?.label ??
+			"Text"
+		);
 	}, [displayedFormatState.block]);
 
 	const handleBlockChange = useCallback(
-		(value: ToolbarBlockType) => {
+		(value: ActiveBlockType) => {
 			if (!editor) return;
 			const option = TOOLBAR_BLOCK_OPTIONS.find(
 				(entry) => entry.value === value,

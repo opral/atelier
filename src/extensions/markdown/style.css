@@ -326,13 +326,102 @@
 		   would ring every frontmatter in every diff. The panel's fields carry
 		   their own added, removed and modified marks. */
 		.markdown-view:not(.markdown-review)
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			:is(
 				.markdown-frontmatter[data-selected="true"],
 				.markdown-frontmatter.ProseMirror-selectednode
 			) {
 			border-radius: var(--markdown-radius);
 			box-shadow: 0 0 0 2px var(--atelier-ring);
+		}
+
+		/* Every selected-block ring below asks for a focused editor: a document
+		   opens with its selection on the first block, and an unfocused one
+		   showed a ring around its opening frontmatter, table or image. */
+
+		/* Backspace or Delete beside a table, rule or embed, an arrow key onto
+		   one, or a click selects the whole block, and the next key removes or
+		   replaces it. Nothing showed that, so a second Backspace deleted a
+		   table nobody saw selected. Blocks with their own selected look
+		   (frontmatter above, tables and rules just below, images and videos
+		   further down) keep it. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror.ProseMirror-focused
+			:is(
+				.markdown-wc-unsupported-block,
+				.ProseMirror
+					> *:not(
+						hr,
+						table,
+						.markdown-frontmatter,
+						.markdown-image-embed,
+						[data-markdown-image-block],
+						.markdown-video-embed
+					)
+			).ProseMirror-selectednode {
+			border-radius: var(--markdown-radius);
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 2px;
+		}
+
+		/* A table's element is the scroll room around the grid, and clips
+		   anything drawn outside it: the grid itself shows the selection, its
+		   edge in the ring colour and its cells tinted like selected text. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror.ProseMirror-focused
+			table.ProseMirror-selectednode
+			> tbody {
+			border-color: var(--atelier-ring);
+		}
+
+		.markdown-view:not(.markdown-review)
+			.ProseMirror.ProseMirror-focused
+			table.ProseMirror-selectednode
+			tr {
+			background-color: var(--atelier-bg-selection);
+		}
+
+		/* A rule is one line: it is shown selected as a band around the line,
+		   tinted like selected text, with the ring at its edge. */
+		.markdown-view:not(.markdown-review)
+			.ProseMirror.ProseMirror-focused
+			hr.ProseMirror-selectednode {
+			border-radius: 1px;
+			box-shadow:
+				0 0 0 7px var(--atelier-bg-selection),
+				0 0 0 9px var(--atelier-ring);
+		}
+
+		/* A text selection that runs over a block with no text of its own — an
+		   image, a rule, an embed — takes it along, so it is tinted the colour
+		   the browser paints selected text. */
+		.markdown-view
+			.ProseMirror
+			.markdown-in-selection:not(
+				.markdown-image-embed,
+				[data-markdown-image-block],
+				.markdown-video-embed
+			),
+		.markdown-view
+			.ProseMirror
+			.markdown-image-embed.markdown-in-selection
+			> .markdown-image-block-content,
+		.markdown-view
+			.ProseMirror
+			[data-markdown-image-block].markdown-in-selection:is(
+				img,
+				.markdown-pdf-embed
+			),
+		.markdown-view
+			.ProseMirror
+			.markdown-video-embed.markdown-in-selection
+			> .markdown-video-frame {
+			border-radius: var(--markdown-radius);
+			box-shadow: 0 0 0 4px var(--atelier-bg-selection);
+		}
+
+		.markdown-view .ProseMirror hr.markdown-in-selection {
+			box-shadow: 0 0 0 7px var(--atelier-bg-selection);
 		}
 
 		.markdown-frontmatter-header {
@@ -933,12 +1022,42 @@
 			opacity: 0.6;
 			padding: 0.18rem 0.38rem;
 			pointer-events: none;
-			transition: opacity 120ms ease;
+			transition:
+				opacity 120ms ease,
+				background-color 120ms ease,
+				color 120ms ease;
 		}
 
 		.markdown-view .ProseMirror pre:hover .markdown-code-language,
 		.markdown-view .ProseMirror pre:focus-within .markdown-code-language {
 			opacity: 1;
+		}
+
+		/* While editing, the label is the button that sets the language. */
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			button.markdown-code-language {
+			cursor: pointer;
+			pointer-events: auto;
+		}
+
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			button.markdown-code-language:hover {
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg);
+		}
+
+		/* A block with no language says so only where it can be given one,
+		   and only while the pointer is over it. */
+		.markdown-view
+			.ProseMirror:not([contenteditable="true"])
+			.markdown-code-language[data-plain],
+		.markdown-view
+			.ProseMirror
+			pre:not(:hover)
+			.markdown-code-language[data-plain] {
+			display: none;
 		}
 
 		.markdown-view .ProseMirror .syntax-comment {
@@ -1055,20 +1174,24 @@
 			outline: none;
 		}
 
+		/* The image has no border to colour, so the selection is a ring, the
+		   same one a selected video gets. */
 		.markdown-view
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			[data-markdown-image-block].ProseMirror-selectednode:is(
 				img,
 				.markdown-pdf-embed
 			) {
 			border-color: var(--atelier-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			.markdown-image-embed.ProseMirror-selectednode
 			> .markdown-image-block-content {
 			border-color: var(--atelier-ring);
+			box-shadow: 0 0 0 2px var(--atelier-ring);
 		}
 
 		.markdown-view
@@ -1470,7 +1593,7 @@
 		}
 
 		.markdown-view
-			.ProseMirror
+			.ProseMirror.ProseMirror-focused
 			.markdown-video-embed.ProseMirror-selectednode
 			> .markdown-video-frame {
 			box-shadow: 0 0 0 2px var(--atelier-ring);
@@ -1731,6 +1854,282 @@
 			outline-offset: 2px;
 		}
 
+		/* Table row and column controls. The grips sit on the table's left and
+		   top borders, over the hovered row and column; the "+" bars run along
+		   its bottom and right edges. They are portaled out of the table, whose
+		   element is a scroll room that clips anything drawn outside it.
+
+		   An editable table keeps a strip below its grid for the bottom bar, so
+		   the bar never lies over the next block's first line, where a click
+		   meant for that line would add a row. It is kept whether the bar shows
+		   or not: the text below does not jump as the pointer comes and goes. */
+		.markdown-view .ProseMirror[contenteditable="true"] table {
+			padding-bottom: 1rem;
+		}
+
+		/* A table in a list or a quote is laid out as a table, which draws no
+		   padding of its own around the grid inside it; as a block it keeps
+		   the strip, and its grid is the same table as before. */
+		.markdown-view
+			.ProseMirror[contenteditable="true"]
+			:not(.ProseMirror)
+			> table {
+			display: flow-root;
+		}
+
+		@media (pointer: coarse) {
+			.markdown-view .ProseMirror[contenteditable="true"] table {
+				padding-bottom: 2rem;
+			}
+		}
+
+		.markdown-table-grip,
+		.markdown-table-add {
+			position: fixed;
+			z-index: 40;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0;
+			border: 1px solid var(--atelier-border);
+			background: var(--atelier-panel);
+			color: var(--atelier-fg-subtle);
+			cursor: pointer;
+			animation: markdown-table-control-in var(--atelier-duration) ease-out;
+			transition:
+				background-color var(--atelier-duration-fast) ease,
+				border-color var(--atelier-duration-fast) ease,
+				color var(--atelier-duration-fast) ease;
+		}
+
+		.markdown-table-grip {
+			border-radius: 5px;
+			box-shadow: var(--atelier-shadow-sm);
+		}
+
+		.markdown-table-grip svg {
+			width: 12px;
+			height: 12px;
+			stroke-width: 2;
+		}
+
+		.markdown-table-grip:hover {
+			border-color: var(--atelier-border-strong);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
+		}
+
+		.markdown-table-grip[data-active="true"] {
+			border-color: var(--atelier-accent);
+			background: var(--atelier-accent);
+			color: var(--atelier-accent-on);
+		}
+
+		.markdown-table-add {
+			border-color: transparent;
+			border-radius: 4px;
+			background: var(--atelier-bg-subtle);
+			color: var(--atelier-fg-faint);
+		}
+
+		.markdown-table-add svg {
+			width: 12px;
+			height: 12px;
+			stroke-width: 2;
+		}
+
+		/* The right bar is a thin strip: its "+" shows once it is pointed at. */
+		.markdown-table-add[data-edge="right"] {
+			background: color-mix(in srgb, var(--atelier-bg-subtle) 70%, transparent);
+		}
+
+		.markdown-table-add[data-edge="right"] svg {
+			width: 10px;
+			height: 10px;
+			opacity: 0;
+		}
+
+		.markdown-table-add[data-edge="right"]:hover svg {
+			opacity: 1;
+		}
+
+		/* A finger needs more than the grips' 14 by 24 pixels. The grip stays
+		   the size it is drawn; what answers the touch reaches past it. */
+		@media (pointer: coarse) {
+			.markdown-table-grip::after {
+				position: absolute;
+				inset: -10px;
+				content: "";
+			}
+
+			.markdown-table-add[data-edge="right"]::after {
+				position: absolute;
+				inset: 0 -12px;
+				content: "";
+			}
+
+			.markdown-table-add[data-edge="right"] svg {
+				opacity: 1;
+			}
+		}
+
+		.markdown-table-add:hover {
+			border-color: var(--atelier-border);
+			background: var(--atelier-bg-hover);
+			color: var(--atelier-fg-muted);
+		}
+
+		@keyframes markdown-table-control-in {
+			from {
+				opacity: 0;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.markdown-table-grip,
+			.markdown-table-add {
+				animation: none;
+				transition: none;
+			}
+		}
+
+		/* The row or column a grip's menu is about. */
+		.markdown-view .ProseMirror table :is(th, td).markdown-table-cell-selected {
+			background-color: var(--atelier-accent-subtle);
+		}
+
+		/* The row and column menu: the slash palette's shell, with compact rows,
+		   the key for each action at its end, and the destructive ones last. */
+		.markdown-table-menu {
+			outline: none;
+		}
+
+		.markdown-table-menu .markdown-slash-menu-scroll {
+			padding: 0.3rem;
+		}
+
+		.markdown-table-menu-label {
+			overflow: hidden;
+			padding: 0.4rem 0.5rem 0.3rem;
+			color: var(--atelier-fg-subtle);
+			font-size: var(--atelier-text-ui-xs);
+			font-weight: 600;
+			line-height: 1.2;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-table-menu-separator {
+			height: 1px;
+			margin: 0.25rem 0.3rem;
+			background: var(--atelier-border-subtle);
+		}
+
+		.markdown-table-menu-item {
+			display: flex;
+			min-height: 1.875rem;
+			align-items: center;
+			gap: 0.55rem;
+			padding: 0 0.5rem;
+			border-radius: 6px;
+			color: var(--atelier-fg);
+			cursor: pointer;
+			font-size: 0.8125rem;
+			user-select: none;
+		}
+
+		.markdown-table-menu-item > svg {
+			width: 0.9rem;
+			height: 0.9rem;
+			flex-shrink: 0;
+			color: var(--atelier-fg-subtle);
+			stroke-width: 1.8;
+		}
+
+		.markdown-table-menu-item-label {
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.markdown-table-menu-shortcut {
+			color: var(--atelier-fg-faint);
+			font-family: inherit;
+			font-size: var(--atelier-text-ui-xs);
+			letter-spacing: 0.02em;
+			white-space: nowrap;
+		}
+
+		.markdown-table-menu-item[data-active="true"] {
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-table-menu-item[data-active="true"] > svg {
+			color: var(--atelier-fg-muted);
+		}
+
+		.markdown-table-menu-item[data-danger="true"],
+		.markdown-table-menu-item[data-danger="true"] > svg {
+			color: var(--atelier-danger);
+		}
+
+		.markdown-table-menu-item[data-danger="true"][data-active="true"] {
+			background: var(--atelier-danger-subtle);
+		}
+
+		.markdown-table-menu-align {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 2px;
+			margin: 0.15rem 0.3rem;
+			padding: 2px;
+			border-radius: 7px;
+			background: var(--atelier-bg-subtle);
+		}
+
+		.markdown-table-menu-align-option {
+			display: flex;
+			height: 1.625rem;
+			align-items: center;
+			justify-content: center;
+			border-radius: 5px;
+			color: var(--atelier-fg-subtle);
+			cursor: pointer;
+		}
+
+		.markdown-table-menu-align-option svg {
+			width: 0.9rem;
+			height: 0.9rem;
+			stroke-width: 1.8;
+		}
+
+		/* The column's alignment is the one filled in; the one the keys are on
+		   has the focus ring, so the two never read as two chosen values. */
+		.markdown-table-menu-align-option[data-active="true"] {
+			color: var(--atelier-fg);
+		}
+
+		.markdown-table-menu:not([data-keyboard="true"])
+			.markdown-table-menu-align-option[data-active="true"]:not(
+				[data-checked="true"]
+			) {
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-table-menu-align-option[data-checked="true"] {
+			background: var(--atelier-panel);
+			color: var(--atelier-link);
+			box-shadow: var(--atelier-shadow-sm);
+		}
+
+		.markdown-table-menu[data-keyboard="true"]
+			.markdown-table-menu-align-option[data-active="true"] {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: -2px;
+		}
+
 		/* Slash command palette. It is portaled into .atelier-root so it keeps the
 		   same typography, theme tokens, and sizing model as the editor shell. */
 		.markdown-slash-menu {
@@ -1929,6 +2328,31 @@
 
 		.markdown-embed-file-search input::placeholder {
 			color: var(--atelier-fg-subtle);
+		}
+
+		.markdown-code-language-option {
+			display: flex;
+			min-height: 2rem;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.5rem;
+			padding: 0.3rem 0.5rem;
+			border-radius: 7px;
+			cursor: pointer;
+			font-size: 0.8125rem;
+			user-select: none;
+		}
+
+		.markdown-code-language-option[data-selected="true"] {
+			background: var(--atelier-accent-subtle);
+			box-shadow: inset 0 0 0 1px var(--atelier-accent-border);
+		}
+
+		.markdown-code-language-option svg {
+			width: 0.875rem;
+			height: 0.875rem;
+			flex-shrink: 0;
+			color: var(--atelier-link);
 		}
 
 		.markdown-embed-file-option-icon img {
