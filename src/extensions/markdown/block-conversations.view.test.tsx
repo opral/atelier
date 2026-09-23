@@ -640,6 +640,73 @@ describe("block conversations follow their block through edits", () => {
 		}
 	});
 
+	test("the removal is announced when the thread came back and went again while it was looked up", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			const target = (
+				await lix.execute("SELECT target FROM lix_conversation WHERE id = $1", [
+					conversationId,
+				])
+			).rows[0]!.target as string;
+			// The first lookup answers from its moment, then waits.
+			let lookups = 0;
+			let release!: () => void;
+			const held = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const execute = lix.execute.bind(lix);
+			lix.execute = (async (...args: Parameters<Lix["execute"]>) => {
+				const result = await execute(...args);
+				if (
+					typeof args[0] === "string" &&
+					args[0].startsWith("SELECT id FROM lix_conversation WHERE id IN") &&
+					++lookups === 1
+				)
+					await held;
+				return result;
+			}) as Lix["execute"];
+			const settle = () =>
+				act(async () => {
+					await new Promise((resolve) => setTimeout(resolve, 300));
+				});
+
+			// The thread leaves the comments (its row let go) ...
+			await lix.execute(
+				"UPDATE lix_conversation SET target = NULL WHERE id = $1",
+				[conversationId],
+			);
+			await waitFor(() => expect(lookups).toBe(1));
+			// ... comes back ...
+			await lix.execute(
+				"UPDATE lix_conversation SET target = $2 WHERE id = $1",
+				[conversationId, target],
+			);
+			await settle();
+			// ... and goes with its block, while the first lookup is still out.
+			await lix.execute(
+				"UPDATE lix_file SET content = $2 WHERE id = $1",
+				[fileId, new TextEncoder().encode("# Title\n\nFirst para.\n\nTail.\n")],
+				{ originKey: "an-agent" },
+			);
+			await waitFor(() =>
+				expect(editor.state.doc.textContent).not.toContain("Second para."),
+			);
+			await settle();
+			release();
+			await waitFor(() =>
+				expect(
+					document.querySelector(".markdown-comment-notice")?.textContent,
+				).toContain("A comment thread was removed with its block."),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
 	test("an outside write elsewhere leaves the writer's merge undoable, and the thread goes back", async () => {
 		const view = await setup(
 			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",

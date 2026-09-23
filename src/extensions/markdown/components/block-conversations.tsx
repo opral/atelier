@@ -728,6 +728,9 @@ const BlockConversationsController = memo(
 		// lookup is out must find it missing again, not forget it.
 		const knownThreads = useRef(new Map<string, BlockThread>());
 		const lookingUp = useRef(new Set<string>());
+		// Threads that came back while their lookup was out: its answer is
+		// about a moment that has passed.
+		const cameBack = useRef(new Set<string>());
 		const mounted = useRef(true);
 		useEffect(() => {
 			mounted.current = true;
@@ -737,60 +740,83 @@ const BlockConversationsController = memo(
 		}, []);
 		useEffect(() => {
 			if (commentsResult.status !== "success") return;
+			const lookUp = (missing: readonly BlockThread[]) => {
+				const ids = missing.map((thread) => thread.conversationId);
+				for (const id of ids) lookingUp.current.add(id);
+				void (async () => {
+					const list = (values: readonly string[]) =>
+						values.map((_, index) => `$${index + 1}`).join(", ");
+					const existing = await lix.execute(
+						`SELECT id FROM lix_conversation WHERE id IN (${list(ids)})`,
+						ids,
+					);
+					const exists = new Set(
+						existing.rows.map((row) => String((row as { id: unknown }).id)),
+					);
+					const deleted = missing.filter(
+						(thread) => !exists.has(thread.conversationId),
+					);
+					let withBlock: string[] = [];
+					if (deleted.length > 0) {
+						const nodeIds = deleted.map((thread) => thread.nodeId);
+						const blockRows = await lix.execute(
+							`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
+							[...nodeIds, fileId],
+						);
+						const stillThere = new Set(
+							blockRows.rows.map((row) => String((row as { id: unknown }).id)),
+						);
+						for (const thread of deleted)
+							carriers.current.delete(thread.conversationId);
+						withBlock = deleted
+							.filter((thread) => !stillThere.has(thread.nodeId))
+							.map((thread) => thread.conversationId);
+					}
+					// Settled: a thread that has not come back is no longer known,
+					// unless it came back and went again while this lookup was out;
+					// that one is looked up again.
+					const again: BlockThread[] = [];
+					for (const thread of missing) {
+						const id = thread.conversationId;
+						lookingUp.current.delete(id);
+						const returned = cameBack.current.delete(id);
+						if (latest.current.threads.has(id)) continue;
+						if (
+							returned &&
+							exists.has(id) &&
+							!detachedIds.current.has(id) &&
+							knownThreads.current.has(id)
+						)
+							again.push(knownThreads.current.get(id)!);
+						else knownThreads.current.delete(id);
+					}
+					if (!mounted.current) return;
+					if (withBlock.length > 0)
+						setRemoved((current) => [
+							...current,
+							...withBlock.filter((id) => !current.includes(id)),
+						]);
+					if (again.length > 0) lookUp(again);
+				})().catch((error: unknown) => {
+					// Unsettled: the next read looks again.
+					for (const id of ids) {
+						lookingUp.current.delete(id);
+						cameBack.current.delete(id);
+					}
+					console.error(error);
+				});
+			};
 			const missing = [...knownThreads.current.values()].filter(
 				(thread) =>
 					!threads.has(thread.conversationId) &&
 					!detachedIds.current.has(thread.conversationId) &&
 					!lookingUp.current.has(thread.conversationId),
 			);
-			for (const [id, thread] of threads) knownThreads.current.set(id, thread);
-			if (missing.length === 0) return;
-			const ids = missing.map((thread) => thread.conversationId);
-			for (const id of ids) lookingUp.current.add(id);
-			void (async () => {
-				const list = (values: readonly string[]) =>
-					values.map((_, index) => `$${index + 1}`).join(", ");
-				const existing = await lix.execute(
-					`SELECT id FROM lix_conversation WHERE id IN (${list(ids)})`,
-					ids,
-				);
-				const exists = new Set(
-					existing.rows.map((row) => String((row as { id: unknown }).id)),
-				);
-				const deleted = missing.filter(
-					(thread) => !exists.has(thread.conversationId),
-				);
-				let withBlock: string[] = [];
-				if (deleted.length > 0) {
-					const nodeIds = deleted.map((thread) => thread.nodeId);
-					const blockRows = await lix.execute(
-						`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
-						[...nodeIds, fileId],
-					);
-					const stillThere = new Set(
-						blockRows.rows.map((row) => String((row as { id: unknown }).id)),
-					);
-					for (const thread of deleted)
-						carriers.current.delete(thread.conversationId);
-					withBlock = deleted
-						.filter((thread) => !stillThere.has(thread.nodeId))
-						.map((thread) => thread.conversationId);
-				}
-				// Settled: a thread that has not come back is no longer known.
-				for (const id of ids) {
-					lookingUp.current.delete(id);
-					if (!latest.current.threads.has(id)) knownThreads.current.delete(id);
-				}
-				if (mounted.current && withBlock.length > 0)
-					setRemoved((current) => [
-						...current,
-						...withBlock.filter((id) => !current.includes(id)),
-					]);
-			})().catch((error: unknown) => {
-				// Unsettled: the next read looks again.
-				for (const id of ids) lookingUp.current.delete(id);
-				console.error(error);
-			});
+			for (const [id, thread] of threads) {
+				knownThreads.current.set(id, thread);
+				if (lookingUp.current.has(id)) cameBack.current.add(id);
+			}
+			if (missing.length > 0) lookUp(missing);
 		}, [commentsResult.status, fileId, lix, threads]);
 		useEffect(() => {
 			const onTransaction = ({ transaction }: { transaction: Transaction }) => {
