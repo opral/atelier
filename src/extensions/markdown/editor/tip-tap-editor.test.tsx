@@ -1928,8 +1928,8 @@ test("a successful local persist marks the editor clean before its observer echo
 	});
 });
 
-test("persists a leading space in a paragraph without diverging from the editor", async () => {
-	const fileId = fakeUuid("file_leading_paragraph_space");
+test("reconciles text the Markdown serializer removes after saving", async () => {
+	const fileId = fakeUuid("file_canonical_paragraph_space");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
 		markdown: "Initial\n",
@@ -1947,12 +1947,8 @@ test("persists a leading space in a paragraph without diverging from the editor"
 		});
 	});
 	await waitFor(async () => {
-		const saved = await decodeFileMarkdown(lix, fileId);
-		expect(saved).toContain("&#x20;online-0-10");
-		expect(parseMarkdown(saved).children[0]?.children?.[0]?.value).toBe(
-			" online-0-10",
-		);
-		expect(editor.state.doc.textContent).toBe(" online-0-10");
+		expect(await decodeFileMarkdown(lix, fileId)).toBe("online-0-10\n");
+		expect(editor.state.doc.textContent).toBe("online-0-10");
 	});
 });
 
