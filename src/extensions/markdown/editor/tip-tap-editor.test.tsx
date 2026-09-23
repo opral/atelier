@@ -2013,6 +2013,84 @@ test("an outside write elsewhere keeps the writer's unsaved trailing space, bloc
 	);
 });
 
+test("an outside write merged next to an unsaved space saves only what the file says on the next keystroke", async () => {
+	const fileId = fakeUuid("file_review_double_space");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "# Title\n\nAlpha one.\n\nDelta four.\n",
+		persistDebounceMs: 0,
+	});
+	let deltaAt = 0;
+	editor.state.doc.forEach((node, offset, index) => {
+		if (index === 2) deltaAt = offset + 1 + "Delta".length;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(deltaAt);
+		editor.commands.splitBlock();
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("Delta\n\nfour.\n"),
+	);
+	await settleMarkdownObserver();
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		file.replace("\nfour.\n", "\nNow four.\n"),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.child(3).textContent).toContain("Now"),
+	);
+	await settleMarkdownObserver();
+	// The writer types somewhere else entirely.
+	let alphaEnd = 0;
+	editor.state.doc.forEach((node, offset, index) => {
+		if (index === 1) alphaEnd = offset + node.nodeSize - 1;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(alphaEnd);
+		editor.commands.insertContent("!");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("Alpha one.!"),
+	);
+	expect(await decodeFileMarkdown(lix, fileId)).toBe(
+		"# Title\n\nAlpha one.!\n\nDelta\n\nNow four.\n",
+	);
+});
+
+test("an outside write that prepends a block keeps the writer's caret in the old first block", async () => {
+	const fileId = fakeUuid("file_review_prepend");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "# Title\n\nAlpha one.\n\nDelta four.\n",
+		persistDebounceMs: 0,
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(4);
+	});
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Intro.\n\n" + file.replace("Delta four.", "Delta 4."),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.child(0).textContent).toBe("Intro."),
+	);
+	await act(async () => {
+		editor.commands.insertContent("X");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("X"),
+	);
+	expect(await decodeFileMarkdown(lix, fileId)).toBe(
+		"Intro.\n\n# TitXle\n\nAlpha one.\n\nDelta 4.\n",
+	);
+});
+
 test("delivers external markdown revisions without origin reads", async () => {
 	const fileId = fakeUuid("file_external_single_delivery");
 	const { lix } = await renderEditorForMarkdownFile({

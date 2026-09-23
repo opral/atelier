@@ -193,3 +193,146 @@ describe("outsideWriteTransaction against what the file can hold", () => {
 		expect(editor.state.selection.from).toBe(at(editor, 6, "end"));
 	});
 });
+
+/** The caret's block text and its offset in it. */
+const caretAt = (editor: Editor) => {
+	const { $from } = editor.state.selection;
+	return [$from.parent.textContent, $from.parentOffset];
+};
+
+describe("outsideWriteTransaction edits what changed, where it is", () => {
+	const DOC =
+		"# Title\n\nAlpha one.\n\nBravo two.\n\nCharlie three.\n\nDelta four.\n";
+
+	test("a block prepended above the first keeps the old first block and the caret in it", () => {
+		const editor = editorFor(DOC);
+		const before = ids(editor);
+		editor.commands.setTextSelection(at(editor, 0, 3));
+		apply(editor, `Intro.\n\n${DOC.replace("Delta four.", "Delta 4.")}`);
+		expect(texts(editor)).toEqual([
+			"Intro.",
+			"Title",
+			"Alpha one.",
+			"Bravo two.",
+			"Charlie three.",
+			"Delta 4.",
+		]);
+		expect(ids(editor).slice(1)).toEqual(before);
+		expect(caretAt(editor)).toEqual(["Title", 3]);
+	});
+
+	test("the first block removed: the new first block keeps its id and unsaved space", () => {
+		const editor = editorFor(DOC);
+		editor.commands.setTextSelection(at(editor, 1, "end"));
+		editor.commands.insertContent(" ");
+		const alpha = ids(editor)[1];
+		apply(editor, saved(editor).replace("# Title\n\n", ""));
+		expect(texts(editor)[0]).toBe("Alpha one. ");
+		expect(ids(editor)[0]).toBe(alpha);
+		expect(caretAt(editor)).toEqual(["Alpha one. ", 11]);
+	});
+
+	test("a change touching the writer's unsaved space leaves the editor holding what the file does", () => {
+		for (const [agent, text] of [
+			["Now four.", "Now four."],
+			["Xfour.", "Xfour."],
+		] as const) {
+			const editor = editorFor(DOC);
+			editor.commands.setTextSelection(at(editor, 4, "Delta".length));
+			editor.commands.splitBlock(); // " four." (the file keeps "four.")
+			const file = saved(editor).replace("\nfour.\n", `\n${agent}\n`);
+			apply(editor, file);
+			expect(saved(editor)).toBe(file);
+			expect(texts(editor)[5]).toBe(text);
+		}
+	});
+
+	test("an edit to one list item leaves the others, the caret and the writer's undo", () => {
+		const editor = editorFor(
+			"# L\n\n- one\n- two\n- three\n- four\n\nAfter.\n",
+		);
+		const itemIds = () => {
+			const list: unknown[] = [];
+			editor.state.doc
+				.child(1)
+				.forEach((item) => list.push(item.attrs.data?.id));
+			return list;
+		};
+		let pos = -1;
+		editor.state.doc.descendants((node, offset) => {
+			if (node.isText && node.text === "three") pos = offset + 3;
+		});
+		editor.commands.setTextSelection(pos);
+		editor.commands.insertContent("X");
+		const items = itemIds();
+		const listId = ids(editor)[1];
+		apply(editor, saved(editor).replace("- one", "- ONE"));
+		expect(caretAt(editor)).toEqual(["thrXee", 4]);
+		expect(ids(editor)[1]).toBe(listId);
+		expect(itemIds()).toEqual(items);
+		editor.commands.undo();
+		expect(saved(editor)).toContain("- ONE");
+		expect(saved(editor)).toContain("- three");
+	});
+
+	test("a heading's level changes in place", () => {
+		const editor = editorFor(DOC);
+		const before = ids(editor);
+		editor.commands.setTextSelection(at(editor, 0, 3));
+		apply(editor, DOC.replace("# Title", "## Title"));
+		expect(editor.state.doc.child(0).attrs.level).toBe(2);
+		expect(ids(editor)).toEqual(before);
+		expect(caretAt(editor)).toEqual(["Title", 3]);
+	});
+
+	test("marks changed alone are re-marked, the caret stays", () => {
+		const editor = editorFor(DOC);
+		editor.commands.setTextSelection(at(editor, 2, 2));
+		const file = DOC.replace("Bravo two.", "**Bravo** two.");
+		apply(editor, file);
+		expect(saved(editor)).toBe(file);
+		expect(caretAt(editor)).toEqual(["Bravo two.", 2]);
+	});
+
+	test("a write that changes too much to align still leaves unchanged blocks alone", () => {
+		const count = 2000;
+		const blocks = Array.from(
+			{ length: count },
+			(_, index) => `Paragraph ${index} text.`,
+		);
+		const editor = editorFor(`${blocks.join("\n\n")}\n`);
+		editor.commands.setTextSelection(at(editor, 1, 4));
+		const before = ids(editor);
+		apply(
+			editor,
+			`${blocks.map((block, index) => (index % 3 === 0 ? `${block} x` : block)).join("\n\n")}\n`,
+		);
+		const after = ids(editor);
+		// Changed blocks are edited inside, so every block keeps its id.
+		expect(after).toEqual(before);
+		expect(caretAt(editor)).toEqual(["Paragraph 1 text.", 4]);
+	});
+
+	test("the writer's typing, then the agent's edit in the same block, undo takes the typing only", () => {
+		const editor = editorFor(DOC);
+		editor.commands.setTextSelection(at(editor, 1, "end"));
+		editor.commands.insertContent(" typed");
+		apply(editor, saved(editor).replace("Alpha", "ALPHA"));
+		expect(texts(editor)[1]).toBe("ALPHA one. typed");
+		editor.commands.undo();
+		expect(texts(editor)[1]).toBe("ALPHA one.");
+	});
+
+	test("one of three identical paragraphs removed", () => {
+		const editor = editorFor("A.\n\nSame.\n\nSame.\n\nSame.\n\nZ.\n");
+		apply(editor, "A.\n\nSame.\n\nSame.\n\nZ changed.\n");
+		expect(texts(editor)).toEqual(["A.", "Same.", "Same.", "Z changed."]);
+	});
+
+	test("frontmatter added with an edit elsewhere", () => {
+		const editor = editorFor(DOC);
+		const file = `---\ntitle: x\n---\n\n${DOC.replace("Delta four.", "Delta 4.")}`;
+		apply(editor, file);
+		expect(saved(editor)).toBe(file);
+	});
+});
