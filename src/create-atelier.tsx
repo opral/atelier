@@ -235,9 +235,12 @@ function LiveAtelier(props: AtelierProps) {
 		const state = lifetime.current;
 		const generation = ++state.generation;
 		return () => {
-			queueMicrotask(() => {
+			// React can replay passive effects in a later task under StrictMode.
+			// A microtask can therefore dispose the instance before that replay
+			// reconnects it, leaving onReady with an unusable handle.
+			setTimeout(() => {
 				if (state.generation === generation) disposeAtelierRuntime(instance);
-			});
+			}, 0);
 		};
 	}, [instance]);
 	const handle = useMemo<AtelierHandle>(
