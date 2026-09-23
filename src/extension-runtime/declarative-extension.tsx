@@ -42,13 +42,16 @@ export function DeclarativeExtension({
 		state: ExtensionState;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
-	const documentPath = typeof view.state.filePath === "string"
-		? view.state.filePath
-		: undefined;
+	const documentPath =
+		typeof view.state.filePath === "string" ? view.state.filePath : undefined;
 	const documentAtelier = useMemo(
-		() => documentPath && atelier.scopeDocumentLix
-			? { ...atelier, lix: atelier.scopeDocumentLix(documentPath, atelier.lix) }
-			: atelier,
+		() =>
+			documentPath && atelier.scopeDocumentLix
+				? {
+						...atelier,
+						lix: atelier.scopeDocumentLix(documentPath, atelier.lix),
+					}
+				: atelier,
 		[atelier, documentPath],
 	);
 	const destination: AtelierLocation =

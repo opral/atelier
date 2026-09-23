@@ -128,7 +128,8 @@
 	.comment-body.zettel,
 	.comment-body .zettel,
 	.comment-editor.zettel {
-		--zettel-font-family: inherit;
+		/* `inherit` here would inherit Zettel's own variable, not the font. */
+		--zettel-font-family: var(--atelier-font-sans);
 		--zettel-font-size: var(--comment-body-size);
 		--zettel-line-height: var(--comment-body-line-height);
 		--zettel-text-color: var(--atelier-fg-muted);
@@ -159,11 +160,35 @@
 	.comment-editor.zettel > * + * {
 		margin-top: 6px;
 	}
+	/*
+	 * A posted comment keeps its spaces and line breaks as they were typed:
+	 * the field edits with pre-wrap, and Zettel's read-only default
+	 * (normal) would collapse runs of spaces and indentation.
+	 */
+	.comment-body .zettel_block {
+		white-space: pre-wrap;
+	}
 	.comment-body .zettel_code,
 	.comment-editor .zettel_code {
 		border-radius: var(--atelier-radius-tag);
 		padding: 4px 6px;
 		font-size: 0.92em;
+	}
+	/*
+	 * Inline code: a chip in the line. A tint of the text colour rather than
+	 * a code block's fill, which is near-white and vanishes on the white
+	 * writing field; the tint reads on white and on the checkpoint's orange.
+	 */
+	.comment-body :not(pre) > code,
+	.comment-editor :not(pre) > code {
+		border-radius: var(--atelier-radius-tag);
+		background: color-mix(in srgb, var(--atelier-fg) 7%, transparent);
+		padding: 1px 4px;
+		color: var(--zettel-code-color);
+		font-family: var(--atelier-font-mono);
+		font-size: 0.92em;
+		box-decoration-break: clone;
+		-webkit-box-decoration-break: clone;
 	}
 	.comment-body .zettel_list,
 	.comment-editor .zettel_list {
@@ -184,6 +209,10 @@
 		font-size: 1.08em;
 		font-weight: 600;
 		line-height: var(--comment-body-line-height);
+	}
+	/* A link the thread will not follow (relative, `#`) reads as text. */
+	.comment-body a:not([href]) {
+		color: inherit;
 	}
 	/* A kept blank paragraph is a visible line, as it was in the field. */
 	.comment-body p.zettel_block:empty {

@@ -9,7 +9,6 @@ import type { Document } from "@opral/zettel-ast";
 import { useLix, useQueryResult } from "@/lib/lix-react";
 import {
 	Composer,
-	emptyCommentDocument,
 	hasCommentText,
 } from "@/components/comments/comment-composer";
 import { CommentThread } from "@/components/comments/comment-thread";
@@ -39,6 +38,10 @@ export function hasConversationDraft(draft: ConversationDraft): boolean {
  * pressing it, or the row's Comment chip, does. Several conversations on one
  * commit (another client started one) read as one thread; replies go to the
  * first, whose title the row shows.
+ *
+ * The field is there from the first render, before the thread is read: the
+ * Comment chip focuses it in the same click, so the keys typed right after
+ * land in it rather than wherever focus was.
  */
 export function CommitConversationView({
 	commitId,
@@ -50,9 +53,10 @@ export function CommitConversationView({
 	setDraft,
 	unfolded,
 	onUnfoldedChange,
-	onCancel,
+	returnFocus,
 	focusRequest,
 	onFocusHandled,
+	holdFocus = false,
 	open,
 }: {
 	readonly commitId: string;
@@ -65,10 +69,15 @@ export function CommitConversationView({
 	readonly setDraft: Dispatch<SetStateAction<ConversationDraft>>;
 	readonly unfolded: boolean;
 	readonly onUnfoldedChange: (unfolded: boolean) => void;
-	/** Esc in the field: focus goes back to the checkpoint row. */
-	readonly onCancel: () => void;
+	/**
+	 * Esc in the field, or the checkpoint closing with focus in it: focus
+	 * goes back to the checkpoint's row, where it can be seen.
+	 */
+	readonly returnFocus: () => void;
 	readonly focusRequest: number;
 	readonly onFocusHandled: () => void;
+	/** See the composer's `holdFocus`. */
+	readonly holdFocus?: boolean;
 	readonly open: boolean;
 }) {
 	const lix = useLix();
@@ -86,9 +95,11 @@ export function CommitConversationView({
 	else if (comments.status === "success") lastRowsRef.current = comments.rows;
 	const rows = lastRowsRef.current;
 	// Closing a checkpoint takes focus out of a field that is folding away.
+	const returnFocusRef = useRef(returnFocus);
+	returnFocusRef.current = returnFocus;
 	useEffect(() => {
 		if (!open && rootRef.current?.contains(document.activeElement))
-			(document.activeElement as HTMLElement).blur();
+			returnFocusRef.current();
 	}, [open]);
 	const primary = conversations[0] ?? null;
 	const loadFailed = status === "error" || comments.status === "error";
@@ -102,12 +113,23 @@ export function CommitConversationView({
 	)
 		settledRef.current = true;
 	const firstLoad = !settledRef.current;
+	// Which comments may fold is decided when the checkpoint opens. What is
+	// posted while it is open (the reader's own replies) is added after the
+	// fold and never folds the thread away under the field; closing and
+	// opening again decides afresh. While it folds shut it stays as it was.
+	const foldWithinRef = useRef<number | null>(null);
+	const wasOpenRef = useRef(open);
+	if (open && !wasOpenRef.current) foldWithinRef.current = null;
+	wasOpenRef.current = open;
+	if (open && foldWithinRef.current === null && settledRef.current)
+		foldWithinRef.current = rows.length;
 
+	// The field has already emptied itself; it owns clearing the draft.
 	async function submit(document: Document) {
 		if (primary) await replyToConversation(lix, primary.id, document);
 		else await createCommitConversation(lix, commitId, document);
-		setDraft(emptyCommentDocument());
 	}
+	const replying = primary !== null || rows.length > 0;
 
 	return (
 		<div
@@ -126,6 +148,7 @@ export function CommitConversationView({
 						label="Comments"
 						expanded={unfolded}
 						onExpandedChange={onUnfoldedChange}
+						foldWithin={foldWithinRef.current ?? rows.length}
 					/>
 				</>
 			) : null}
@@ -154,16 +177,17 @@ export function CommitConversationView({
 					Loading conversation…
 				</p>
 			) : null}
-			{!readOnly && !loadFailed && !firstLoad ? (
+			{!readOnly && !loadFailed ? (
 				<Composer
-					label={rows.length > 0 ? "Reply" : "Comment on this checkpoint"}
-					placeholder={rows.length > 0 ? "Reply" : "Comment"}
+					label={replying ? "Reply" : "Comment on this checkpoint"}
+					placeholder={replying ? "Reply" : "Comment"}
 					value={draft}
 					onChange={setDraft}
 					onSubmit={submit}
-					onCancel={onCancel}
+					onCancel={returnFocus}
 					focusRequest={focusRequest}
 					onFocusHandled={onFocusHandled}
+					holdFocus={holdFocus}
 					className="mr-2 ml-[23px]"
 				/>
 			) : null}

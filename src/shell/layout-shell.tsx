@@ -1951,6 +1951,9 @@ function LayoutShellLoadedContentResolved({
 		if (!isReviewMode) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
+			// An input method's Esc cancels what it is composing, nothing more.
+			// (Safari ends a composition with keyCode 229 and isComposing false.)
+			if (event.isComposing || event.keyCode === 229) return;
 			if (reviewFloatHandlesEscape()) return;
 			exitDiffReview();
 		};

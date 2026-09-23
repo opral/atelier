@@ -2,6 +2,7 @@ import {
 	useEffect,
 	useRef,
 	useState,
+	type ClipboardEvent as ReactClipboardEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
@@ -10,10 +11,13 @@ import {
 	loadDocument,
 	registerZettelLexicalPlugin,
 	toPlainText,
+	ZettelImageNode,
+	ZettelSpanNode,
 	type Document,
 } from "@opral/zettel-lexical";
-import type { LexicalEditor } from "lexical";
+import { $getRoot, type LexicalEditor } from "lexical";
 import { isMacPlatform } from "@/lib/platform";
+import { isBlankComment, withoutImages } from "./comment-document";
 import "./comments.css";
 
 export type ComposerTone = "accent" | "neutral";
@@ -74,15 +78,39 @@ export function hasCommentText(document: Document | null | undefined): boolean {
 export type ComposerProps = {
 	readonly label: string;
 	readonly placeholder: string;
+	/**
+	 * The draft the field starts with. It is read when the field mounts and
+	 * not again: from then on the text lives in the field, and every change
+	 * is reported through `onChange`. To show another draft (another
+	 * block's), give the field a `key` for it.
+	 */
 	readonly value: Document;
 	readonly onChange: (document: Document) => void;
+	/**
+	 * Writes the comment. The field has already emptied itself (and said so
+	 * through `onChange`) when this is called, so text typed while the write
+	 * is in flight is the next comment. Do not clear the draft again when it
+	 * resolves: the field ignores it, and a caller that shows the draft
+	 * elsewhere would show nothing while the field has text. If it rejects,
+	 * the field puts the comment back unless something new was typed.
+	 */
 	readonly onSubmit: (document: Document) => Promise<void>;
 	/** The verb in the ⌘↵ hint: "send" in History, "comment" in a document. */
 	readonly submitHint?: string;
 	/** Increment to focus the field (a Comment button was pressed). */
 	readonly focusRequest?: number;
 	readonly onFocusHandled?: () => void;
-	/** Esc, after the field has let go of focus. */
+	/**
+	 * While true, focus taken out of the field by something the reader did
+	 * not do is put back, so what they type keeps landing in it: History's
+	 * Comment chip opens a review, and the review hands the keyboard to its
+	 * float as it opens. A click elsewhere, Tab or Esc lets go.
+	 */
+	readonly holdFocus?: boolean;
+	/**
+	 * Esc, after the field has let go of focus (to its wrapper, which the
+	 * review's shortcuts ignore). The caller may move focus on from there.
+	 */
 	readonly onCancel?: (document: Document) => void;
 	/**
 	 * The surface it sits on: "accent" on the orange of a selected
@@ -102,10 +130,11 @@ export type ComposerProps = {
  * thread is for reading; focus comes from a click or a Comment button), then
  * the writing field: white, the accent ring, the send button in its corner
  * and the key hints under it. Text is a Zettel document edited with Lexical,
- * so bold, italic, code, links and lists survive the round trip.
+ * so bold, italic, code, links and lists survive the round trip. Images do
+ * not: a comment is text (see `withoutImages`).
  *
- * The draft lives with the caller: the field can unmount (a checkpoint
- * closing) and come back with what was typed.
+ * The draft lives with the caller too, so the field can unmount (a
+ * checkpoint closing) and come back with what was typed.
  */
 export function Composer({
 	label,
@@ -116,6 +145,7 @@ export function Composer({
 	submitHint = "send",
 	focusRequest = 0,
 	onFocusHandled,
+	holdFocus = false,
 	onCancel,
 	tone = "accent",
 	size = "compact",
@@ -137,50 +167,90 @@ export function Composer({
 	const editor = editorRef.current;
 	const onChangeRef = useRef(onChange);
 	onChangeRef.current = onChange;
-	const initialValueRef = useRef(value);
-	const serializedRef = useRef(JSON.stringify(value));
+	const [initialValue] = useState(() => withoutImages(value));
+	const [current, setCurrent] = useState(initialValue);
+	const serializedRef = useRef(JSON.stringify(initialValue));
+	// The last text that exported as a valid document. Lexical can leave a
+	// structure Zettel rejects (seen after deleting across pasted nested
+	// lists); the field then keeps reporting, and sends, this one.
+	const lastValidRef = useRef(initialValue);
+	const exportFailedRef = useRef(false);
 	const [focused, setFocused] = useState(false);
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const hasText = hasCommentText(value);
+	const hasText = hasCommentText(current);
+	const blank = isBlankComment(current);
 	const writing = focused;
 	const inDocument = size === "document";
-	const expanded = inDocument || focused || hasText;
+	const expanded = inDocument || focused || !blank;
+	// Design 4a: the pill's 12px line sits in the middle of its 30px (a
+	// 15px line, 7.5px either side); writing is 12.5px on 18px.
 	const textSize = inDocument
 		? "text-[13px] leading-[19px]"
 		: expanded
 			? "text-[12.5px] leading-[18px]"
-			: "text-[12px] leading-[18px]";
+			: "text-[12px] leading-[15px]";
+
+	function readDocument(): Document {
+		try {
+			const document = exportDocument(editor);
+			exportFailedRef.current = false;
+			lastValidRef.current = document;
+			return document;
+		} catch (cause) {
+			// Once per broken stretch, not once per keystroke.
+			if (!exportFailedRef.current)
+				console.warn(
+					"The comment field holds a structure that is not a valid Zettel document; keeping the last valid text.",
+					cause,
+				);
+			exportFailedRef.current = true;
+			return lastValidRef.current;
+		}
+	}
 
 	useEffect(() => {
 		editor.setRootElement(fieldRef.current);
-		const unregisterPlugin = registerZettelLexicalPlugin(editor);
-		loadDocument(editor, initialValueRef.current);
+		// Comments are written the way people write in chat: **bold**, `code`,
+		// "- " for a list, and bare URLs become links.
+		const unregisterPlugin = registerZettelLexicalPlugin(editor, {
+			markdownShortcuts: true,
+		});
+		// Every way in (paste, drop, a stored draft) meets the same rule.
+		const unregisterImages = editor.registerNodeTransform(
+			ZettelImageNode,
+			(image) => {
+				if (!image.alt.trim()) {
+					image.remove();
+					return;
+				}
+				// Its marks carry a link it sat in into the posted comment.
+				image.replace(
+					new ZettelSpanNode({ text: image.alt, marks: image.marks }),
+				);
+			},
+		);
+		loadDocument(editor, initialValue);
 		const unregisterChanges = editor.registerUpdateListener(
 			({ dirtyElements, dirtyLeaves }) => {
 				if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
-				const document = exportDocument(editor);
+				const document = readDocument();
 				const serialized = JSON.stringify(document);
 				if (serialized === serializedRef.current) return;
 				serializedRef.current = serialized;
 				setError(null);
+				setCurrent(document);
 				onChangeRef.current(document);
 			},
 		);
 		return () => {
 			unregisterChanges();
+			unregisterImages();
 			unregisterPlugin();
 			editor.setRootElement(null);
 		};
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- mount only: `value` seeds the field once (see ComposerProps).
 	}, [editor]);
-
-	// A draft replaced from outside (cleared after sending elsewhere, restored).
-	useEffect(() => {
-		const serialized = JSON.stringify(value);
-		if (serialized === serializedRef.current) return;
-		serializedRef.current = serialized;
-		loadDocument(editor, value);
-	}, [editor, value]);
 
 	useEffect(() => {
 		if (focusRequest === 0) return;
@@ -188,26 +258,67 @@ export function Composer({
 		onFocusHandled?.();
 	}, [editor, focusRequest, onFocusHandled]);
 
-	function replaceDocument(document: Document) {
-		serializedRef.current = JSON.stringify(document);
-		loadDocument(editor, document);
-		onChangeRef.current(document);
+	useEffect(() => {
+		const field = fieldRef.current;
+		if (!holdFocus || !field) return;
+		let held = field.contains(document.activeElement);
+		const onFocusIn = (event: FocusEvent) => {
+			if (field.contains(event.target as Node)) held = true;
+			else if (held) {
+				// Focus first, in this task, so no key lands in between; then
+				// the caret goes back to where it was.
+				field.focus({ preventScroll: true });
+				editor.focus();
+			}
+		};
+		const letGo = () => {
+			held = false;
+		};
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Tab" || event.key === "Escape") held = false;
+		};
+		document.addEventListener("focusin", onFocusIn, true);
+		document.addEventListener("pointerdown", letGo, true);
+		document.addEventListener("keydown", onKey, true);
+		return () => {
+			document.removeEventListener("focusin", onFocusIn, true);
+			document.removeEventListener("pointerdown", letGo, true);
+			document.removeEventListener("keydown", onKey, true);
+		};
+	}, [editor, holdFocus]);
+
+	function replaceDocument(next: Document) {
+		const hadFocus =
+			fieldRef.current?.contains(globalThis.document.activeElement) ?? false;
+		serializedRef.current = JSON.stringify(next);
+		lastValidRef.current = next;
+		loadDocument(editor, next);
+		// Zettel's loadDocument clears the root with the caret inside it, and
+		// the selection falls back to the root: the next key would start a
+		// bare Lexical paragraph outside the document's blocks (Shift+Enter
+		// then splits it instead of breaking the line). Put the caret back in
+		// the last block while the field is being typed in.
+		if (hadFocus)
+			editor.update(() => $getRoot().selectEnd(), { discrete: true });
+		setCurrent(next);
+		onChangeRef.current(next);
 	}
 
 	async function send() {
-		const document = exportDocument(editor);
+		const document = readDocument();
 		if (!hasCommentText(document) || sending) return;
 		setSending(true);
 		setError(null);
-		// Cleared before the write, so text typed while it is in flight is
-		// the next comment rather than lost when the field clears afterwards.
+		// The field empties before the write, so text typed while it is in
+		// flight is the next comment. Callers must not clear it afterwards
+		// (see ComposerProps.onSubmit).
 		replaceDocument(emptyCommentDocument());
 		try {
-			await onSubmit(trimEmptyBlocks(document));
+			await onSubmit(trimEmptyBlocks(withoutImages(document)));
 			// The reading view keeps the field for a follow-up.
 			if (size === "view") focusEnd(editor, fieldRef.current);
 		} catch (cause) {
-			if (!hasCommentText(exportDocument(editor))) replaceDocument(document);
+			if (!hasCommentText(readDocument())) replaceDocument(document);
 			setError(
 				cause instanceof Error && cause.message
 					? `Couldn't send: ${cause.message}`
@@ -228,19 +339,39 @@ export function Composer({
 			if (inField) void send();
 			return;
 		}
-		if (event.key === "Escape" && inField && !event.nativeEvent.isComposing) {
+		if (event.key === "Escape" && inField && !isComposing(event)) {
 			event.preventDefault();
 			event.stopPropagation();
 			// Focus stays on the field's wrapper, which ignores the review's
 			// shortcuts, so a reflexive ⌘↵ after Esc can't restore a file.
 			rootRef.current?.focus({ preventScroll: true });
-			onCancel?.(exportDocument(editor));
+			onCancel?.(readDocument());
+		}
+	}
+
+	// An input method uses Esc to cancel what it is composing. That Esc is
+	// the IME's: it reaches the text (Lexical ends the composition) and
+	// stops there, before the review's Esc closes the checkpoint.
+	function onKeyDownBubble(event: ReactKeyboardEvent<HTMLDivElement>) {
+		if (event.key === "Escape" && isComposing(event)) event.stopPropagation();
+	}
+
+	function onPaste(event: ReactClipboardEvent<HTMLDivElement>) {
+		const data = event.clipboardData;
+		const hasClipboardText =
+			data.types.includes("text/plain") || data.types.includes("text/html");
+		const image = [...data.files].some((file) =>
+			file.type.startsWith("image/"),
+		);
+		if (image && !hasClipboardText) {
+			event.preventDefault();
+			setError("Comments are text: an image can't be added.");
 		}
 	}
 
 	const modifier = isMacPlatform() ? "⌘" : "Ctrl";
 	if (size === "view") {
-		const open = focused || hasText;
+		const open = focused || !blank;
 		return (
 			<div
 				ref={rootRef}
@@ -269,7 +400,7 @@ export function Composer({
 					}}
 				>
 					<div className={`relative min-w-0 ${open ? "min-h-[38px]" : ""}`}>
-						{!hasText ? (
+						{blank ? (
 							<span
 								aria-hidden="true"
 								className="comment-field-placeholder pointer-events-none absolute inset-x-0 top-0 truncate text-[14px] leading-[21px]"
@@ -286,9 +417,13 @@ export function Composer({
 							aria-keyshortcuts="Meta+Enter Control+Enter"
 							contentEditable
 							suppressContentEditableWarning
+							// Editable is tabbable already; said here for the linter.
+							tabIndex={0}
 							spellCheck
 							onFocus={() => setFocused(true)}
 							onBlur={() => setFocused(false)}
+							onKeyDown={onKeyDownBubble}
+							onPaste={onPaste}
 							className="zettel comment-editor max-h-[40vh] min-w-0 overflow-y-auto text-[14px] leading-[21px]"
 						/>
 					</div>
@@ -338,13 +473,15 @@ export function Composer({
 			<div
 				role="presentation"
 				data-state={writing ? "writing" : hasText ? "draft" : "resting"}
-				className={`comment-field flex cursor-text items-end gap-2 rounded-control ${
+				className={`comment-field flex cursor-text items-end rounded-control ${
 					!expanded
-						? "min-h-[30px] px-[9px] py-1.5"
+						? "min-h-[30px] gap-2 px-[9px] py-[7.5px]"
 						: inDocument
-							? "min-h-8 py-1 pr-1 pl-[9px]"
+							? // Handoff N2/N4: a 1px border and 9px of padding put the text
+								// 10px in; 6px to the send button.
+								"min-h-8 gap-1.5 py-1 pr-1 pl-[10px]"
 							: // The design's 1px border plus 4px padding; the edge here is a shadow.
-								"min-h-[34px] py-[5px] pr-[5px] pl-[10px]"
+								"min-h-[34px] gap-2 py-[5px] pr-[5px] pl-[10px]"
 				}`}
 				onMouseDown={(event) => {
 					// A press on the field's padding still lands in the text.
@@ -357,7 +494,7 @@ export function Composer({
 				<div
 					className={`relative min-w-0 flex-1 ${expanded ? "py-[3px]" : ""}`}
 				>
-					{!hasText ? (
+					{blank ? (
 						<span
 							aria-hidden="true"
 							className={`comment-field-placeholder pointer-events-none absolute inset-x-0 truncate ${
@@ -376,9 +513,13 @@ export function Composer({
 						aria-keyshortcuts="Meta+Enter Control+Enter"
 						contentEditable
 						suppressContentEditableWarning
+						// Editable is tabbable already; said here for the linter.
+						tabIndex={0}
 						spellCheck
 						onFocus={() => setFocused(true)}
 						onBlur={() => setFocused(false)}
+						onKeyDown={onKeyDownBubble}
+						onPaste={onPaste}
 						// The plugin adds "zettel" to its root; React owns className, so say it here too.
 						className={`zettel comment-editor max-h-[40vh] min-w-0 overflow-y-auto ${textSize}`}
 					/>
@@ -400,10 +541,10 @@ export function Composer({
 						<svg
 							aria-hidden="true"
 							viewBox="0 0 24 24"
-							className="size-[11px]"
+							className={inDocument ? "size-[13px]" : "size-[11px]"}
 							fill="none"
 							stroke="currentColor"
-							strokeWidth={2.5}
+							strokeWidth={inDocument ? 2.4 : 2.5}
 							strokeLinecap="round"
 							strokeLinejoin="round"
 						>
@@ -421,7 +562,7 @@ export function Composer({
 					aria-hidden="true"
 					className={`comment-secondary flex gap-2.5 ${
 						inDocument
-							? "text-[11.5px] leading-4"
+							? "text-[11.5px] leading-[normal]"
 							: "pl-0.5 text-[10.5px] leading-3"
 					}`}
 				>
@@ -431,6 +572,12 @@ export function Composer({
 			) : null}
 		</div>
 	);
+}
+
+function isComposing(event: ReactKeyboardEvent): boolean {
+	// Safari reports the key that ends a composition with keyCode 229 and
+	// isComposing already false.
+	return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
 function focusEnd(editor: LexicalEditor, root: HTMLElement | null) {

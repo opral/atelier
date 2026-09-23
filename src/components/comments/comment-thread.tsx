@@ -1,8 +1,15 @@
-import { useMemo, useState } from "react";
+import {
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	type MouseEvent as ReactMouseEvent,
+} from "react";
 import { toHtml } from "@opral/zettel-html";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import { CommentAvatar } from "./comment-avatar";
+import { withoutImages } from "./comment-document";
 import "./comments.css";
 
 export type ThreadComment = {
@@ -83,16 +90,44 @@ export function parseCommentBody(body: unknown): Document {
 	return value;
 }
 
-function renderCommentHtml(body: unknown): string | null {
+export function renderCommentHtml(body: unknown): string | null {
 	try {
-		return toHtml(parseCommentBody(body));
+		// A comment stored with an image (pasted before the field refused
+		// them) shows its alt text, not a remote picture.
+		return toHtml(withoutImages(parseCommentBody(body)));
 	} catch {
 		return null;
 	}
 }
 
+/**
+ * Where a link in a comment may go: the web and mail. A relative or `#`
+ * link would navigate the app itself, and anything else is not a place a
+ * comment should send a reader. `null` when the link is not followed.
+ */
+export function commentLinkUrl(anchor: HTMLAnchorElement): string | null {
+	const href = anchor.getAttribute("href")?.trim();
+	if (!href) return null;
+	const protocol = href.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
+	return protocol === "http" || protocol === "https" || protocol === "mailto"
+		? anchor.href
+		: null;
+}
+
 function CommentBody({ body }: { readonly body: unknown }) {
+	const ref = useRef<HTMLDivElement>(null);
 	const html = useMemo(() => renderCommentHtml(body), [body]);
+	// A link opens in a new tab, like one in a document, so reading a
+	// comment never navigates the app away; a link that may not be followed
+	// stays text.
+	useLayoutEffect(() => {
+		for (const anchor of ref.current?.querySelectorAll("a") ?? []) {
+			if (commentLinkUrl(anchor)) {
+				anchor.target = "_blank";
+				anchor.rel = "noopener noreferrer";
+			} else anchor.removeAttribute("href");
+		}
+	}, [html]);
 	if (html === null) {
 		return (
 			<p className="comment-body-text text-danger">
@@ -101,12 +136,24 @@ function CommentBody({ body }: { readonly body: unknown }) {
 		);
 	}
 	return (
+		// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Only guards the links inside, which are focusable and activate with Enter as links do.
 		<div
+			ref={ref}
 			className="comment-body"
+			onClick={guardLinkClick}
+			onAuxClick={guardLinkClick}
 			// toHtml escapes text and sanitizes links and raw HTML.
 			dangerouslySetInnerHTML={{ __html: html }}
 		/>
 	);
+}
+
+/** The same rule as the attributes above, for a link the rule missed. */
+function guardLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
+	const anchor =
+		event.target instanceof Element ? event.target.closest("a") : null;
+	if (anchor instanceof HTMLAnchorElement && !commentLinkUrl(anchor))
+		event.preventDefault();
 }
 
 /**
@@ -328,8 +375,16 @@ export function CommentThread({
 	expanded: controlledExpanded,
 	onExpandedChange,
 	collapsible = false,
+	foldWithin,
 }: {
 	readonly comments: readonly ThreadComment[];
+	/**
+	 * Fold only among the first this-many comments; later ones always show
+	 * after the fold. History passes the count when the checkpoint opened,
+	 * so what is posted while it is open never folds the thread shut under
+	 * the field.
+	 */
+	readonly foldWithin?: number;
 	readonly label?: string;
 	/**
 	 * Whether a long thread is unfolded. Pass it when the thread can remount
@@ -355,18 +410,24 @@ export function CommentThread({
 		setLocalExpanded(value);
 		onExpandedChange?.(value);
 	};
-	const folded = foldComments(comments, false);
+	const foldable =
+		foldWithin === undefined ? comments : comments.slice(0, foldWithin);
+	const later = comments.slice(foldable.length);
+	const folded = foldComments(foldable, false);
 	// Unfolded but collapsible: the first comment, the fold row turned into
 	// "Hide N comments", then everything after it.
 	const hideRow =
 		collapsible && size === "view" && expanded && folded.hidden.length > 0;
+	const shown = foldComments(foldable, expanded);
 	const { head, hidden, tail } = hideRow
 		? {
 				head: comments.slice(0, 1),
 				hidden: folded.hidden,
 				tail: comments.slice(1),
 			}
-		: foldComments(comments, expanded);
+		: shown.hidden.length > 0
+			? { ...shown, tail: [...shown.tail, ...later] }
+			: { head: comments, hidden: [], tail: [] };
 	const rows = (list: readonly ThreadComment[], offset: number) =>
 		list.map((comment, index) => (
 			<CommentRow

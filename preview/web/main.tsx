@@ -10,7 +10,11 @@ import { AtelierDeveloperTools } from "@opral/atelier/dev-tools";
 import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "@opral/atelier/style.css";
-import { HostBrandMark, HostRepositoryPicker } from "./host-navbar";
+import {
+	HostBrandMark,
+	HostRepositoryPicker,
+	PREVIEW_ACCOUNT_NAME,
+} from "./host-navbar";
 import { installMarkdownPlugin } from "./install-markdown-plugin";
 import { seedCommentsDemo } from "./seed-comments-demo";
 import { seedConversationDemo } from "./seed-conversation-demo";
@@ -22,12 +26,27 @@ const element = document.querySelector<HTMLElement>("#atelier");
 if (!element) throw new Error("Atelier web preview mount element is missing");
 const mountElement = element;
 
+/**
+ * Comments are signed by the active account, which a new lix calls
+ * "Anonymous". The top bar's chip is who the preview reads as, so the
+ * account takes its name and a demo comment shows a real author.
+ */
+async function namePreviewAccount(lix: Lix) {
+	await lix.execute(
+		"UPDATE lix_account SET name = $1 WHERE id = lix_active_account_id() AND name = 'Anonymous'",
+		[PREVIEW_ACCOUNT_NAME],
+	);
+}
+
 async function start() {
 	const lix = await openLix({
 		storage: new OpfsStorage({ name: "atelier-preview-lix-opfs-0.12" }),
 	});
 	// Before seeding: the plugin projects files as they are written.
 	await installMarkdownPlugin(lix);
+	// Before seeding too, so the rename lands in the demo's first checkpoint
+	// rather than showing as a working change.
+	await namePreviewAccount(lix);
 	await seedWorkspace(lix);
 	await seedCsvDemo(lix);
 	const params = new URLSearchParams(window.location.search);

@@ -20,7 +20,7 @@ import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
 import { splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
-import { useLix, useQueryResult } from "@/lib/lix-react";
+import { useLix, useQueryResult, type QueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviewPage,
@@ -529,6 +529,49 @@ function ReviewFileList({
 	);
 }
 
+/**
+ * The rows in pages of queries (conversations, counts, file previews). A
+ * page ends where it ended before, so a new checkpoint joins the first page
+ * instead of shifting every row into the next: a row that changed page
+ * would remount, and an open checkpoint's field would lose its text focus.
+ * Rows past the known ends (the first render, a page loaded later) are cut
+ * into pages of the usual size.
+ */
+export function pageCheckpoints<T extends { readonly commit_id: string }>(
+	checkpoints: readonly T[],
+	pageEnds: ReadonlySet<string>,
+): T[][] {
+	const pages: T[][] = [];
+	let page: T[] = [];
+	for (const checkpoint of checkpoints) {
+		page.push(checkpoint);
+		if (pageEnds.has(checkpoint.commit_id)) {
+			pages.push(page);
+			page = [];
+		}
+	}
+	for (
+		let offset = 0;
+		offset < page.length;
+		offset += CHECKPOINT_PREVIEW_PAGE_SIZE
+	)
+		pages.push(page.slice(offset, offset + CHECKPOINT_PREVIEW_PAGE_SIZE));
+	return pages;
+}
+
+/**
+ * A read whose query changed (a checkpoint joined the list, a page grew)
+ * starts over with no rows. Its last answer stays until the new one lands,
+ * so the rows on screen are not swapped for a loading line and back.
+ */
+function useHeldResult<T>(result: QueryResult<T>): QueryResult<T> {
+	const lastRef = useRef<QueryResult<T> | null>(null);
+	if (result.status !== "pending") lastRef.current = result;
+	return result.status === "pending" && lastRef.current
+		? lastRef.current
+		: result;
+}
+
 function CheckpointList({
 	atelier,
 	wide,
@@ -542,22 +585,49 @@ function CheckpointList({
 		CHECKPOINT_PREVIEW_PAGE_SIZE,
 	);
 	const [retryKey, setRetryKey] = useState(0);
-	// Keep one older endpoint for the last row and the next-page hint.
-	const checkpointResult = useQueryResult(
-		(lix) => selectCheckpoints(lix).limit(visibleCount + 1),
+	// Past the rows shown: one for the next-page hint, and room for a burst
+	// of new checkpoints, which push the rows on screen down (below).
+	const checkpointRead = useQueryResult(
+		(lix) =>
+			selectCheckpoints(lix).limit(visibleCount + CHECKPOINT_PREVIEW_PAGE_SIZE),
 		{ retryKey },
 	);
+	const checkpointResult = useHeldResult(checkpointRead);
 	const allCheckpoints = checkpointResult.rows;
-	const visibleCheckpoints = allCheckpoints.slice(0, visibleCount);
-	const hasMore = visibleCount < allCheckpoints.length;
-	const changes = useQueryResult(
-		(lix) =>
-			selectFileCheckpointChanges(
-				lix,
-				file?.id ?? "",
-				visibleCheckpoints.map((checkpoint) => checkpoint.commit_id),
-			),
-		{ enabled: file !== null, retryKey },
+	// The cut follows the oldest row already on screen, not a count: a new
+	// checkpoint at the top must not push a row off the end, least of all
+	// an open one being typed in.
+	const oldestShownRef = useRef<string | null>(null);
+	const oldestShownIndex = oldestShownRef.current
+		? allCheckpoints.findIndex(
+				(checkpoint) => checkpoint.commit_id === oldestShownRef.current,
+			)
+		: -1;
+	const shownCount = Math.max(visibleCount, oldestShownIndex + 1);
+	const visibleCheckpoints = allCheckpoints.slice(0, shownCount);
+	// A held answer is shorter than the one asked for: whether more is left
+	// is what the last real answer said.
+	const hasMoreRef = useRef(false);
+	if (checkpointRead.status !== "pending")
+		hasMoreRef.current = shownCount < allCheckpoints.length;
+	const hasMore = hasMoreRef.current;
+	const oldestShownId = visibleCheckpoints.at(-1)?.commit_id ?? null;
+	const settled = checkpointResult.status === "success";
+	useEffect(() => {
+		if (!settled) return;
+		oldestShownRef.current = oldestShownId;
+		if (shownCount > visibleCount) setVisibleCount(shownCount);
+	}, [oldestShownId, settled, shownCount, visibleCount]);
+	const changes = useHeldResult(
+		useQueryResult(
+			(lix) =>
+				selectFileCheckpointChanges(
+					lix,
+					file?.id ?? "",
+					visibleCheckpoints.map((checkpoint) => checkpoint.commit_id),
+				),
+			{ enabled: file !== null, retryKey },
+		),
 	);
 	const fileChanges = useMemo(
 		() =>
@@ -571,6 +641,14 @@ function CheckpointList({
 				fileChanges.has(checkpoint.commit_id),
 			)
 		: visibleCheckpoints;
+	const pageEndsRef = useRef<ReadonlySet<string>>(new Set());
+	useEffect(() => {
+		pageEndsRef.current = new Set(
+			pageCheckpoints(checkpoints, pageEndsRef.current).map(
+				(page) => page.at(-1)!.commit_id,
+			),
+		);
+	});
 
 	if (
 		checkpointResult.status === "pending" ||
@@ -618,25 +696,15 @@ function CheckpointList({
 		);
 	}
 
-	const pages: CheckpointRow[][] = [];
-	for (
-		let offset = 0;
-		offset < checkpoints.length;
-		offset += CHECKPOINT_PREVIEW_PAGE_SIZE
-	) {
-		pages.push(
-			checkpoints.slice(offset, offset + CHECKPOINT_PREVIEW_PAGE_SIZE),
-		);
-	}
+	const pages = pageCheckpoints(checkpoints, pageEndsRef.current);
 	return (
 		<>
 			<ol aria-label="Checkpoints" className="space-y-0">
-				{pages.map((page, pageIndex) => (
+				{pages.map((page) => (
 					<CheckpointPage
-						// By position: a new checkpoint shifts every page's members,
-						// and keying by them remounted every row on the page.
-						// oxlint-disable-next-line react/no-array-index-key
-						key={pageIndex}
+						// By the row that ends it, which stays its last: rows keep
+						// their page, and so their DOM (an open field keeps focus).
+						key={page.at(-1)!.commit_id}
 						atelier={atelier}
 						wide={wide}
 						checkpoints={page}
@@ -651,7 +719,7 @@ function CheckpointList({
 					type="button"
 					className="rounded-panel px-2 py-2 text-sm text-fg-muted hover:bg-bg-hover"
 					onClick={() =>
-						setVisibleCount((count) => count + CHECKPOINT_PREVIEW_PAGE_SIZE)
+						setVisibleCount(shownCount + CHECKPOINT_PREVIEW_PAGE_SIZE)
 					}
 				>
 					Load older checkpoints
@@ -684,36 +752,42 @@ function CheckpointPage({
 }) {
 	const [visible, setVisible] = useState(false);
 	const [conversationRetryKey, setConversationRetryKey] = useState(0);
-	const conversations = useQueryResult(
-		(lix) =>
-			selectCheckpointConversations(
-				lix,
-				checkpoints.map((checkpoint) => checkpoint.commit_id),
-			),
-		{ retryKey: conversationRetryKey },
+	const conversations = useHeldResult(
+		useQueryResult(
+			(lix) =>
+				selectCheckpointConversations(
+					lix,
+					checkpoints.map((checkpoint) => checkpoint.commit_id),
+				),
+			{ retryKey: conversationRetryKey },
+		),
 	);
-	const commentCounts = useQueryResult(
-		(lix) =>
-			selectConversationCounts(
-				lix,
-				conversations.rows.map((conversation) => conversation.id),
-			),
-		{
-			enabled:
-				conversations.status === "success" && conversations.rows.length > 0,
-			retryKey: conversationRetryKey,
-		},
+	const commentCounts = useHeldResult(
+		useQueryResult(
+			(lix) =>
+				selectConversationCounts(
+					lix,
+					conversations.rows.map((conversation) => conversation.id),
+				),
+			{
+				enabled:
+					conversations.status === "success" && conversations.rows.length > 0,
+				retryKey: conversationRetryKey,
+			},
+		),
 	);
 	const countsByConversation = new Map(
 		commentCounts.rows.map((row) => [row.conversation_id, row.comment_count]),
 	);
-	const result = useQueryResult(
-		(lix) =>
-			selectCheckpointFilePreviewPage(
-				lix,
-				checkpoints.map((checkpoint) => checkpoint.commit_id),
-			),
-		{ subscribe: false, enabled: visible && wide },
+	const result = useHeldResult(
+		useQueryResult(
+			(lix) =>
+				selectCheckpointFilePreviewPage(
+					lix,
+					checkpoints.map((checkpoint) => checkpoint.commit_id),
+				),
+			{ subscribe: false, enabled: visible && wide },
+		),
 	);
 	return (
 		<>
@@ -838,6 +912,30 @@ function CheckpointItem({
 		setUnfoldedState(value);
 	};
 	const [focusRequest, setFocusRequest] = useState(0);
+	// The Comment chip opens the checkpoint's field in the same click, before
+	// the review has opened (an async read), so the keys typed right after
+	// the click land in the field. Settled once the review moves anywhere.
+	const [opening, setOpening] = useState(false);
+	const sessionTargetKey =
+		session === null
+			? null
+			: "commitId" in session.target
+				? session.target.commitId
+				: "working";
+	useEffect(() => {
+		setOpening(false);
+	}, [sessionTargetKey]);
+	const open = isViewing || opening;
+	// The review hands the keyboard to its float as it opens; the field
+	// holds on to it until the checkpoint is open and that has happened.
+	const [holdFocus, setHoldFocus] = useState(false);
+	useEffect(() => {
+		if (!holdFocus || !isViewing) return;
+		let frame = requestAnimationFrame(() => {
+			frame = requestAnimationFrame(() => setHoldFocus(false));
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [holdFocus, isViewing]);
 	const rowButtonRef = useRef<HTMLButtonElement>(null);
 	const titleAtEditStartRef = useRef<string>("");
 	const hasDraft = hasConversationDraft(draft);
@@ -864,6 +962,9 @@ function CheckpointItem({
 		setEditingTitle(false);
 		setTitleError(null);
 		focusRowSoon();
+	}
+	function focusRow() {
+		rowButtonRef.current?.focus({ preventScroll: true });
 	}
 	// The input unmounts; keyboard users continue from the row, not <body>.
 	function focusRowSoon() {
@@ -903,7 +1004,16 @@ function CheckpointItem({
 		}
 	}
 	function openCheckpoint() {
-		void atelier.diff
+		// Focus on another checkpoint (its row, or its field, which would go
+		// as it closes) follows to the row that was pressed, where it can be
+		// seen. Focus outside the list (the document) stays where it is.
+		const item = rowButtonRef.current?.closest("li");
+		if (
+			document.activeElement?.closest("[data-attr=history-checkpoint]") &&
+			!item?.contains(document.activeElement)
+		)
+			focusRow();
+		return atelier.diff
 			.open({
 				base: previousCommitId ? { commitId: previousCommitId } : null,
 				target: { commitId: checkpoint.commit_id },
@@ -938,9 +1048,22 @@ function CheckpointItem({
 		isViewing && !editingTitle && Boolean(atelier.views && conversations[0]);
 
 	return (
+		// The open checkpoint is where ⌘↵ sends a comment. Focus returns to its
+		// row on Esc, and a reflexive ⌘↵ there must not restore the checkpoint
+		// (the review's shortcut) or press the row (which leaves the review).
+		// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Swallows one chord for the controls inside; each keeps its own keyboard behaviour.
 		<li
 			aria-current={isViewing ? "true" : undefined}
 			data-attr="history-checkpoint"
+			data-review-shortcut-ignore={isViewing ? "" : undefined}
+			onKeyDown={
+				isViewing
+					? (event) => {
+							if (event.key === "Enter" && (event.metaKey || event.ctrlKey))
+								event.preventDefault();
+						}
+					: undefined
+			}
 			className={`group relative rounded-panel transition-[background-color,box-shadow] duration-200 motion-reduce:transition-none ${
 				isViewing ? "bg-accent-subtle ring-1 ring-accent-border ring-inset" : ""
 			}`}
@@ -1012,7 +1135,7 @@ function CheckpointItem({
 							atelier.diff.exit();
 							return;
 						}
-						openCheckpoint();
+						void openCheckpoint();
 					}}
 					onMouseDown={(event) => event.preventDefault()}
 					onKeyDown={(event) => {
@@ -1098,7 +1221,12 @@ function CheckpointItem({
 					onMouseDown={(event) => event.preventDefault()}
 					onClick={() => {
 						setFocusRequest((value) => value + 1);
-						openCheckpoint();
+						setOpening(true);
+						setHoldFocus(true);
+						openCheckpoint().catch(() => {
+							setOpening(false);
+							setHoldFocus(false);
+						});
 					}}
 					className="pointer-events-none absolute top-1.5 right-[5px] inline-flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] bg-panel px-[7px] text-[11px] font-semibold text-fg-muted opacity-0 ring-1 ring-border-strong group-hover:pointer-events-auto group-hover:opacity-100 hover:text-fg focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
@@ -1106,7 +1234,7 @@ function CheckpointItem({
 					Comment
 				</button>
 			) : null}
-			<AnimatedHistoryDisclosure open={isViewing}>
+			<AnimatedHistoryDisclosure open={open}>
 				<div className="flex flex-col gap-2 pt-2 pb-2.5">
 					{!wide ? (
 						<CheckpointFileList
@@ -1126,10 +1254,11 @@ function CheckpointItem({
 						setDraft={setDraft}
 						unfolded={unfolded}
 						onUnfoldedChange={setUnfolded}
-						onCancel={focusRowSoon}
+						returnFocus={focusRow}
+						holdFocus={holdFocus}
 						focusRequest={focusRequest}
 						onFocusHandled={() => setFocusRequest(0)}
-						open={isViewing}
+						open={open}
 					/>
 				</div>
 			</AnimatedHistoryDisclosure>
@@ -1301,7 +1430,9 @@ function AnimatedHistoryDisclosure({
 			}`}
 		>
 			<div className="min-h-0 overflow-hidden">
-				{isMounted ? children : null}
+				{/* Mounted in the render that opens it, not an effect later: a
+				    field inside may be focused by the same click. */}
+				{isMounted || open ? children : null}
 			</div>
 		</div>
 	);
