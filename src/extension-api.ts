@@ -166,6 +166,12 @@ export type AtelierViewOpenOptions = {
 	readonly newTab?: boolean;
 	readonly focus?: boolean;
 	/**
+	 * `false` only updates the state of the open instance named by
+	 * `instanceId` (a view renaming its own tab while in the background),
+	 * without activating it; nothing opens when there is no such instance.
+	 */
+	readonly activate?: boolean;
+	/**
 	 * Target panel. Defaults to "main". Side areas follow the add-view
 	 * rules instead of the tab rules: `instanceId` and `newTab` are ignored.
 	 */

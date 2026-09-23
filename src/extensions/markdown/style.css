@@ -2846,31 +2846,55 @@
 			--markdown-comment-line: 75%;
 		}
 
+		/* A block with no text to wash (a rule, an image, an empty line) takes
+		   the wash on the block itself. */
+		.ProseMirror > [data-block-comment]:not(:has(.markdown-block-comment)) {
+			--markdown-comment-wash: 7%;
+			--markdown-comment-line: 32%;
+			border-radius: var(--atelier-radius-tag);
+			background: color-mix(
+				in srgb,
+				var(--atelier-link) var(--markdown-comment-wash),
+				transparent
+			);
+			box-shadow: inset 0 -2px 0
+				color-mix(
+					in srgb,
+					var(--atelier-link) var(--markdown-comment-line),
+					transparent
+				);
+		}
+
+		.ProseMirror
+			> [data-block-comment="hover"]:not(:has(.markdown-block-comment)) {
+			--markdown-comment-wash: 11%;
+			--markdown-comment-line: 55%;
+		}
+
+		.ProseMirror
+			> [data-block-comment="active"]:not(:has(.markdown-block-comment)) {
+			--markdown-comment-wash: 15%;
+			--markdown-comment-line: 75%;
+		}
+
 		/* On a wide panel the column moves left and a margin beside it holds
-		   the cards: the column's left gutter, the column, a 40px gap and a
-		   280px margin, centred together. */
+		   the cards (design N3): a 64px gutter, the column, a 40px gap, the
+		   280px margin, and at least 32px after it. */
 		.markdown-view
 			.tiptap-container:has(
 				> .markdown-block-comments[data-layout="margin"][data-has-threads]
 			)
 			.ProseMirror {
-			--markdown-comment-column-left: max(
-				64px,
-				calc((100% - var(--markdown-content-width) - 320px) / 2)
-			);
 			--atelier-doc-gutter: 0px;
-			padding-left: var(--markdown-comment-column-left);
-			padding-right: calc(
-				100% - var(--markdown-comment-column-left) -
-					var(--markdown-content-width)
-			);
+			padding-left: 64px;
+			padding-right: calc(100% - 64px - var(--markdown-content-width));
 		}
 
-		/* Narrow: the counts sit in the right gutter, so it keeps room for them. */
+		/* Narrow: the counts sit in the right gutter. It keeps room for them in
+		   every document that takes comments, so the first comment does not
+		   reflow the text. */
 		.markdown-view
-			.tiptap-container:has(
-				> .markdown-block-comments[data-layout="narrow"][data-has-threads]
-			)
+			.tiptap-container:has(> .markdown-block-comments[data-layout="narrow"])
 			.ProseMirror {
 			padding-left: max(40px, calc((100% - var(--markdown-content-width)) / 2));
 			padding-right: max(
@@ -2988,8 +3012,10 @@
 			top: 6px;
 			right: 6px;
 		}
-		.markdown-comment-card[data-state="active"] > .comment-surface:first-of-type,
-		.markdown-comment-popover > .comment-surface:first-of-type {
+		/* Only the thread makes room for it; the reply field keeps the card's
+		   full width. */
+		.markdown-comment-card[data-state="active"] > ol.comment-surface,
+		.markdown-comment-popover > ol.comment-surface {
 			padding-right: 24px;
 		}
 

@@ -319,6 +319,79 @@ describe("conversation queries", () => {
 		expect(await selectConversationSummary(lix, id)).toBeNull();
 	});
 
+	test("a conversation deleted on purpose stays gone when its anchor is removed later", async () => {
+		const notes = await insertFile(
+			lix,
+			"/notes.md",
+			"# Notes\n\nKeep this paragraph.\n\nSecret paragraph.\n",
+		);
+		const secret = await lix.execute(
+			"SELECT id FROM markdown_node WHERE lixcol_file_id = $1 AND kind = 'paragraph' ORDER BY order_key",
+			[notes],
+		);
+		const nodeId = secret.rows[1]!.id as string;
+		const id = await startConversation(
+			lix,
+			{ sql: "lix_row_ref('markdown_node', $4, $5)", params: [notes, nodeId] },
+			{ title: "Private", comments: ["Delete me on purpose"] },
+		);
+		await createCheckpoint(lix);
+		// Deleted on purpose while its paragraph is still there…
+		await lix.execute("DELETE FROM lix_conversation WHERE id = $1", [id]);
+		await createCheckpoint(lix);
+		// …and the paragraph removed afterwards.
+		await lix.execute("UPDATE lix_file SET content = $2 WHERE id = $1", [
+			notes,
+			encode("# Notes\n\nKeep this paragraph.\n"),
+		]);
+		await createCheckpoint(lix);
+		expect(await readRemovedConversation(lix, id)).toBeNull();
+		expect(await selectConversationSummary(lix, id)).toBeNull();
+	});
+
+	test("ids are matched without regard to case", async () => {
+		const id = await startConversation(lix, null, { title: "Cased" });
+		expect(
+			await selectConversationSummary(lix, id.toUpperCase()),
+		).toMatchObject({ id, title: "Cased" });
+		expect(conversationLocation(id.toUpperCase()).state.conversationId).toBe(
+			id,
+		);
+	});
+
+	test("a list's text is its items' text, and a header row is the header", async () => {
+		const file = await insertFile(
+			lix,
+			"/list.md",
+			"# Plan\n\n- first item\n- second item\n",
+		);
+		const blocks = await lix.execute(
+			"SELECT id FROM markdown_node WHERE lixcol_file_id = $1 AND kind = 'list'",
+			[file],
+		);
+		const anchor = await readAnchor(lix, {
+			kind: "markdown_block",
+			fileId: file,
+			nodeId: blocks.rows[0]!.id as string,
+		});
+		expect(anchor).toMatchObject({
+			blockKind: "list",
+			heading: "Plan",
+			text: "first item\nsecond item",
+		});
+		const header = await lix.execute(
+			"SELECT id FROM csv_row WHERE lixcol_file_id = $1 ORDER BY order_key LIMIT 1",
+			[postsId],
+		);
+		const headerAnchor = await readAnchor(lix, {
+			kind: "csv_row",
+			fileId: postsId,
+			rowId: header.rows[0]!.id as string,
+		});
+		expect(headerAnchor).toMatchObject({ rowNumber: 0 });
+		expect(anchorLabel(headerAnchor)).toBe("posts.csv › header");
+	});
+
 	test("conversationLocation is the Atelier location for the view", () => {
 		const id = crypto.randomUUID();
 		expect(conversationLocation(id)).toEqual({

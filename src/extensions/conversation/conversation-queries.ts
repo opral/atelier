@@ -1,3 +1,4 @@
+import { normalizeConversationId } from "./conversation-location";
 import type { Lix } from "@lix-js/sdk";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { toPlainText } from "@opral/zettel-lexical";
@@ -16,11 +17,7 @@ import {
  * attached to; everything here is a plain read, usable outside React.
  */
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isConversationId(value: unknown): value is string {
-	return typeof value === "string" && UUID.test(value);
-}
+export { normalizeConversationId } from "./conversation-location";
 
 export type ConversationRow = {
 	readonly id: string;
@@ -344,6 +341,8 @@ export function markdownBlockAnchor(
 	fileId: string,
 	filePath: string | null,
 	nodeId: string,
+	/** All of the file's nodes, to read a list's, table's or quote's text. */
+	nodes?: readonly MarkdownNodeRow[],
 ): MarkdownBlockAnchor | null {
 	const index = blocks.findIndex((block) => block.id === nodeId);
 	if (index < 0) return null;
@@ -361,9 +360,70 @@ export function markdownBlockAnchor(
 		filePath,
 		nodeId,
 		blockKind: block.kind,
-		text: blockRowText(block),
+		text: blockRowText(block) ?? (nodes ? containerText(nodes, nodeId) : null),
 		heading,
 	};
+}
+
+export type MarkdownNodeRow = MarkdownBlockRow & {
+	readonly parent_id: string | null;
+	readonly order_key: string | null;
+};
+
+/** Every node of a Markdown file: the document, its blocks and their parts. */
+export function selectMarkdownNodes(lix: Lix, fileId: string) {
+	return qb(lix)
+		.selectFrom("markdown_node")
+		.select(["id", "parent_id", "kind", "order_key", "payload_json"])
+		.where("lixcol_file_id", "=", fileId)
+		.$castTo<MarkdownNodeRow>();
+}
+
+function byOrder(a: MarkdownNodeRow, b: MarkdownNodeRow): number {
+	const left = a.order_key ?? "";
+	const right = b.order_key ?? "";
+	if (left !== right) return left < right ? -1 : 1;
+	return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** The document's top-level blocks in order, from all of its nodes. */
+export function topLevelBlocks(
+	nodes: readonly MarkdownNodeRow[],
+): MarkdownNodeRow[] {
+	const root = nodes.find((node) => node.kind === "document");
+	if (!root) return [];
+	return nodes.filter((node) => node.parent_id === root.id).sort(byOrder);
+}
+
+/**
+ * The text of a block that carries none itself (a list, a table, a quote):
+ * one line per child — an item, a row — with a table row's cells joined by
+ * " · ". Null when there is no text under it.
+ */
+export function containerText(
+	nodes: readonly MarkdownNodeRow[],
+	nodeId: string,
+): string | null {
+	const children = new Map<string, MarkdownNodeRow[]>();
+	for (const node of nodes) {
+		if (!node.parent_id) continue;
+		const list = children.get(node.parent_id) ?? [];
+		list.push(node);
+		children.set(node.parent_id, list);
+	}
+	for (const list of children.values()) list.sort(byOrder);
+	const flatten = (node: MarkdownNodeRow, depth: number): string => {
+		const own = blockRowText(node);
+		if (own !== null || depth > 12) return own ?? "";
+		return (children.get(node.id) ?? [])
+			.map((child) => flatten(child, depth + 1))
+			.filter(Boolean)
+			.join(/row/.test(node.kind) ? " · " : " ");
+	};
+	const lines = (children.get(nodeId) ?? [])
+		.map((child) => flatten(child, 0))
+		.filter(Boolean);
+	return lines.length > 0 ? lines.join("\n") : null;
 }
 
 export type CsvRowAnchor = {
@@ -489,10 +549,18 @@ export async function readRemovedConversation(
 	)
 		return null;
 	const before = removal.lixcol_from_commit_id;
+	const removedIn = removal.lixcol_to_commit_id;
 	const target = await resolveTargetAt(lix, removal.from_target, before);
 	if (target.kind !== "markdown_block" && target.kind !== "csv_row")
 		return null;
-	// Still here: the conversation was deleted on its own.
+	// Only the cascade of the anchor's removal: the anchor was there when
+	// the conversation was last visible and went in the very commit that
+	// took the conversation. A conversation deleted on purpose stays deleted
+	// when its anchor goes later, and one whose anchor is still here was
+	// deleted on its own. (Two deletions compacted into one checkpoint
+	// cannot be told apart; the anchor's goes first either way.)
+	if (!(await targetExists(lix, target, before))) return null;
+	if (await targetExists(lix, target, removedIn)) return null;
 	if (await targetExists(lix, target)) return null;
 	const conversationRows = await lix.execute(
 		"SELECT id, target, title, lixcol_global, lixcol_created_at FROM lix_as_of('lix_conversation', $1) WHERE id = $2",
@@ -504,7 +572,6 @@ export async function readRemovedConversation(
 		"SELECT id, body, lixcol_created_at, lixcol_change_id AS change_id FROM lix_as_of('lix_comment', $1) WHERE conversation_id = $2 ORDER BY lixcol_created_at, id",
 		[before, conversationId],
 	);
-	const removedIn = removal.lixcol_to_commit_id;
 	const log = await lix.execute(
 		"SELECT is_checkpoint, parent_commit_id FROM lix_log() WHERE commit_id = $1",
 		[removedIn],
@@ -585,29 +652,34 @@ async function resolveTargetAt(
 	return { kind: "row", relation: hint?.relation ?? null };
 }
 
+/** Whether the anchor row exists now, or at `commitId` when given. */
 async function targetExists(
 	lix: Lix,
 	target: ConversationTarget,
+	commitId?: string,
 ): Promise<boolean> {
+	const relation =
+		target.kind === "markdown_block"
+			? "markdown_node"
+			: target.kind === "csv_row"
+				? "csv_row"
+				: null;
+	if (!relation || !("fileId" in target)) return false;
+	const id = target.kind === "markdown_block" ? target.nodeId : target.rowId;
 	try {
-		if (target.kind === "markdown_block") {
-			const result = await lix.execute(
-				"SELECT id FROM markdown_node WHERE lixcol_file_id = $1 AND id = $2",
-				[target.fileId, target.nodeId],
-			);
-			return result.rows.length > 0;
-		}
-		if (target.kind === "csv_row") {
-			const result = await lix.execute(
-				"SELECT id FROM csv_row WHERE lixcol_file_id = $1 AND id = $2",
-				[target.fileId, target.rowId],
-			);
-			return result.rows.length > 0;
-		}
+		const result = commitId
+			? await lix.execute(
+					`SELECT id FROM lix_as_of('${relation}', $1) WHERE lixcol_file_id = $2 AND id = $3`,
+					[commitId, target.fileId, id],
+				)
+			: await lix.execute(
+					`SELECT id FROM ${relation} WHERE lixcol_file_id = $1 AND id = $2`,
+					[target.fileId, id],
+				);
+		return result.rows.length > 0;
 	} catch {
 		return false;
 	}
-	return false;
 }
 
 async function filePathAt(
@@ -633,15 +705,17 @@ async function readAnchorAt(
 ): Promise<MarkdownBlockAnchor | CsvRowAnchor | null> {
 	try {
 		if (target.kind === "markdown_block") {
-			const blocks = await lix.execute(
-				"SELECT block.id AS id, block.kind AS kind, block.payload_json AS payload_json FROM lix_as_of('markdown_node', $1) block JOIN lix_as_of('markdown_node', $1) root ON root.id = block.parent_id AND root.lixcol_file_id = block.lixcol_file_id WHERE root.kind = 'document' AND block.lixcol_file_id = $2 ORDER BY block.order_key, block.id",
+			const result = await lix.execute(
+				"SELECT id, parent_id, kind, order_key, payload_json FROM lix_as_of('markdown_node', $1) WHERE lixcol_file_id = $2",
 				[commitId, target.fileId],
 			);
+			const nodes = result.rows as unknown as MarkdownNodeRow[];
 			return markdownBlockAnchor(
-				blocks.rows as unknown as MarkdownBlockRow[],
+				topLevelBlocks(nodes),
 				target.fileId,
 				await filePathAt(lix, target.fileId, commitId),
 				target.nodeId,
+				nodes,
 			);
 		}
 		if (target.kind === "csv_row") {
@@ -747,7 +821,15 @@ export async function selectConversationSummary(
 	lix: Lix,
 	conversationId: string,
 ): Promise<ConversationSummary | null> {
-	if (!isConversationId(conversationId)) return null;
+	const id = normalizeConversationId(conversationId);
+	if (!id) return null;
+	return summarize(lix, id);
+}
+
+async function summarize(
+	lix: Lix,
+	conversationId: string,
+): Promise<ConversationSummary | null> {
 	const rows = await selectConversation(lix, conversationId).execute();
 	const conversation = rows[0];
 	if (!conversation) {
@@ -786,16 +868,14 @@ export async function readAnchor(
 		case "checkpoint":
 			return readCheckpointAnchor(lix, target.commitId);
 		case "markdown_block": {
-			const blocks = await lix.execute(
-				"SELECT block.id AS id, block.kind AS kind, block.payload_json AS payload_json FROM markdown_node block JOIN markdown_node root ON root.id = block.parent_id AND root.lixcol_file_id = block.lixcol_file_id WHERE root.kind = 'document' AND block.lixcol_file_id = $1 ORDER BY block.order_key, block.id",
-				[target.fileId],
-			);
+			const nodes = await selectMarkdownNodes(lix, target.fileId).execute();
 			const path = await selectFilePath(lix, target.fileId).execute();
 			return markdownBlockAnchor(
-				blocks.rows as unknown as MarkdownBlockRow[],
+				topLevelBlocks(nodes),
 				target.fileId,
 				path[0]?.path ?? null,
 				target.nodeId,
+				nodes,
 			);
 		}
 		case "csv_row": {

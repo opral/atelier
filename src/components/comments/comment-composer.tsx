@@ -92,6 +92,8 @@ export type ComposerProps = {
 	readonly size?: ComposerSize;
 	/** The send button's label where it has one (`size="view"`). */
 	readonly submitLabel?: string;
+	/** The icon send button's accessible name: "Send comment", "Send reply". */
+	readonly sendLabel?: string;
 	readonly className?: string;
 };
 
@@ -118,6 +120,7 @@ export function Composer({
 	tone = "accent",
 	size = "compact",
 	submitLabel = "Comment",
+	sendLabel = "Send comment",
 	className = "",
 }: ComposerProps) {
 	const fieldRef = useRef<HTMLDivElement>(null);
@@ -386,7 +389,7 @@ export function Composer({
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={() => void send()}
 						disabled={!hasText || sending}
-						aria-label={sending ? "Sending comment" : "Send comment"}
+						aria-label={sending ? "Sending…" : sendLabel}
 						title={`Send (${modifier}↵)`}
 						className={`flex shrink-0 cursor-pointer items-center justify-center bg-accent text-accent-on transition-opacity hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-default ${
 							inDocument

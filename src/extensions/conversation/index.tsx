@@ -5,7 +5,6 @@ import type { ExtensionDefinition } from "@/extension-runtime/types";
 import manifestJson from "./manifest.json";
 import { ConversationView } from "./conversation-view";
 import { conversationInstanceId } from "./conversation-location";
-import { isConversationId } from "./conversation-queries";
 
 /** The tab's message-square, in the accent like the design's tab. */
 function ConversationTabIcon({ className }: { className?: string }) {
@@ -40,8 +39,5 @@ export const extension: ExtensionDefinition = {
 	icon: ConversationTabIcon,
 	multiInstance: true,
 	hidden: true,
-	instanceIdForState: (state) =>
-		isConversationId(state?.conversationId)
-			? conversationInstanceId(state.conversationId)
-			: undefined,
+	instanceIdForState: (state) => conversationInstanceId(state?.conversationId),
 };

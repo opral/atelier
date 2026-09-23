@@ -3462,7 +3462,13 @@ function LayoutShellLoadedContentResolved({
 			!filePath && typeof entry.state?.atelier?.label === "string"
 				? entry.state.atelier.label
 				: "";
-		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}::${label}`;
+		// A title in the state (a conversation's) is part of its name too: one
+		// cleared to equal the fallback label changes nothing else.
+		const title =
+			!filePath && entry.state && "title" in entry.state
+				? JSON.stringify(entry.state.title ?? null)
+				: "";
+		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}::${label}::${title}`;
 		if (lastActivatedCentralViewRef.current === signature) return;
 		lastActivatedCentralViewRef.current = signature;
 		emitEvent({
@@ -3886,6 +3892,27 @@ function LayoutShellLoadedContentResolved({
 					(definition.multiInstance
 						? createExtensionInstanceId(extensionId)
 						: extensionId));
+			if (options.activate === false) {
+				// A state update for a tab that stays where it is.
+				if (
+					panelStatesRef.current.main.views.some(
+						(entry) => entry.instance === instanceId,
+					)
+				)
+					setAreaState(
+						"main",
+						(current) => ({
+							views: current.views.map((entry) =>
+								entry.instance === instanceId
+									? { ...entry, state: { ...entry.state, ...options.state } }
+									: entry,
+							),
+							activeInstance: current.activeInstance,
+						}),
+						{ focus: false },
+					);
+				return undefined;
+			}
 			const view: ExtensionInstance = {
 				instance: instanceId,
 				kind: extensionId,

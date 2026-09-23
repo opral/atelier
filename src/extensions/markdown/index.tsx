@@ -73,6 +73,8 @@ import {
 	BlockConversationsLayer,
 } from "./components/block-conversations";
 import { ConversationViewsContext } from "../conversation/open-conversation";
+import { documentReveal, type DocumentReveal } from "@/lib/document-reveal";
+import { RevealMarkdownBlock } from "./components/reveal-block";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
 import { MentionMenu } from "./components/mention-menu";
@@ -109,6 +111,8 @@ type MarkdownViewProps = {
 	readonly isActiveView?: boolean;
 	readonly isPanelFocused?: boolean;
 	readonly focusOnLoad?: boolean;
+	/** A block to bring into view (`state.reveal`), once. */
+	readonly reveal?: DocumentReveal | null;
 	readonly defaultBlock?: EmptyMarkdownDefaultBlock;
 	readonly activeBranchId?: string;
 	readonly diffSession?: AtelierDiffSession | null;
@@ -400,6 +404,7 @@ function MarkdownLiveDocument({
 	isActiveView = true,
 	isPanelFocused = true,
 	focusOnLoad = false,
+	reveal = null,
 	defaultBlock,
 	activeBranchId = "",
 	diffSession,
@@ -669,6 +674,13 @@ function MarkdownLiveDocument({
 								current?.reviewId === review.reviewId ? null : current,
 							);
 						}}
+					/>
+				) : null}
+				{reveal && liveEditor && !reviewLocked ? (
+					<RevealMarkdownBlock
+						editor={liveEditor}
+						fileId={effectiveFileRow.id}
+						reveal={reveal}
 					/>
 				) : null}
 				{editorReadOnly ? null : (
@@ -1282,6 +1294,7 @@ export const extension = createReactExtensionDefinition({
 							isActiveView={view.isActive}
 							isPanelFocused={view.isFocused}
 							focusOnLoad={Boolean(view.state.focusOnLoad)}
+							reveal={documentReveal(view.state)}
 							defaultBlock={
 								view.state.defaultBlock === "heading1" ? "heading1" : undefined
 							}

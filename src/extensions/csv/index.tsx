@@ -1,3 +1,4 @@
+import { documentReveal, type DocumentReveal } from "@/lib/document-reveal";
 import { CsvContent } from "./csv-content";
 import {
 	loadTextFile,
@@ -175,7 +176,12 @@ type CsvViewProps = {
 	readonly afterFileId?: string | null;
 	readonly beforeExists?: boolean;
 	readonly afterExists?: boolean;
+	/** A row to bring into view and select (`state.reveal`), once. */
+	readonly reveal?: DocumentReveal | null;
 };
+
+/** The row a view was opened at; the table on screen consumes it once. */
+const CsvRevealContext = createContext<DocumentReveal | null>(null);
 
 const COLUMN_MIN_WIDTH = 112;
 const COLUMN_MAX_WIDTH = 520;
@@ -291,6 +297,7 @@ export function CsvView({
 	afterFileId,
 	beforeExists,
 	afterExists,
+	reveal = null,
 }: CsvViewProps) {
 	assertFileId(fileId);
 	// Local presentation — widths, scroll, filter — outlives the document
@@ -323,18 +330,20 @@ export function CsvView({
 		retainedLayout,
 	};
 	return (
-		<CsvFrame>
-			{/* The readers below render no DOM of their own, so a read that
-			    suspends here hides nothing: the frame and the previous table
-			    stay on screen. */}
-			<Suspense fallback={null}>
-				{historical ? (
-					<CsvHistoricalReader {...reader} fileRow={undefined} />
-				) : (
-					<CsvLiveReader {...reader} />
-				)}
-			</Suspense>
-		</CsvFrame>
+		<CsvRevealContext.Provider value={reveal}>
+			<CsvFrame>
+				{/* The readers below render no DOM of their own, so a read that
+				    suspends here hides nothing: the frame and the previous table
+				    stay on screen. */}
+				<Suspense fallback={null}>
+					{historical ? (
+						<CsvHistoricalReader {...reader} fileRow={undefined} />
+					) : (
+						<CsvLiveReader {...reader} />
+					)}
+				</Suspense>
+			</CsvFrame>
+		</CsvRevealContext.Provider>
 	);
 }
 
@@ -2017,6 +2026,33 @@ function CsvTable({
 	// anchor cell. A pending new row selects its first cell so typing
 	// continues there.
 	const rowMapKey = rowMap.join(",");
+	// Opened at a row (a CSV row conversation): select it and scroll it to
+	// the middle once the grid has painted. Row 0 is the header record.
+	const reveal = useContext(CsvRevealContext);
+	const revealedKey = useRef<string | null>(null);
+	useEffect(() => {
+		if (!reveal || reveal.rowNumber === null || !gridPainted) return;
+		if (revealedKey.current === reveal.key) return;
+		revealedKey.current = reveal.key;
+		const row =
+			reveal.rowNumber < 1 ? -1 : rowMap.indexOf(reveal.rowNumber - 1);
+		if (row < 0) {
+			requestAnimationFrame(() => gridRef.current?.scrollTo(0, 0, "vertical"));
+			return;
+		}
+		// The row selected as a row, as a reader would pick it. (A single cell
+		// makes Glide scroll the active cell into view itself, and its scroll
+		// lands at the table's end instead of the row.)
+		setGridSelection({
+			columns: CompactSelection.empty(),
+			rows: CompactSelection.fromSingleSelection(row),
+		});
+		requestAnimationFrame(() =>
+			gridRef.current?.scrollTo(0, row, "vertical", 0, 0, {
+				vAlign: "center",
+			}),
+		);
+	}, [gridPainted, reveal, rowMap]);
 	// The map array is rebuilt on every metadata or content change; only a
 	// change in the visible mapping itself matters here.
 	const rowMapRef = useRef(rowMap);
@@ -3448,6 +3484,7 @@ export const extension = createReactExtensionDefinition({
 					}
 					isActiveView={view.isActive}
 					isPanelFocused={view.isFocused}
+					reveal={documentReveal(view.state)}
 				/>
 			</PreparedFileSurface>
 		);

@@ -15,6 +15,8 @@ import {
 	useConversationViews,
 } from "../../conversation/open-conversation";
 import type { Editor } from "@tiptap/core";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { MessageSquare } from "lucide-react";
 import { toPlainText } from "@opral/zettel-lexical";
 import type { Document } from "@opral/zettel-ast";
@@ -33,6 +35,12 @@ import {
 } from "@/components/comments/comment-thread";
 import { CommentAvatar } from "@/components/comments/comment-avatar";
 import { useEditorCtx } from "../editor/editor-context";
+import {
+	joinMarkdownEditorSaves,
+	markdownEditorLastAcknowledgedMarkdown,
+} from "../editor/create-editor";
+import type { SqlParam } from "@lix-js/sdk";
+import { buildNormalizedMarkdownIncrementally } from "../editor/incremental-markdown-save";
 import {
 	blockCommentPluginKey,
 	blockNodeId,
@@ -120,11 +128,21 @@ function selectActiveAccountName(lix: Parameters<typeof qb>[0]) {
 		.$castTo<{ name: string | null }>();
 }
 
-/** The top-level kinds of a document, to know when blocks moved. */
+/**
+ * The top-level blocks of a document, by kind and editor id, to know when
+ * blocks moved or were replaced (an external write gives every block a new
+ * id while the kinds stay the same).
+ */
 function structureOf(editor: Editor): string {
-	const kinds: string[] = [];
-	editor.state.doc.forEach((node) => kinds.push(node.type.name));
-	return kinds.join(",");
+	return structureOfDoc(editor.state.doc);
+}
+
+function structureOfDoc(doc: ProseMirrorNode): string {
+	const blocks: string[] = [];
+	doc.forEach((node) =>
+		blocks.push(`${node.type.name}:${blockNodeId(node) ?? ""}`),
+	);
+	return blocks.join(",");
 }
 
 function topLevelIndexOfId(editor: Editor, blockId: string): number {
@@ -176,6 +194,76 @@ function useEditorViewReady(editor: Editor): boolean {
 		};
 	}, [editor]);
 	return ready;
+}
+
+/**
+ * Where a conversation is in the editor: its block's editor id, and while
+ * that block is gone, the block standing in for it.
+ */
+type Carrier = {
+	readonly blockId: string;
+	readonly standIn: string | null;
+	readonly standInIndex: number;
+	/** What the gone block held, to know it again when it is pasted back. */
+	readonly lost?: string;
+};
+
+/** A block's kind and text, the only way to know a pasted block again. */
+function blockSignature(node: ProseMirrorNode): string | null {
+	const text = node.textContent.trim();
+	return text ? `${node.type.name}:${text}` : null;
+}
+
+function indexOfBlock(doc: ProseMirrorNode, blockId: string): number {
+	let found = -1;
+	doc.forEach((node, _offset, index) => {
+		if (found < 0 && blockNodeId(node) === blockId) found = index;
+	});
+	return found;
+}
+
+function carrierIndex(doc: ProseMirrorNode, carrier: Carrier): number {
+	const own = indexOfBlock(doc, carrier.blockId);
+	if (own >= 0) return own;
+	const standIn = carrier.standIn ? indexOfBlock(doc, carrier.standIn) : -1;
+	if (standIn >= 0) return standIn;
+	return Math.min(carrier.standInIndex, doc.childCount - 1);
+}
+
+function conversationIdsOf(thread: BlockThread): string[] {
+	return [
+		...new Set(thread.comments.map((comment) => comment.conversation_id)),
+	];
+}
+
+function mergeThreads(first: BlockThread, second: BlockThread): BlockThread {
+	const comments = [...first.comments, ...second.comments].sort(
+		(a, b) =>
+			(a.lixcol_created_at ?? "").localeCompare(b.lixcol_created_at ?? "") ||
+			a.id.localeCompare(b.id),
+	);
+	return { ...first, comments };
+}
+
+/** The row of the block at `index`, or of the nearest block that has one. */
+function nearestRow(
+	rowOfBlock: readonly (string | null)[],
+	index: number,
+): string | null {
+	for (let distance = 0; distance < rowOfBlock.length; distance++) {
+		const before = rowOfBlock[index - distance];
+		if (before) return before;
+		const after = rowOfBlock[index + distance];
+		if (after) return after;
+	}
+	return null;
+}
+
+function draftKey(pending: {
+	readonly blockId: string | null;
+	readonly index: number;
+}): string {
+	return pending.blockId ?? `#${pending.index}`;
 }
 
 const wait = (ms: number) =>
@@ -277,10 +365,14 @@ const BlockConversationsController = memo(
 		// The pairing of editor blocks with rows changes only when blocks move.
 		const [structure, setStructure] = useState(() => structureOf(editor));
 		useEffect(() => {
-			const onUpdate = () => setStructure(structureOf(editor));
-			editor.on("update", onUpdate);
+			// Every document change, including one loaded from the file without
+			// an "update" (an external write).
+			const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+				if (transaction.docChanged) setStructure(structureOf(editor));
+			};
+			editor.on("transaction", onTransaction);
 			return () => {
-				editor.off("update", onUpdate);
+				editor.off("transaction", onTransaction);
 			};
 		}, [editor]);
 		const alignment = useMemo<BlockAlignment>(
@@ -289,19 +381,62 @@ const BlockConversationsController = memo(
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[editor, rows, structure],
 		);
+		// Which block carries each conversation, followed through edits in the
+		// editor rather than read back from rows that lag the edit by a save.
+		const carriers = useRef(new Map<string, Carrier>());
+		const [carrierVersion, setCarrierVersion] = useState(0);
+		const commentsLoaded = commentsResult.status === "success";
 		const placed = useMemo<PlacedThread[]>(() => {
-			const list: PlacedThread[] = [];
+			const { doc } = editor.state;
+			const live = new Set<string>();
 			for (const thread of threads.values()) {
-				const index = alignment.blockOfRow.get(thread.nodeId);
-				if (index !== undefined) list.push({ thread, index });
+				for (const conversationId of conversationIdsOf(thread)) {
+					live.add(conversationId);
+					if (carriers.current.has(conversationId)) continue;
+					// A conversation first seen: its row tells which block it is on.
+					const index = alignment.blockOfRow.get(thread.nodeId);
+					const blockId =
+						index !== undefined && index < doc.childCount
+							? blockNodeId(doc.child(index))
+							: null;
+					if (blockId)
+						carriers.current.set(conversationId, {
+							blockId,
+							standIn: null,
+							standInIndex: index!,
+						});
+				}
 			}
-			return list.sort((a, b) => a.index - b.index);
-		}, [alignment, threads]);
+			if (commentsLoaded)
+				for (const conversationId of carriers.current.keys())
+					if (!live.has(conversationId))
+						carriers.current.delete(conversationId);
+			// Two threads whose blocks became one (a merge) read as one thread.
+			const byIndex = new Map<number, BlockThread>();
+			for (const thread of threads.values()) {
+				const carrier = carriers.current.get(thread.conversationId);
+				const index = carrier
+					? carrierIndex(doc, carrier)
+					: alignment.blockOfRow.get(thread.nodeId);
+				if (index === undefined || index < 0) continue;
+				const other = byIndex.get(index);
+				byIndex.set(index, other ? mergeThreads(other, thread) : thread);
+			}
+			return [...byIndex]
+				.map(([index, thread]) => ({ thread, index }))
+				.sort((a, b) => a.index - b.index);
+			// `structure` and `carrierVersion` stand for the document's blocks
+			// and where the conversations are among them.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+		}, [alignment, threads, structure, carrierVersion, commentsLoaded]);
 
 		const [layout, setLayout] = useState<BlockCommentLayout>("narrow");
 		const [pending, setPending] = useState<PendingComment | null>(null);
-		const [pendingDraft, setPendingDraft] =
-			useState<Document>(emptyCommentDocument);
+		// Drafts are kept per block, like History's per checkpoint: Esc or
+		// commenting on another block puts a draft away, it does not drop it.
+		const [pendingDrafts, setPendingDrafts] = useState<
+			ReadonlyMap<string, Document>
+		>(() => new Map());
 		const [active, setActive] = useState<ActiveConversation | null>(null);
 		const [hovered, setHovered] = useState<string | null>(null);
 		const [replyDrafts, setReplyDrafts] = useState<
@@ -322,10 +457,28 @@ const BlockConversationsController = memo(
 				? topLevelIndexOfId(editor, pending.blockId)
 				: pending.index
 			: -1;
+		const pendingKey = pending ? draftKey(pending) : null;
+		const pendingDraft =
+			(pendingKey && pendingDrafts.get(pendingKey)) || EMPTY_DRAFT;
+		const setPendingDraft = useCallback(
+			(draft: Document) => {
+				if (!pendingKey) return;
+				setPendingDrafts((drafts) => new Map(drafts).set(pendingKey, draft));
+			},
+			[pendingKey],
+		);
 
-		const available = blocksResult.status === "success";
-		const latest = useRef({ alignment, threads, placed, layout, available });
-		latest.current = { alignment, threads, placed, layout, available };
+		// A file the plugin does not project (it matches `*.md` by case, so
+		// `NOTES.MD` has no rows) has no block to attach to.
+		const available =
+			blocksResult.status === "success" && blocksResult.rows.length > 0;
+		// The thread each editor block shows, by its index.
+		const threadAtBlock = useMemo(
+			() => new Map(placed.map((entry) => [entry.index, entry.thread.nodeId])),
+			[placed],
+		);
+		const latest = useRef({ threads, layout, available, threadAtBlock });
+		latest.current = { threads, layout, available, threadAtBlock };
 
 		const activate = useCallback((nodeId: string | null, focus = false) => {
 			setActive((current) => {
@@ -340,19 +493,18 @@ const BlockConversationsController = memo(
 			if (editor.isDestroyed || !latest.current.available) return;
 			const index = selectedTopLevelBlock(editor.state);
 			if (index === null) return;
-			const { alignment: currentAlignment, threads: currentThreads } =
-				latest.current;
-			const nodeId = currentAlignment.rowOfBlock[index];
+			const nodeId = latest.current.threadAtBlock.get(index);
 			// A block has one conversation: commenting again opens it.
-			if (nodeId && currentThreads.has(nodeId)) {
+			if (nodeId) {
 				activate(nodeId, true);
 				return;
 			}
 			const node = editor.state.doc.child(index);
 			// The comment is on the block: the selected characters are dropped.
-			editor.commands.setTextSelection(editor.state.selection.to);
+			const { selection } = editor.state;
+			if (selection instanceof TextSelection && !selection.empty)
+				editor.commands.setTextSelection(selection.to);
 			setActive(null);
-			setPendingDraft(emptyCommentDocument());
 			setPending((current) => ({
 				blockId: blockNodeId(node),
 				index,
@@ -372,31 +524,53 @@ const BlockConversationsController = memo(
 		const submitPending = useCallback(
 			async (body: Document) => {
 				if (!pending) return;
-				// The block's row: the editor saves within a moment of an edit, and
-				// a block typed just now has no row until then.
+				// The block's row, read once the document on screen is saved: a
+				// block typed just now has no row until then.
 				let nodeId: string | null = null;
-				for (let attempt = 0; attempt < 12 && !nodeId; attempt++) {
+				let blockIndex = -1;
+				for (let attempt = 0; attempt < 20 && !nodeId; attempt++) {
 					if (attempt > 0) await wait(150);
 					if (editor.isDestroyed) throw new Error("The document was closed.");
-					const index = pending.blockId
+					blockIndex = pending.blockId
 						? topLevelIndexOfId(editor, pending.blockId)
 						: pending.index;
-					if (index < 0) throw new Error("This block was removed.");
+					if (blockIndex < 0) throw new Error("This block was removed.");
+					const doc = editor.state.doc;
+					if (
+						markdownEditorLastAcknowledgedMarkdown(editor) !==
+						buildNormalizedMarkdownIncrementally(doc)
+					)
+						continue;
 					const currentRows = (await selectMarkdownBlocks(
 						lix,
 						fileId,
 					).execute()) as MarkdownBlockRow[];
 					nodeId =
-						blockAlignment(editor.state.doc, currentRows).rowOfBlock[index] ??
-						null;
+						blockAlignment(doc, currentRows).rowOfBlock[blockIndex] ?? null;
 				}
 				if (!nodeId)
 					throw new Error(
 						"This block is not saved yet. Try again in a moment.",
 					);
-				await createBlockConversation(lix, fileId, nodeId, body);
+				const conversationId = await createBlockConversation(
+					lix,
+					fileId,
+					nodeId,
+					body,
+				);
+				const blockId = blockNodeId(editor.state.doc.child(blockIndex));
+				if (blockId)
+					carriers.current.set(conversationId, {
+						blockId,
+						standIn: null,
+						standInIndex: blockIndex,
+					});
 				setPending(null);
-				setPendingDraft(emptyCommentDocument());
+				setPendingDrafts((drafts) => {
+					const next = new Map(drafts);
+					next.delete(draftKey(pending));
+					return next;
+				});
 				if (!editor.isDestroyed)
 					editor.chain().focus(null, { scrollIntoView: false }).run();
 			},
@@ -458,6 +632,144 @@ const BlockConversationsController = memo(
 			setBlockCommentMarks(editor, marks);
 		}, [active, editor, hovered, pendingIndex, placed, structure, viewReady]);
 
+		// A conversation belongs to the block the writer sees. Lix keeps it on
+		// a row, and a save re-derives the rows: a block merged away, cut or
+		// deleted takes its row with it, and Lix deletes the conversations on a
+		// deleted row. So the editor follows each conversation's block through
+		// edits (a merge hands it to the block merged into, a split keeps it on
+		// the first half, a deletion hands it to the block that takes the
+		// deleted one's place, undo gives it back), and every save that changes
+		// the blocks moves the conversations in its own transaction: let go of
+		// their rows before the write, put on their blocks' new rows after it.
+		const lastSavedStructure = useRef(structureOf(editor));
+		useEffect(() => {
+			const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+				if (!transaction.docChanged) return;
+				const after = editor.state.doc;
+				// A document loaded from the file (an external write) has new
+				// block ids; its conversations are found again from the rows.
+				if (transaction.getMeta("preventUpdate")) {
+					carriers.current.clear();
+					lastSavedStructure.current = structureOf(editor);
+					setCarrierVersion((version) => version + 1);
+					return;
+				}
+				const present = new Map<string, number>();
+				after.forEach((node, _offset, index) => {
+					const id = blockNodeId(node);
+					if (id) present.set(id, index);
+				});
+				const offsets = new Map<string, number>();
+				const signatures = new Map<string, string | null>();
+				transaction.before.forEach((node, offset) => {
+					const id = blockNodeId(node);
+					if (!id) return;
+					offsets.set(id, offset);
+					signatures.set(id, blockSignature(node));
+				});
+				// Blocks this edit brought in (a paste), by what they hold.
+				const arrived = new Map<string, string>();
+				after.forEach((node) => {
+					const id = blockNodeId(node);
+					const signature = blockSignature(node);
+					if (id && signature && !offsets.has(id) && !arrived.has(signature))
+						arrived.set(signature, id);
+				});
+				let changed = false;
+				for (const [conversationId, carrier] of carriers.current) {
+					if (present.has(carrier.blockId)) {
+						// Its own block is back (undo, a paste of the cut block).
+						if (carrier.standIn !== null) {
+							carriers.current.set(conversationId, {
+								...carrier,
+								standIn: null,
+							});
+							changed = true;
+						}
+						continue;
+					}
+					// The block pasted back after a cut: the conversation goes with it.
+					const pasted = carrier.lost ? arrived.get(carrier.lost) : undefined;
+					if (pasted) {
+						carriers.current.set(conversationId, {
+							blockId: pasted,
+							standIn: null,
+							standInIndex: present.get(pasted) ?? 0,
+						});
+						changed = true;
+						continue;
+					}
+					if (carrier.standIn !== null && present.has(carrier.standIn))
+						continue;
+					const offset =
+						offsets.get(carrier.standIn ?? carrier.blockId) ??
+						offsets.get(carrier.blockId);
+					if (offset === undefined) continue;
+					// Where the block's first character went: into the block before
+					// it on a merge, onto the block after it when it was deleted.
+					const mapped = transaction.mapping.map(offset + 1, -1);
+					const at = after.resolve(Math.min(mapped, after.content.size));
+					const index = Math.min(at.index(0), after.childCount - 1);
+					const standIn = index >= 0 ? blockNodeId(after.child(index)) : null;
+					carriers.current.set(conversationId, {
+						...carrier,
+						standIn,
+						standInIndex: Math.max(0, index),
+						lost: carrier.lost ?? signatures.get(carrier.blockId) ?? undefined,
+					});
+					changed = true;
+				}
+				if (changed) setCarrierVersion((version) => version + 1);
+			};
+			editor.on("transaction", onTransaction);
+			const leave = joinMarkdownEditorSaves(editor, {
+				prepare: (doc) => {
+					const conversationIds = [...carriers.current.keys()];
+					if (conversationIds.length === 0) return null;
+					const savedStructure = structureOfDoc(doc);
+					// Typing inside blocks keeps every row.
+					if (savedStructure === lastSavedStructure.current) return null;
+					const targets = conversationIds.map(
+						(id) => [id, carrierIndex(doc, carriers.current.get(id)!)] as const,
+					);
+					return {
+						before: async (transaction) => {
+							await transaction.execute(
+								`UPDATE lix_conversation SET target = NULL WHERE lixcol_global = false AND id IN (${conversationIds
+									.map((_, index) => `$${index + 1}`)
+									.join(", ")})`,
+								conversationIds,
+							);
+						},
+						after: async (transaction) => {
+							const query = selectMarkdownBlocks(lix, fileId).compile();
+							const saved = await transaction.execute(
+								query.sql,
+								query.parameters as SqlParam[],
+							);
+							const { rowOfBlock } = blockAlignment(
+								doc,
+								saved.rows as unknown as MarkdownBlockRow[],
+							);
+							for (const [conversationId, index] of targets) {
+								const nodeId = nearestRow(rowOfBlock, index);
+								if (!nodeId) continue;
+								await transaction.execute(
+									"UPDATE lix_conversation SET target = lix_row_ref('markdown_node', $2, $3) WHERE id = $1",
+									[conversationId, fileId, nodeId],
+								);
+							}
+							lastSavedStructure.current = savedStructure;
+						},
+					};
+				},
+			});
+			return () => {
+				editor.off("transaction", onTransaction);
+				leave();
+			};
+		}, [editor, fileId, lix]);
+
 		// ⌘⌥M, Esc, and clicking into a commented block.
 		useEffect(() => {
 			if (!viewReady) return;
@@ -475,8 +787,7 @@ const BlockConversationsController = memo(
 					return null;
 				}
 				const index = editor.state.doc.resolve(position).index(0);
-				const nodeId = latest.current.alignment.rowOfBlock[index] ?? null;
-				return nodeId && latest.current.threads.has(nodeId) ? nodeId : null;
+				return latest.current.threadAtBlock.get(index) ?? null;
 			};
 			const onKeyDown = (event: KeyboardEvent) => {
 				if (isBlockCommentShortcut(event)) {
@@ -486,27 +797,37 @@ const BlockConversationsController = memo(
 				}
 				if (event.key === "Escape") setActive(null);
 			};
-			const onClick = () => {
+			// The block under the click, not the state's selection: ProseMirror
+			// may not have read the click's caret yet.
+			const onClick = (event: MouseEvent) => {
 				if (latest.current.layout !== "margin") return;
-				const index = editor.state.selection.$head.index(0);
-				const nodeId = latest.current.alignment.rowOfBlock[index] ?? null;
-				if (nodeId && latest.current.threads.has(nodeId)) activate(nodeId);
+				const nodeId =
+					nodeIdAt(event.target) ?? nodeIdAtPoint(event.clientX, event.clientY);
+				if (nodeId) activate(nodeId);
 				else setActive(null);
+			};
+			const nodeIdAtPoint = (left: number, top: number): string | null => {
+				const hit = editor.view.posAtCoords({ left, top });
+				if (!hit) return null;
+				const index = editor.state.doc.resolve(hit.pos).index(0);
+				return latest.current.threadAtBlock.get(index) ?? null;
 			};
 			const onMouseOver = (event: MouseEvent) => {
 				const nodeId = nodeIdAt(event.target);
 				setHovered((current) => (current === nodeId ? current : nodeId));
 			};
+			// Pointer events, like the cards' and counts': a mouse event from the
+			// document arrives after the pointer events of what it moved onto.
 			const onMouseLeave = () => setHovered(null);
 			dom.addEventListener("keydown", onKeyDown);
 			dom.addEventListener("click", onClick);
-			dom.addEventListener("mouseover", onMouseOver);
-			dom.addEventListener("mouseleave", onMouseLeave);
+			dom.addEventListener("pointerover", onMouseOver);
+			dom.addEventListener("pointerleave", onMouseLeave);
 			return () => {
 				dom.removeEventListener("keydown", onKeyDown);
 				dom.removeEventListener("click", onClick);
-				dom.removeEventListener("mouseover", onMouseOver);
-				dom.removeEventListener("mouseleave", onMouseLeave);
+				dom.removeEventListener("pointerover", onMouseOver);
+				dom.removeEventListener("pointerleave", onMouseLeave);
 			};
 		}, [activate, editor, startComment, viewReady]);
 
@@ -549,6 +870,7 @@ const BlockConversationsController = memo(
 				pendingIndex,
 				placed,
 				replyDraft,
+				setPendingDraft,
 				setReplyDraft,
 				submitPending,
 				submitReply,
@@ -619,6 +941,8 @@ function BlockConversationsSurface({
 	readonly state: BlockConversationsState;
 }) {
 	const { editor, layout, setLayout, placed, pendingIndex, active } = state;
+	// A branch switch unmounts the view under a surface that is still up.
+	const viewReady = useEditorViewReady(editor);
 	const layerRef = useRef<HTMLDivElement>(null);
 	const [geometry, setGeometry] = useState<Geometry | null>(null);
 	const [tick, setTick] = useState(0);
@@ -636,7 +960,7 @@ function BlockConversationsSurface({
 	measuring.current = indexes.length > 0;
 	useLayoutEffect(() => {
 		const surface = layerRef.current?.parentElement;
-		if (!surface) return;
+		if (!surface || !viewReady || !hasView(editor)) return;
 		const bump = () => setTick((value) => value + 1);
 		const bumpOnEdit = () => {
 			if (measuring.current) bump();
@@ -649,11 +973,11 @@ function BlockConversationsSurface({
 			observer.disconnect();
 			editor.off("update", bumpOnEdit);
 		};
-	}, [editor]);
+	}, [editor, viewReady]);
 
 	useLayoutEffect(() => {
 		const surface = layerRef.current?.parentElement;
-		if (!surface || editor.isDestroyed) return;
+		if (!surface || !viewReady || !hasView(editor)) return;
 		const width = surface.clientWidth;
 		setLayout(blockCommentLayout(width));
 		const surfaceRect = surface.getBoundingClientRect();
@@ -681,7 +1005,7 @@ function BlockConversationsSurface({
 		}
 		const next: Geometry = { width, columnRight, boxes };
 		setGeometry((current) => (sameGeometry(current, next) ? current : next));
-	}, [editor, indexes, layout, setLayout, tick]);
+	}, [editor, indexes, layout, setLayout, tick, viewReady]);
 
 	return (
 		<div
@@ -689,7 +1013,6 @@ function BlockConversationsSurface({
 			className="markdown-block-comments"
 			data-layout={layout}
 			data-has-threads={hasThreads ? "" : undefined}
-			aria-label="Comments"
 		>
 			{geometry && layout === "margin" && hasThreads ? (
 				<MarginCards state={state} geometry={geometry} />
@@ -743,6 +1066,29 @@ const POPOVER_OFFSET = 8;
 
 function popoverLeft(box: BlockBox, surfaceWidth: number): number {
 	return Math.max(0, Math.min(box.left, surfaceWidth - POPOVER_WIDTH - 8));
+}
+
+/**
+ * Pointing at a card or a count tints its block. Native listeners: React's
+ * synthesized mouseenter does not reach elements laid over the editor
+ * surface from real pointer moves.
+ */
+function usePointerHover(
+	element: HTMLElement | null,
+	nodeId: string,
+	setHovered: (nodeId: string | null) => void,
+) {
+	useEffect(() => {
+		if (!element) return;
+		const enter = () => setHovered(nodeId);
+		const leave = () => setHovered(null);
+		element.addEventListener("pointerenter", enter);
+		element.addEventListener("pointerleave", leave);
+		return () => {
+			element.removeEventListener("pointerenter", enter);
+			element.removeEventListener("pointerleave", leave);
+		};
+	}, [element, nodeId, setHovered]);
 }
 
 /** Closes something when a press lands outside it. */
@@ -883,6 +1229,7 @@ function ConversationBody({
 						state.editor.chain().focus(null, { scrollIntoView: false }).run();
 				}}
 				submitHint="reply"
+				sendLabel="Send reply"
 				focusRequest={state.active?.nodeId === nodeId ? state.active.focus : 0}
 				tone="neutral"
 				size="document"
@@ -906,8 +1253,11 @@ function CountBadge({
 	const { nodeId, comments } = entry.thread;
 	const open = state.active?.nodeId === nodeId;
 	const count = comments.length;
+	const [element, setElement] = useState<HTMLButtonElement | null>(null);
+	usePointerHover(element, nodeId, state.setHovered);
 	return (
 		<button
+			ref={setElement}
 			type="button"
 			className="markdown-comment-badge"
 			data-comment-badge={nodeId}
@@ -919,9 +1269,17 @@ function CountBadge({
 				left: Math.max(box.right, columnRight) + 16,
 			}}
 			onMouseDown={(event) => event.preventDefault()}
-			onClick={() => state.activate(open ? null : nodeId)}
-			onMouseEnter={() => state.setHovered(nodeId)}
-			onMouseLeave={() => state.setHovered(null)}
+			// From the keyboard (no pointer, `detail` 0) the caret goes on into
+			// the reply field.
+			onClick={(event) =>
+				state.activate(open ? null : nodeId, !open && event.detail === 0)
+			}
+			onKeyDown={(event) => {
+				if (event.key === "Escape" && open) {
+					event.preventDefault();
+					state.activate(null);
+				}
+			}}
 		>
 			<MessageSquare aria-hidden />
 			{count}
@@ -936,6 +1294,12 @@ function previewText(body: unknown): string {
 		return "";
 	}
 }
+
+/**
+ * A card is level with its block's box, which reaches 4px above the text
+ * (design: the block wrapper's padding), not with the first line.
+ */
+const CARD_RISE = 4;
 
 /** N3/N4: one card per commented block, level with its block. */
 function MarginCards({
@@ -955,7 +1319,7 @@ function MarginCards({
 
 	const stack = useCallback(() => {
 		const cards = entries.map((entry) => ({
-			top: geometry.boxes.get(entry.index)!.top,
+			top: geometry.boxes.get(entry.index)!.top - CARD_RISE,
 			height: cardRefs.current.get(entry.thread.nodeId)?.offsetHeight ?? 0,
 		}));
 		const tops = stackMarginCards(cards, activeIndex);
@@ -972,12 +1336,31 @@ function MarginCards({
 		return () => observer.disconnect();
 	}, [stack]);
 
+	// Pointing at a card tints its block.
+	const setHovered = state.setHovered;
+	useEffect(() => {
+		const cleanups: (() => void)[] = [];
+		for (const [nodeId, card] of cardRefs.current) {
+			const enter = () => setHovered(nodeId);
+			const leave = () => setHovered(null);
+			card.addEventListener("pointerenter", enter);
+			card.addEventListener("pointerleave", leave);
+			cleanups.push(() => {
+				card.removeEventListener("pointerenter", enter);
+				card.removeEventListener("pointerleave", leave);
+			});
+		}
+		return () => {
+			for (const cleanup of cleanups) cleanup();
+		};
+	});
+
 	const activeRef = useRef<HTMLDivElement | null>(null);
 	activeRef.current = (active && cardRefs.current.get(active.nodeId)) ?? null;
 	useOutsidePress(activeRef, (target) => {
 		// Clicks in the document decide for themselves (a click into another
 		// commented block opens that one).
-		if (state.editor.view.dom.contains(target)) return;
+		if (hasView(state.editor) && state.editor.view.dom.contains(target)) return;
 		if (target instanceof Element && target.closest(".markdown-comment-card"))
 			return;
 		if (active) state.activate(null);
@@ -1005,10 +1388,8 @@ function MarginCards({
 					style: {
 						left,
 						width: MARGIN_CARD_WIDTH,
-						top: geometry.boxes.get(entry.index)!.top,
+						top: geometry.boxes.get(entry.index)!.top - CARD_RISE,
 					},
-					onMouseEnter: () => state.setHovered(nodeId),
-					onMouseLeave: () => state.setHovered(null),
 				};
 				if (isActive) {
 					return (
@@ -1029,9 +1410,11 @@ function MarginCards({
 						{...shared}
 						role="button"
 						tabIndex={0}
-						aria-label={`Open conversation: ${comments.length} ${
+						aria-label={`Show ${comments.length} ${
 							comments.length === 1 ? "comment" : "comments"
 						}`}
+						// The label names the action; the preview stays readable.
+						aria-describedby={`markdown-comment-preview-${nodeId}`}
 						onMouseDown={() => state.activate(nodeId)}
 						onKeyDown={(event) => {
 							if (event.key !== "Enter" && event.key !== " ") return;
@@ -1055,7 +1438,10 @@ function MarginCards({
 										</time>
 									) : null}
 								</div>
-								<p className="markdown-comment-card-preview">
+								<p
+									id={`markdown-comment-preview-${nodeId}`}
+									className="markdown-comment-card-preview"
+								>
 									{previewText(first.body)}
 								</p>
 							</div>

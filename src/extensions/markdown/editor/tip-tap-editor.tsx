@@ -428,12 +428,18 @@ function TipTapEditorLoadedContent({
 	const handleSurfacePointerDown = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
 			if (!editor || readOnly) return;
-			const target = event.target as HTMLElement | null;
-			const insideContent = target?.closest(".ProseMirror");
-			const insideFrontmatterDisclosure = target?.closest(
-				".markdown-frontmatter-disclosure",
-			);
-			if (insideContent || insideFrontmatterDisclosure) return;
+			// The surface owns presses on its own background only: the scroll
+			// area and the wrappers around the document, which contain it.
+			// ProseMirror owns presses in the document, and whatever is laid
+			// over the surface (the frontmatter panel, block conversations) owns
+			// its own; neither is a press that should move the caret here.
+			const target = event.target;
+			const documentRoot = editor.view.dom;
+			const onBackground =
+				target instanceof Node &&
+				target !== documentRoot &&
+				target.contains(documentRoot);
+			if (!onBackground) return;
 			event.preventDefault();
 			if (editor.isEmpty) {
 				editor.commands.focus("start");

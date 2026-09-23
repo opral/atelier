@@ -27,7 +27,7 @@ export function openConversation(
 	conversationId: string,
 ): Promise<void> {
 	return atelier.views.open(ATELIER_CONVERSATION_VIEW_ID, {
-		state: { conversationId },
+		state: conversationLocation(conversationId).state,
 		newTab: true,
 	});
 }
@@ -57,8 +57,12 @@ export function OpenConversationButton({
 }) {
 	const href = useConversationHref(conversationId);
 	const onClick = (event: MouseEvent) => {
-		// Modified clicks are the browser's (new tab, new window, copy).
-		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+		// On a link, modified clicks are the browser's (new tab, new window,
+		// copy); a button has nothing else to do with them.
+		if (
+			href &&
+			(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+		)
 			return;
 		event.preventDefault();
 		event.stopPropagation();

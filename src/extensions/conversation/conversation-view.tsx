@@ -2,18 +2,22 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Lix } from "@lix-js/sdk";
 import type { Document } from "@opral/zettel-ast";
 import { useLix, useQueryResult } from "@/lib/lix-react";
+import { qb, sql } from "@/lib/lix-kysely";
+import { documentRevealState } from "@/lib/document-reveal";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import { fileIconUrl } from "@/file-icons";
 import { DiffGlyph } from "@/components/diff-glyph";
 import {
 	Composer,
 	emptyCommentDocument,
+	hasCommentText,
 } from "@/components/comments/comment-composer";
 import {
 	CommentThread,
 	type ThreadComment,
 } from "@/components/comments/comment-thread";
 import {
+	blockRowText,
 	selectCommentAuthors,
 	selectMarkdownBlocks,
 	type MarkdownBlockRow,
@@ -26,7 +30,6 @@ import {
 	anchorLabel,
 	blockKindLabel,
 	csvRowAnchor,
-	isConversationId,
 	markdownBlockAnchor,
 	readCheckpointAnchor,
 	readRemovedConversation,
@@ -36,6 +39,7 @@ import {
 	selectConversationThread,
 	selectCsvRecords,
 	selectFilePath,
+	selectMarkdownNodes,
 	setConversationTitle,
 	type CheckpointAnchor,
 	type ConversationCommentRow,
@@ -45,7 +49,10 @@ import {
 	type MarkdownBlockAnchor,
 	type RemovedConversation,
 } from "./conversation-queries";
-import { ATELIER_CONVERSATION_VIEW_ID } from "./conversation-location";
+import {
+	ATELIER_CONVERSATION_VIEW_ID,
+	normalizeConversationId,
+} from "./conversation-location";
 import "./style.css";
 
 type Runtime = Pick<
@@ -66,9 +73,7 @@ export function ConversationView({
 	readonly atelier: Runtime;
 	readonly view: Pick<ExtensionView, "state" | "instanceId" | "isActive">;
 }) {
-	const conversationId = isConversationId(view.state.conversationId)
-		? view.state.conversationId
-		: null;
+	const conversationId = normalizeConversationId(view.state.conversationId);
 	return (
 		<div
 			data-attr="conversation-view"
@@ -89,11 +94,15 @@ export function ConversationView({
 }
 
 /** The same words for a deleted conversation and one the reader cannot open. */
-function NotAvailable() {
+function NotAvailable({ inline = false }: { readonly inline?: boolean }) {
 	return (
 		<div
 			role="status"
-			className="flex h-full min-h-60 flex-col items-center justify-center gap-2 px-6 text-center"
+			className={
+				inline
+					? "flex flex-col gap-2"
+					: "flex h-full min-h-60 flex-col items-center justify-center gap-2 px-6 text-center"
+			}
 		>
 			<p className="text-[16px] font-semibold text-fg">
 				This conversation isn’t available
@@ -128,10 +137,14 @@ type AsyncState<T> =
 	| { readonly status: "success"; readonly value: T }
 	| { readonly status: "error"; readonly error: unknown };
 
-/** A one-shot read keyed by `key`; a new key starts over. */
+/**
+ * A one-shot read keyed by `key`; a new key starts over. With `hold`, the
+ * last value stays while the next key is read (a re-read, not a new page).
+ */
 function useAsyncRead<T>(
 	key: string | null,
 	read: () => Promise<T>,
+	{ hold = false }: { readonly hold?: boolean } = {},
 ): AsyncState<T> {
 	const [state, setState] = useState<{
 		readonly key: string | null;
@@ -154,7 +167,19 @@ function useAsyncRead<T>(
 			cancelled = true;
 		};
 	}, [key]);
-	return state.key === key ? state.value : { status: "pending" };
+	if (state.key === key) return state.value;
+	return hold && state.value.status === "success"
+		? state.value
+		: { status: "pending" };
+}
+
+/** The branch head: it moves with every write, so a read keyed on it is live. */
+function selectBranchHead(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_branch")
+		.select("commit_id")
+		.where("id", "=", sql<string>`lix_active_branch_id()`)
+		.$castTo<{ commit_id: string }>();
 }
 
 const EMPTY_AUTHORS: readonly {
@@ -207,21 +232,41 @@ function ConversationReader({
 	const result = useQueryResult((session) =>
 		selectConversation(session, conversationId),
 	);
+	// The reply being typed outlives the conversation: if it disappears
+	// mid-sentence, the text stays on screen instead of vanishing with it.
+	const [draft, setDraft] = useState<Document>(emptyCommentDocument);
 	const conversation = result.rows[0] ?? null;
 	const missing = result.status === "success" && conversation === null;
-	const removed = useAsyncRead(missing ? conversationId : null, () =>
-		readRemovedConversation(lix, conversationId),
+	// Re-read as the branch moves: the removal is checkpointed later, or the
+	// conversation comes back with an undo.
+	const head = useQueryResult(selectBranchHead, { enabled: missing });
+	const removed = useAsyncRead(
+		missing ? `${conversationId}:${head.rows[0]?.commit_id ?? ""}` : null,
+		() => readRemovedConversation(lix, conversationId),
+		{ hold: true },
 	);
-	if (result.status === "error") return <NotAvailable />;
+	const lostDraft = hasCommentText(draft) ? (
+		<LostDraft draft={draft} onChange={setDraft} />
+	) : null;
+	if (result.status === "error")
+		return lostDraft ? <Column>{lostDraft}</Column> : <NotAvailable />;
 	if (missing) {
 		if (removed.status === "pending") return null;
 		if (removed.status === "error" || removed.value === null)
-			return <NotAvailable />;
+			return lostDraft ? (
+				<Column>
+					<NotAvailable inline />
+					{lostDraft}
+				</Column>
+			) : (
+				<NotAvailable />
+			);
 		return (
 			<RemovedConversationPage
 				atelier={atelier}
 				view={view}
 				removed={removed.value}
+				footer={lostDraft}
 			/>
 		);
 	}
@@ -231,7 +276,41 @@ function ConversationReader({
 			atelier={atelier}
 			view={view}
 			conversation={conversation}
+			draft={draft}
+			onDraftChange={setDraft}
 		/>
+	);
+}
+
+/**
+ * A reply that was being written when its conversation went away: kept,
+ * editable so it can be copied, and said plainly that it was not sent.
+ */
+function LostDraft({
+	draft,
+	onChange,
+}: {
+	readonly draft: Document;
+	readonly onChange: (draft: Document) => void;
+}) {
+	return (
+		<div className="flex flex-col gap-2">
+			<p role="alert" className="text-[13px] text-history-secondary">
+				Your reply wasn’t sent: this conversation isn’t available anymore. The
+				text is kept here so you can copy it.
+			</p>
+			<Composer
+				label="Unsent reply"
+				placeholder="Leave a comment…"
+				value={draft}
+				onChange={onChange}
+				onSubmit={() =>
+					Promise.reject(new Error("This conversation isn’t available."))
+				}
+				tone="neutral"
+				size="view"
+			/>
+		</div>
 	);
 }
 
@@ -241,10 +320,14 @@ function LiveConversation({
 	atelier,
 	view,
 	conversation,
+	draft,
+	onDraftChange,
 }: {
 	readonly atelier: Runtime;
 	readonly view: Pick<ExtensionView, "state" | "instanceId" | "isActive">;
 	readonly conversation: ConversationRow;
+	readonly draft: Document;
+	readonly onDraftChange: (draft: Document) => void;
 }) {
 	const lix = useLix();
 	const now = useMinuteClock();
@@ -311,6 +394,8 @@ function LiveConversation({
 			<Thread comments={comments} />
 			{atelier.readOnly ? null : (
 				<ReplyBox
+					draft={draft}
+					onDraftChange={onDraftChange}
 					onSubmit={(body) => replyInConversation(lix, conversation, body)}
 				/>
 			)}
@@ -343,6 +428,16 @@ function useAnchor(
 		(session) => selectCsvRecords(session, fileId ?? ""),
 		{ enabled: target?.kind === "csv_row" },
 	);
+	// A list, table or quote carries no text itself: read its parts.
+	const block =
+		target?.kind === "markdown_block"
+			? blocks.rows.find((row) => row.id === target.nodeId)
+			: undefined;
+	const container = block !== undefined && blockRowText(block) === null;
+	const nodes = useQueryResult(
+		(session) => selectMarkdownNodes(session, fileId ?? ""),
+		{ enabled: container },
+	);
 	if (!target) return { value: null, settled: false };
 	switch (target.kind) {
 		case "checkpoint":
@@ -353,7 +448,11 @@ function useAnchor(
 						settled: true,
 					};
 		case "markdown_block":
-			if (blocks.status === "pending" || path.status === "pending")
+			if (
+				blocks.status === "pending" ||
+				path.status === "pending" ||
+				(container && nodes.status === "pending")
+			)
 				return { value: null, settled: false };
 			return {
 				value: markdownBlockAnchor(
@@ -361,6 +460,7 @@ function useAnchor(
 					target.fileId,
 					path.rows[0]?.path ?? null,
 					target.nodeId,
+					container ? nodes.rows : undefined,
 				),
 				settled: true,
 			};
@@ -397,11 +497,13 @@ function useTabLabel(
 		(state.atelier as { label?: unknown } | undefined)?.label ?? null;
 	const currentTitle = state.title ?? null;
 	useEffect(() => {
-		if (!view.isActive || label === null) return;
+		if (label === null) return;
 		if (currentLabel === label && currentTitle === title) return;
 		void atelier.views
 			.open(ATELIER_CONVERSATION_VIEW_ID, {
 				instanceId: view.instanceId,
+				// A tab in the background is renamed where it is.
+				...(view.isActive ? {} : { activate: false }),
 				focus: false,
 				state: {
 					...state,
@@ -433,27 +535,39 @@ function ConversationTitle({
 	readonly readOnly: boolean;
 	readonly onSave?: (title: string) => Promise<void>;
 }) {
-	const [editing, setEditing] = useState(false);
+	// The title as it was when editing began: a rename that lands meanwhile
+	// (another reader, an agent) is not overwritten by an unchanged draft.
+	const [editing, setEditing] = useState<{ readonly base: string } | null>(
+		null,
+	);
 	const [draft, setDraft] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const buttonRef = useRef<HTMLButtonElement>(null);
 	const doneRef = useRef(false);
+	// Enter and Escape hand the keyboard back to the title.
+	const refocusRef = useRef(false);
 	useEffect(() => {
 		if (editing) inputRef.current?.select();
+		else if (refocusRef.current) {
+			refocusRef.current = false;
+			buttonRef.current?.focus();
+		}
 	}, [editing]);
 	const heading = "text-[26px] leading-[1.2] tracking-[-0.015em] outline-none";
 	if (editing) {
-		const finish = async (save: boolean) => {
+		const finish = async (save: boolean, refocus: boolean) => {
 			if (doneRef.current) return;
 			doneRef.current = true;
-			if (save && onSave && draft.trim() !== (title ?? "")) {
+			if (save && onSave && draft.trim() !== editing.base) {
 				try {
 					await onSave(draft);
 				} catch (cause) {
 					setError(cause instanceof Error ? cause.message : String(cause));
 				}
 			}
-			setEditing(false);
+			refocusRef.current = refocus;
+			setEditing(null);
 		};
 		return (
 			<input
@@ -462,14 +576,14 @@ function ConversationTitle({
 				value={draft}
 				placeholder="Add a title"
 				onChange={(event) => setDraft(event.target.value)}
-				onBlur={() => void finish(true)}
+				onBlur={() => void finish(true, false)}
 				onKeyDown={(event) => {
 					if (event.key === "Enter") {
 						event.preventDefault();
-						void finish(true);
+						void finish(true, true);
 					} else if (event.key === "Escape") {
 						event.preventDefault();
-						void finish(false);
+						void finish(false, true);
 					}
 				}}
 				className={`conversation-title-input w-full bg-transparent p-0 font-bold text-fg ${heading}`}
@@ -481,13 +595,14 @@ function ConversationTitle({
 		doneRef.current = false;
 		setDraft(title ?? "");
 		setError(null);
-		setEditing(true);
+		setEditing({ base: title ?? "" });
 	};
 	return (
 		<>
 			<h1 className="m-0">
 				{title ? (
 					<button
+						ref={buttonRef}
 						type="button"
 						onClick={begin}
 						disabled={readOnly || !onSave}
@@ -497,23 +612,33 @@ function ConversationTitle({
 					</button>
 				) : (
 					<button
+						ref={buttonRef}
 						type="button"
 						onClick={begin}
 						disabled={readOnly || !onSave}
 						className={`flex cursor-text items-center gap-2.5 p-0 text-left font-semibold text-history-flag disabled:cursor-default ${heading}`}
 					>
-						Add a title
-						<svg
-							aria-hidden="true"
-							viewBox="0 0 24 24"
-							className="size-4"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth={2}
-						>
-							<path d="M12 20h9" />
-							<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-						</svg>
+						{readOnly || !onSave ? (
+							"Untitled"
+						) : (
+							<span>
+								<span className="sr-only">Untitled conversation, </span>
+								Add a title
+							</span>
+						)}
+						{readOnly || !onSave ? null : (
+							<svg
+								aria-hidden="true"
+								viewBox="0 0 24 24"
+								className="size-4"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth={2}
+							>
+								<path d="M12 20h9" />
+								<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+							</svg>
+						)}
 					</button>
 				)}
 			</h1>
@@ -690,19 +815,24 @@ function AnchorDetail({
 		);
 	}
 	if (anchor.kind === "markdown_block") {
+		const placeholder = blockKindLabel(anchor.blockKind).replace(/^./, (c) =>
+			c.toUpperCase(),
+		);
 		return (
 			<button
 				type="button"
 				onClick={() => onOpen()}
-				aria-label={`Open ${fileName(anchor.filePath)}${removed ? "" : " at this block"}`}
-				className={`conversation-well cursor-pointer rounded-panel px-3.5 py-2.5 text-left text-[14.5px] leading-[1.6] ${
+				className={`conversation-well cursor-pointer rounded-panel px-3.5 py-2.5 text-left text-[14.5px] leading-[1.6] whitespace-pre-line ${
 					removed ? "text-history-secondary line-through" : "text-fg"
 				}`}
 			>
-				{anchor.text ||
-					blockKindLabel(anchor.blockKind).replace(/^./, (c) =>
-						c.toUpperCase(),
-					)}
+				{/* The text is the button's name; the action is said first. */}
+				<span className="sr-only">
+					{removed
+						? `Open ${fileName(anchor.filePath)}. Removed ${blockKindLabel(anchor.blockKind)}: `
+						: `Open ${fileName(anchor.filePath)} at this ${blockKindLabel(anchor.blockKind)}: `}
+				</span>
+				{anchor.text || placeholder}
 			</button>
 		);
 	}
@@ -726,53 +856,78 @@ function CsvRowTable({
 	readonly onOpen: () => void;
 	readonly removed: boolean;
 }) {
-	const count = Math.min(
-		MAX_CSV_COLUMNS,
-		Math.max(anchor.header.length, anchor.cells.length),
-	);
+	const width = Math.max(anchor.header.length, anchor.cells.length);
+	const count = Math.min(MAX_CSV_COLUMNS, width);
+	const hidden = width - count;
 	const columns = Array.from({ length: count }, (_, index) => index);
 	const template = `50px ${columns.map((index) => (index === 0 ? "1.4fr" : "1fr")).join(" ")}`;
+	// The header record itself: one row, drawn as the header it is.
+	const isHeader = anchor.rowNumber === 0;
+	const name = fileName(anchor.filePath);
 	return (
 		<button
 			type="button"
 			onClick={onOpen}
-			aria-label={`Open ${fileName(anchor.filePath)}${removed ? "" : ` at row ${anchor.rowNumber}`}`}
-			className={`block w-full cursor-pointer overflow-hidden rounded-panel p-0 border border-border text-left text-[12.5px] leading-[1.2] ${
+			className={`block w-full cursor-pointer overflow-hidden rounded-panel border border-border p-0 text-left text-[12.5px] leading-[1.2] ${
 				removed ? "line-through" : ""
 			}`}
 		>
+			<span className="sr-only">
+				{isHeader
+					? `Open ${name} at its header: ${anchor.header.join(", ")}`
+					: `Open ${name} at row ${anchor.rowNumber}${removed ? " (removed)" : ""}: ${anchor.header
+							.map(
+								(column, index) =>
+									`${column || `column ${index + 1}`}: ${anchor.cells[index] ?? ""}`,
+							)
+							.join(", ")}`}
+			</span>
 			<span
-				className="grid border-b border-border bg-bg-subtle text-[10.5px] font-bold tracking-[0.04em] text-fg-muted uppercase"
+				aria-hidden="true"
+				className={`grid bg-bg-subtle text-[10.5px] font-bold tracking-[0.04em] text-fg-muted uppercase ${
+					isHeader ? "" : "border-b border-border"
+				}`}
 				style={{ gridTemplateColumns: template }}
 			>
-				<span className="px-2.5 py-2">Row</span>
+				<span className="px-2.5 py-2">{isHeader ? "Header" : "Row"}</span>
 				{columns.map((index) => (
 					<span key={index} className="truncate px-2.5 py-2">
 						{anchor.header[index] ?? ""}
 					</span>
 				))}
 			</span>
-			<span
-				className={`grid ${removed ? "text-history-secondary" : "text-fg"}`}
-				style={{ gridTemplateColumns: template }}
-			>
-				<span className="px-2.5 py-[9px] font-mono text-history-secondary">
-					{anchor.rowNumber}
+			{isHeader ? null : (
+				<span
+					aria-hidden="true"
+					className={`grid ${removed ? "text-history-secondary" : "text-fg"}`}
+					style={{ gridTemplateColumns: template }}
+				>
+					<span className="px-2.5 py-[9px] font-mono text-history-secondary">
+						{anchor.rowNumber}
+					</span>
+					{columns.map((index) => {
+						const value = anchor.cells[index] ?? "";
+						return (
+							<span
+								key={index}
+								className={`truncate px-2.5 py-[9px] ${
+									index === 0 ? "font-semibold" : ""
+								} ${looksLiteral(value) ? "font-mono" : ""}`}
+							>
+								{value}
+							</span>
+						);
+					})}
 				</span>
-				{columns.map((index) => {
-					const value = anchor.cells[index] ?? "";
-					return (
-						<span
-							key={index}
-							className={`truncate px-2.5 py-[9px] ${
-								index === 0 ? "font-semibold" : ""
-							} ${looksLiteral(value) ? "font-mono" : ""}`}
-						>
-							{value}
-						</span>
-					);
-				})}
-			</span>
+			)}
+			{hidden > 0 ? (
+				<span
+					aria-hidden="true"
+					className="block border-t border-border-subtle px-2.5 py-1.5 text-[11.5px] text-history-secondary"
+				>
+					{`+${hidden} more ${hidden === 1 ? "column" : "columns"} in ${name}`}
+				</span>
+			) : null}
 		</button>
 	);
 }
@@ -797,17 +952,20 @@ function Thread({ comments }: { readonly comments: readonly ThreadComment[] }) {
 }
 
 function ReplyBox({
+	draft,
+	onDraftChange,
 	onSubmit,
 }: {
+	readonly draft: Document;
+	readonly onDraftChange: (draft: Document) => void;
 	readonly onSubmit: (body: Document) => Promise<void>;
 }) {
-	const [draft, setDraft] = useState<Document>(emptyCommentDocument);
 	return (
 		<Composer
 			label="Leave a comment"
 			placeholder="Leave a comment…"
 			value={draft}
-			onChange={setDraft}
+			onChange={onDraftChange}
 			onSubmit={onSubmit}
 			tone="neutral"
 			size="view"
@@ -821,10 +979,13 @@ function RemovedConversationPage({
 	atelier,
 	view,
 	removed,
+	footer = null,
 }: {
 	readonly atelier: Runtime;
 	readonly view: Pick<ExtensionView, "state" | "instanceId" | "isActive">;
 	readonly removed: RemovedConversation;
+	/** A reply that was being written when the conversation went. */
+	readonly footer?: ReactNode;
 }) {
 	const now = useMinuteClock();
 	const comments = useThreadComments(removed.comments);
@@ -873,6 +1034,7 @@ function RemovedConversationPage({
 				</>
 			) : null}
 			<Thread comments={comments} />
+			{footer}
 		</Column>
 	);
 }
@@ -925,10 +1087,11 @@ function openAnchor(
 	void atelier.documents.open(anchor.filePath, {
 		newTab: true,
 		state: {
-			reveal:
+			reveal: documentRevealState(
 				anchor.kind === "csv_row"
 					? { conversationId, rowId: anchor.rowId, rowNumber: anchor.rowNumber }
 					: { conversationId, rowId: anchor.nodeId },
+			),
 		},
 	});
 }

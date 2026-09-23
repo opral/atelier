@@ -475,21 +475,26 @@ export function stackMarginCards(
 	cards: readonly { readonly top: number; readonly height: number }[],
 	activeIndex: number,
 	spacing: number = MARGIN_CARD_SPACING,
+	minTop = 0,
 ): number[] {
-	const tops = cards.map((card) => card.top);
+	const tops = cards.map((card) => Math.max(minTop, card.top));
 	const place = (from: number) => {
 		for (let index = Math.max(1, from); index < cards.length; index++) {
 			const floor = tops[index - 1]! + cards[index - 1]!.height + spacing;
-			tops[index] = Math.max(cards[index]!.top, floor);
+			tops[index] = Math.max(cards[index]!.top, minTop, floor);
 		}
 	};
 	place(1);
 	if (activeIndex < 0 || activeIndex >= cards.length) return tops;
-	tops[activeIndex] = cards[activeIndex]!.top;
+	const natural = [...tops];
+	tops[activeIndex] = Math.max(minTop, cards[activeIndex]!.top);
 	for (let index = activeIndex - 1; index >= 0; index--) {
 		const ceiling = tops[index + 1]! - spacing - cards[index]!.height;
 		tops[index] = Math.min(tops[index]!, ceiling);
 	}
+	// Cards above never leave the top of the page: when there is not room
+	// for them over the active card, the active card goes down instead.
+	if (tops[0]! < minTop) return natural;
 	place(activeIndex + 1);
 	return tops;
 }

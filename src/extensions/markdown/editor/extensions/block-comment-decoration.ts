@@ -96,14 +96,49 @@ function sameMarks(a: BlockCommentMarks, b: BlockCommentMarks): boolean {
 	return true;
 }
 
-/** Replaces the marks; a no-op when nothing changed. */
+type ViewInternals = {
+	readonly input?: { readonly mouseDown?: unknown };
+	readonly domObserver?: { flush?: () => void };
+};
+
+/** Marks waiting for a press in the document to end, per editor. */
+const deferredMarks = new WeakMap<Editor, BlockCommentMarks>();
+
+/**
+ * Replaces the marks; a no-op when nothing changed.
+ *
+ * A transaction redraws the selection from the state. While a press is in
+ * the document the browser has already moved the caret and ProseMirror has
+ * not read it yet, so a transaction then would put the old caret back over
+ * the click. The marks wait for the release, and before dispatching the
+ * DOM's selection is read into the state first.
+ */
 export function setBlockCommentMarks(
 	editor: Editor,
 	marks: BlockCommentMarks,
 ): void {
 	if (editor.isDestroyed) return;
+	const view = editor.view as unknown as ViewInternals;
+	if (view.input?.mouseDown) {
+		const waiting = deferredMarks.has(editor);
+		deferredMarks.set(editor, marks);
+		if (waiting) return;
+		const release = () => {
+			window.removeEventListener("mouseup", release, true);
+			// After ProseMirror's own mouseup has read the new selection.
+			setTimeout(() => {
+				const latest = deferredMarks.get(editor);
+				deferredMarks.delete(editor);
+				if (latest) setBlockCommentMarks(editor, latest);
+			}, 0);
+		};
+		window.addEventListener("mouseup", release, true);
+		return;
+	}
+	deferredMarks.delete(editor);
 	const current = blockCommentPluginKey.getState(editor.state);
 	if (!current || sameMarks(current.marks, marks)) return;
+	view.domObserver?.flush?.();
 	editor.view.dispatch(
 		editor.state.tr
 			.setMeta(blockCommentPluginKey, marks)

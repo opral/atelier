@@ -15,6 +15,8 @@ import { bundledPluginArchives, type Lix } from "@lix-js/sdk";
  *   S9 paragraph removed             5c0a0001-…-000000000009
  *   S10 never created                5c0a0001-…-000000000010
  *   standalone (no anchor)           5c0a0001-…-000000000011
+ *   paragraph 140 of 150 (reveal)    5c0a0001-…-000000000012
+ *   CSV row 250 of 300 (reveal)      5c0a0001-…-000000000013
  *
  * Each comment is written by its author's own account. Times are the
  * engine's clock, so every comment reads as written just now.
@@ -32,6 +34,10 @@ export const DEMO_CONVERSATION_IDS = {
 	removed: "5c0a0001-0000-4000-8000-000000000009",
 	missing: "5c0a0001-0000-4000-8000-000000000010",
 	standalone: "5c0a0001-0000-4000-8000-000000000011",
+	/** Paragraph 140 of a 150-paragraph document: opening it must scroll. */
+	longParagraph: "5c0a0001-0000-4000-8000-000000000012",
+	/** Row 250 of a 300-row CSV. */
+	longCsvRow: "5c0a0001-0000-4000-8000-000000000013",
 } as const;
 
 const RESEARCH =
@@ -307,6 +313,51 @@ export async function seedConversationDemo(lix: Lix): Promise<void> {
 		"Mara",
 		"What should we keep from this launch for the next one?",
 	]);
+
+	// Long files, to check that opening a block or row scrolls to it.
+	await writeFile(
+		"/long.md",
+		[
+			"# A long document",
+			...Array.from(
+				{ length: 150 },
+				(_, index) =>
+					`Paragraph ${index + 1}. ${"Filler text keeps each block a few lines tall. ".repeat(3)}`,
+			),
+			"",
+		].join("\n\n"),
+	);
+	await onRow(
+		ids.longParagraph,
+		"markdown_node",
+		"/long.md",
+		await paragraphId("/long.md", "Paragraph 140. Filler"),
+		"Deep in the document",
+		[["Nils", "This is paragraph 140."]],
+	);
+	await writeFile(
+		"/long.csv",
+		[
+			"id,name,value",
+			...Array.from(
+				{ length: 300 },
+				(_, index) => `${index + 1},Row ${index + 1},${(index + 1) * 10}`,
+			),
+			"",
+		].join("\n"),
+	);
+	const longRows = await lix.execute(
+		"SELECT id FROM csv_row WHERE lixcol_file_id = $1 ORDER BY order_key, id",
+		[await fileId("/long.csv")],
+	);
+	await onRow(
+		ids.longCsvRow,
+		"csv_row",
+		"/long.csv",
+		String(longRows.rows[250]!.id),
+		"Row 250",
+		[["Samuel", "Check this value."]],
+	);
 
 	await lix.execute("INSERT INTO lix_key_value (key, value) VALUES ($1, $2)", [
 		DEMO_MARKER,

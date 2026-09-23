@@ -58,7 +58,8 @@
 	.comment-fold-view:hover {
 		background: var(--atelier-bg-hover);
 	}
-	.comment-fold-avatar-view {
+	/* Two classes: the base ring below comes later in the sheet. */
+	.comment-fold-avatar.comment-fold-avatar-view {
 		box-shadow: 0 0 0 2px var(--comment-avatar-ring);
 	}
 

@@ -15,6 +15,7 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { ConversationView } from "./conversation-view";
 import { ATELIER_CONVERSATION_VIEW_ID } from "./conversation-location";
 import { extension } from ".";
+import { OpenConversationButton } from "./open-conversation";
 
 function body(text: string): Document {
 	return {
@@ -169,6 +170,61 @@ describe("ConversationView", () => {
 		).toBeTruthy();
 	});
 
+	test("an unchanged draft does not overwrite a rename that landed while editing, and focus returns to the title", async () => {
+		lix = await openLix();
+		const { id } = await checkpointConversation(lix, ["hello"]);
+		renderView(runtimeStub(), id);
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Version sent to legal" }),
+		);
+		const input = screen.getByRole("textbox", { name: "Conversation title" });
+		// Someone else renames it while this reader's field is open.
+		await lix.execute("UPDATE lix_conversation SET title = $1 WHERE id = $2", [
+			"Renamed elsewhere",
+			id,
+		]);
+		await act(async () => {
+			fireEvent.keyDown(input, { key: "Enter" });
+		});
+		const title = await screen.findByRole("button", {
+			name: "Renamed elsewhere",
+		});
+		const rows = await lix.execute(
+			"SELECT title FROM lix_conversation WHERE id = $1",
+			[id],
+		);
+		expect(rows.rows[0]?.title).toBe("Renamed elsewhere");
+		await waitFor(() => expect(document.activeElement).toBe(title));
+	});
+
+	test("the untitled title is named for what it is", async () => {
+		lix = await openLix();
+		const { id } = await checkpointConversation(lix, []);
+		await lix.execute(
+			"UPDATE lix_conversation SET title = NULL WHERE id = $1",
+			[id],
+		);
+		renderView(runtimeStub(), id);
+		expect(
+			await screen.findByRole("button", {
+				name: "Untitled conversation, Add a title",
+			}),
+		).toBeTruthy();
+	});
+
+	test("Open conversation opens the tab on any click when it is a button", () => {
+		const views = { open: vi.fn(async () => {}) };
+		const id = crypto.randomUUID();
+		render(<OpenConversationButton atelier={{ views }} conversationId={id} />);
+		fireEvent.click(screen.getByRole("button", { name: "Open conversation" }), {
+			metaKey: true,
+		});
+		expect(views.open).toHaveBeenCalledWith(ATELIER_CONVERSATION_VIEW_ID, {
+			state: { conversationId: id },
+			newTab: true,
+		});
+	});
+
 	test("a long thread folds and unfolds, and folds again", async () => {
 		lix = await openLix();
 		const { id } = await checkpointConversation(lix, [
@@ -216,6 +272,16 @@ describe("ConversationView", () => {
 		expect(extension.instanceIdForState?.({ conversationId: id })).toBe(
 			`${ATELIER_CONVERSATION_VIEW_ID}:${id}`,
 		);
-		expect(extension.instanceIdForState?.({})).toBeUndefined();
+		// Case does not make a second tab, and an invalid id opened twice is
+		// one "not available" tab.
+		expect(
+			extension.instanceIdForState?.({ conversationId: id.toUpperCase() }),
+		).toBe(`${ATELIER_CONVERSATION_VIEW_ID}:${id}`);
+		expect(extension.instanceIdForState?.({ conversationId: "nope" })).toBe(
+			`${ATELIER_CONVERSATION_VIEW_ID}:nope`,
+		);
+		expect(extension.instanceIdForState?.({})).toBe(
+			`${ATELIER_CONVERSATION_VIEW_ID}:none`,
+		);
 	});
 });

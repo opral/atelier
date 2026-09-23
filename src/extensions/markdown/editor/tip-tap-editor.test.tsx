@@ -2764,3 +2764,29 @@ test("a delayed acknowledgment read cannot replace a newer observed winner", asy
 		"Newest remote winner",
 	);
 });
+
+test("a press on something laid over the surface is its own, not a press on the document", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: fakeUuid("surface-overlay-press"),
+		markdown: "First line\n\nSecond line",
+	});
+	const surface = editor.view.dom.closest(".tiptap-container") as HTMLElement;
+	// A reply field in a comment card, laid over the surface.
+	const overlay = document.createElement("div");
+	const field = document.createElement("div");
+	field.contentEditable = "true";
+	overlay.append(field);
+	surface.append(overlay);
+	await act(async () => {
+		editor.commands.setTextSelection(3);
+	});
+
+	const onOverlay = fireEvent.mouseDown(field);
+	expect(onOverlay).toBe(true); // not prevented
+	expect(editor.state.selection.from).toBe(3);
+
+	// The surface's own background still puts the caret in the document.
+	const onBackground = fireEvent.mouseDown(surface);
+	expect(onBackground).toBe(false);
+	overlay.remove();
+});

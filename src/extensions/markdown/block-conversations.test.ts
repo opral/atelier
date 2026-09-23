@@ -123,6 +123,18 @@ describe("stackMarginCards", () => {
 			),
 		).toEqual([32, 120]);
 	});
+
+	test("cards above an active card stay on the page; the active card goes down", () => {
+		expect(
+			stackMarginCards(
+				[
+					{ top: 10, height: 80 },
+					{ top: 40, height: 60 },
+				],
+				1,
+			),
+		).toEqual([10, 98]);
+	});
 });
 
 describe("selectedTopLevelBlock", () => {
