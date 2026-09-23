@@ -268,6 +268,7 @@ describe("open file lifecycle", () => {
 		});
 		expect(onEvent).toHaveBeenCalledWith({
 			type: "document_open_attempted",
+			fileId: expect.any(String),
 			filePath: "/one.md",
 			documentOrigin: "existing",
 			viewKind: "atelier_file",

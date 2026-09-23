@@ -193,6 +193,7 @@ export type AtelierDocumentsApi = {
 export type AtelierEvent =
 	| {
 			type: "document_open_attempted";
+			fileId: string;
 			filePath: string;
 			documentOrigin: AtelierDocumentOrigin;
 			viewKind: string;
@@ -374,7 +375,11 @@ export type AtelierDocumentLinks = {
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
-	readonly scopeDocumentLix?: (path: string, lix: Lix) => Lix;
+	readonly scopeDocumentLix?: (
+		path: string,
+		fileId: string | undefined,
+		lix: Lix,
+	) => Lix;
 	/** The host's file URLs, when it has any; see `AtelierDocumentLinks`. */
 	readonly documentLinks?: AtelierDocumentLinks;
 	/**

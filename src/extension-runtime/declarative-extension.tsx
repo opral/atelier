@@ -42,14 +42,23 @@ export function DeclarativeExtension({
 		state: ExtensionState;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
-	const documentPath = typeof view.state.filePath === "string"
-		? view.state.filePath
-		: undefined;
+	const documentPath =
+		typeof view.state.filePath === "string" ? view.state.filePath : undefined;
 	const documentAtelier = useMemo(
-		() => documentPath && atelier.scopeDocumentLix
-			? { ...atelier, lix: atelier.scopeDocumentLix(documentPath, atelier.lix) }
-			: atelier,
-		[atelier, documentPath],
+		() =>
+			documentPath && atelier.scopeDocumentLix
+				? {
+						...atelier,
+						lix: atelier.scopeDocumentLix(
+							documentPath,
+							typeof view.state.fileId === "string"
+								? view.state.fileId
+								: undefined,
+							atelier.lix,
+						),
+					}
+				: atelier,
+		[atelier, documentPath, view.state.fileId],
 	);
 	const destination: AtelierLocation =
 		typeof view.state.filePath === "string" &&

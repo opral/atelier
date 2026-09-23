@@ -2309,6 +2309,7 @@ function LayoutShellLoadedContentResolved({
 			const kind = handler?.kind ?? FILE_EXTENSION_KIND;
 			emitEvent({
 				type: "document_open_attempted",
+				fileId,
 				filePath,
 				documentOrigin,
 				viewKind: kind,
