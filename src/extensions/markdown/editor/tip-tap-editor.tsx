@@ -23,6 +23,7 @@ import {
 import {
 	acknowledgeMarkdownEditorPersistence,
 	markdownEditorExpectedFileMarkdown,
+	markdownEditorHasUnacknowledgedChanges,
 	createEditor,
 	createMarkdownEditorOriginKey,
 	markdownEditorLastAcknowledgedMarkdown,
@@ -652,8 +653,14 @@ function TipTapEditorLoadedContent({
 		if (
 			!readOnly &&
 			sourceMarkdown === markdownEditorExpectedFileMarkdown(editor)
-		)
+		) {
+			if (
+				!markdownEditorHasUnacknowledgedChanges(editor) &&
+				!editorTextMatchesMarkdown(editor, sourceMarkdown, defaultBlock)
+			)
+				setEditorMarkdown(editor, sourceMarkdown, defaultBlock);
 			return;
+		}
 
 		const nextMarkdown = normalizePersistedMarkdown(sourceMarkdown);
 		const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
@@ -731,7 +738,9 @@ function TipTapEditorLoadedContent({
 					buildNormalizedMarkdownFromEditor(editor) ===
 					normalizePersistedMarkdown(markdown)
 				) {
-					acknowledgeMarkdownEditorPersistence(editor, markdown);
+					if (editorTextMatchesMarkdown(editor, markdown, defaultBlock))
+						acknowledgeMarkdownEditorPersistence(editor, markdown);
+					else setEditorMarkdown(editor, markdown, defaultBlock);
 					return;
 				}
 				setEditorMarkdown(editor, markdown, defaultBlock);
@@ -934,6 +943,20 @@ function TipTapEditorLoadingState({
 			<div className="h-full w-full bg-panel" />
 		</div>
 	);
+}
+
+function editorTextMatchesMarkdown(
+	editor: Editor,
+	markdown: string,
+	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
+): boolean {
+	const ast = parseMarkdown(markdown) as any;
+	const canonical = editor.schema.nodeFromJSON(
+		astToTiptapDoc(ast, { defaultBlock }),
+	);
+	const text = (doc: typeof canonical) =>
+		doc.textBetween(0, doc.content.size, "\n");
+	return text(editor.state.doc) === text(canonical);
 }
 
 function setEditorMarkdown(

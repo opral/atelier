@@ -1928,6 +1928,30 @@ test("a successful local persist marks the editor clean before its observer echo
 	});
 });
 
+test("reconciles text the Markdown serializer removes after saving", async () => {
+	const fileId = fakeUuid("file_canonical_paragraph_space");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Initial\n",
+		persistDebounceMs: 0,
+	});
+	await act(async () => {
+		editor.commands.setContent({
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [{ type: "text", text: " online-0-10" }],
+				},
+			],
+		});
+	});
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toBe("online-0-10\n");
+		expect(editor.state.doc.textContent).toBe("online-0-10");
+	});
+});
+
 test("applies different-origin markdown update when editor is clean", async () => {
 	const fileId = fakeUuid("file_external_clean");
 	const { lix, editor } = await renderEditorForMarkdownFile({
