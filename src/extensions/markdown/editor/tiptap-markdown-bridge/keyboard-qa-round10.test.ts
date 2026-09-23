@@ -289,7 +289,7 @@ describe("Delete across block boundaries", () => {
 });
 
 describe("Enter", () => {
-	test("at the start of a heading opens a line above and keeps the heading", () => {
+	test("at the start of a heading opens a line above and puts the caret there", () => {
 		const editor = editorFor("# Obsidian Version Control\n\nbody\n");
 		caret(editor, "Obsidian Version Control", 0);
 		expect(key(editor, "Enter")).toBe(true);
@@ -297,12 +297,10 @@ describe("Enter", () => {
 			"<span></span>\n\n# Obsidian Version Control\n\nbody\n",
 		);
 		const $caret = editor.state.selection.$from;
-		expect($caret.parent.type.name).toBe("heading");
+		expect($caret.parent.type.name).toBe("paragraph");
 		expect($caret.parentOffset).toBe(0);
 		type(editor, "x");
-		expect(md(editor)).toBe(
-			"<span></span>\n\n# xObsidian Version Control\n\nbody\n",
-		);
+		expect(md(editor)).toBe("x\n\n# Obsidian Version Control\n\nbody\n");
 	});
 
 	test("at the start of a heading inside a quote keeps the heading", () => {
@@ -312,7 +310,7 @@ describe("Enter", () => {
 		expect(md(editor)).toBe("> <span></span>\n>\n> # Quoted\n");
 	});
 
-	test("then Backspace takes the empty line back and keeps the heading", () => {
+	test("Backspace removes the empty line above the heading", () => {
 		const editor = editorFor("# Title\n");
 		caret(editor, "Title", 0);
 		key(editor, "Enter");
@@ -321,6 +319,33 @@ describe("Enter", () => {
 		// With nothing empty above, Backspace turns the heading into text.
 		expect(key(editor, "Backspace")).toBe(true);
 		expect(md(editor)).toBe("Title\n");
+	});
+
+	test("Backspace removes the inserted line after a table and enters its last cell", () => {
+		const editor = editorFor(
+			"| Folder | Holds |\n| --- | --- |\n| notes/ | Notes |\n\n## Conventions\n",
+		);
+		caret(editor, "Conventions", 0);
+		key(editor, "Enter");
+
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe(
+			"| Folder | Holds |\n| ------ | ----- |\n| notes/ | Notes |\n\n## Conventions\n",
+		);
+		expect(editor.state.selection.$from.parent.type.name).toBe("tableCell");
+		expect(editor.state.selection.$from.parent.textContent).toBe("Notes");
+		expect(editor.state.selection.$from.parentOffset).toBe(5);
+	});
+
+	test("Backspace removes the inserted line inside a quote", () => {
+		const editor = editorFor("> # Quoted\n");
+		caret(editor, "Quoted", 0);
+		key(editor, "Enter");
+
+		expect(key(editor, "Backspace")).toBe(true);
+		expect(md(editor)).toBe("> # Quoted\n");
+		expect(editor.state.selection.$from.parent.type.name).toBe("heading");
+		expect(editor.state.selection.$from.parentOffset).toBe(0);
 	});
 
 	test("over a heading's whole text does not throw", () => {

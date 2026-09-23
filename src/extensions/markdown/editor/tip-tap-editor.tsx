@@ -722,6 +722,18 @@ function TipTapEditorLoadedContent({
 					return;
 				const markdown = decodeMarkdownData(result.rows[0].content);
 				externalSyncState.pendingExternalMarkdown = null;
+				// The observer can report our own write before its persistence
+				// acknowledgment advances the clean baseline. In that window it is
+				// queued as an external winner. If the reread is already what the
+				// editor contains, acknowledge it without replacing the ProseMirror
+				// document: setContent would reset a valid caret (often to EOF).
+				if (
+					buildNormalizedMarkdownFromEditor(editor) ===
+					normalizePersistedMarkdown(markdown)
+				) {
+					acknowledgeMarkdownEditorPersistence(editor, markdown);
+					return;
+				}
 				setEditorMarkdown(editor, markdown, defaultBlock);
 			})
 			.catch((error: unknown) => {

@@ -1035,6 +1035,42 @@ test("keeps the editor selection when adding frontmatter", async () => {
 	expect(editor.state.selection.$from.parent.textContent).toBe("Hello");
 });
 
+test("keeps the caret in the new paragraph when Enter is pressed before a heading", async () => {
+	const fileId = fakeUuid("file_enter_before_heading_caret");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown:
+			"| Folder | Holds |\n| --- | --- |\n| notes/ | Notes |\n\n## Conventions\n\nFollowing text.\n",
+		persistDebounceMs: 0,
+	});
+	let headingPosition: number | null = null;
+	editor.state.doc.descendants((node, position) => {
+		if (node.type.name === "heading" && node.textContent === "Conventions") {
+			headingPosition = position;
+			return false;
+		}
+		return true;
+	});
+	expect(headingPosition).not.toBeNull();
+	await act(async () => {
+		editor.commands.setTextSelection(headingPosition! + 1);
+		editor.view.focus();
+		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+	});
+	const immediateCaret = editor.state.selection.$from;
+	expect(immediateCaret.parent.type.name).toBe("paragraph");
+	expect(immediateCaret.parentOffset).toBe(0);
+
+	await waitFor(async () => {
+		expect(await decodeFileMarkdown(lix, fileId)).toContain(
+			"<span></span>\n\n## Conventions",
+		);
+	});
+	const caret = editor.state.selection.$from;
+	expect(caret.parent.type.name).toBe("paragraph");
+	expect(caret.parentOffset).toBe(0);
+});
+
 test("preserves newly created frontmatter after it has held a property", async () => {
 	const { editor } = await renderEditorForMarkdownFile({
 		fileId: fakeUuid("file_frontmatter_created_then_emptied"),

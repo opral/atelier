@@ -1376,7 +1376,6 @@ export const MarkdownWcShortcuts = Extension.create({
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
 				if (restoreBlockMarker(this.editor.view)) return true;
-				if (escapeEmptyBlockquote(true)) return true;
 				if (deleteSelectionWithinTextblock()) return true;
 				const { state } = this.editor;
 				const { selection } = state;
@@ -1394,6 +1393,38 @@ export const MarkdownWcShortcuts = Extension.create({
 					if (removeEmptyBlockAbove($from, -1)) return true;
 					return this.editor.commands.setNode("paragraph");
 				}
+				// Enter at the start of a heading leaves the caret in the newly
+				// inserted paragraph. Backspace there should undo that insertion,
+				// including when it is the first block in the document.
+				if (
+					$from.parent?.type?.name === "paragraph" &&
+					$from.parent.content.size === 0 &&
+					$from.parentOffset === 0
+				) {
+					const parentDepth = $from.depth - 1;
+					const parent = $from.node(parentDepth);
+					const index = $from.index(parentDepth);
+					const following = parent.maybeChild(index + 1);
+					if (following?.type.name === "heading") {
+						// Preserve table navigation: removing a blank line after a
+						// table enters its last cell, even when the next block is a heading.
+						if (
+							index > 0 &&
+							parent.child(index - 1).type.name === "table" &&
+							backspaceAcrossBlockAbove($from)
+						)
+							return true;
+						const paragraphStart = $from.before();
+						const tr = state.tr.delete(
+							paragraphStart,
+							paragraphStart + $from.parent.nodeSize,
+						);
+						tr.setSelection(TextSelection.create(tr.doc, paragraphStart + 1));
+						this.editor.view.dispatch(tr.scrollIntoView());
+						return true;
+					}
+				}
+				if (escapeEmptyBlockquote(true)) return true;
 				// Backspace at the top of the body selects the frontmatter first;
 				// deleting a whole YAML block on one keystroke is too easy to do
 				// by accident.
@@ -1649,11 +1680,19 @@ export const MarkdownWcShortcuts = Extension.create({
 							const block = $at.parent;
 							// Enter at the start of a line opens an empty line above it
 							// and leaves the line as it was: a heading stays a heading.
-							if ($at.parentOffset === 0 && block.content.size > 0) {
+							if (
+								block.type.name === "heading" &&
+								$at.parentOffset === 0 &&
+								block.content.size > 0
+							) {
 								const paragraph = tr.doc.type.schema.nodes.paragraph!;
 								const index = $at.index(-1);
 								if ($at.node(-1).canReplaceWith(index, index, paragraph)) {
-									tr.insert($at.before(), paragraph.create());
+									const paragraphStart = $at.before();
+									tr.insert(paragraphStart, paragraph.create());
+									tr.setSelection(
+										TextSelection.create(tr.doc, paragraphStart + 1),
+									);
 									return true;
 								}
 							}
