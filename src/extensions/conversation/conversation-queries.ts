@@ -3,6 +3,7 @@ import type { Lix } from "@lix-js/sdk";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { toPlainText } from "@opral/zettel-lexical";
 import { qb } from "@/lib/lix-kysely";
+import { resolvedColumn } from "@/lib/conversation-writes";
 import {
 	blockRowText,
 	type MarkdownBlockRow,
@@ -25,13 +26,20 @@ export type ConversationRow = {
 	readonly title: string | null;
 	readonly lixcol_global: boolean;
 	readonly lixcol_created_at: string | null;
+	/** Always false on a Lix without the `resolved` column. */
+	readonly resolved?: boolean;
 };
 
 /** One conversation, in whichever scope the reader's overlay shows it. */
-export function selectConversation(lix: Lix, conversationId: string) {
+export function selectConversation(
+	lix: Lix,
+	conversationId: string,
+	resolvable = false,
+) {
 	return qb(lix)
 		.selectFrom("lix_conversation")
 		.select(["id", "target", "title", "lixcol_global", "lixcol_created_at"])
+		.select(resolvedColumn("lix_conversation", resolvable))
 		.where("id", "=", conversationId)
 		.limit(1)
 		.$castTo<ConversationRow>();

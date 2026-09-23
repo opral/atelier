@@ -7,6 +7,13 @@ import type { Lix } from "@lix-js/sdk";
  * written by its author's own account, so avatars and grouping are real.
  */
 const DEMO_MARKER = "atelier_preview_comments_demo_v1";
+/**
+ * The preview account's own comments, which offer Delete. Seeded on their
+ * own marker so a preview seeded before them gets them too, and placed where
+ * no design comparison looks: the oldest checkpoint's conversation and the
+ * README's last paragraph (added for them by the latest checkpoint).
+ */
+const OWN_COMMENTS_MARKER = "atelier_preview_comments_demo_own_v1";
 
 type DemoComment = readonly [author: string, text: string];
 
@@ -74,13 +81,18 @@ const CHECKPOINTS: readonly DemoCheckpoint[] = [
 		title: null,
 		files: {
 			"/README.md":
-				"# opral monorepo\n\nHome of Atelier, Lix, and the tools we build on top of them. Each package has its own README and changelog.\n\n## Releases\n\nReleases are cut from main every Tuesday.\n\nResearch moved to /archive.\n",
+				"# opral monorepo\n\nHome of Atelier, Lix, and the tools we build on top of them. Each package has its own README and changelog.\n\n## Releases\n\nReleases are cut from main every Tuesday.\n\nResearch moved to /archive.\n\nQuestions go to the discussions tab.\n",
 		},
 		comments: [],
 	},
 ];
 
 export async function seedCommentsDemo(lix: Lix): Promise<void> {
+	await seedCheckpoints(lix);
+	await seedOwnComments(lix);
+}
+
+async function seedCheckpoints(lix: Lix): Promise<void> {
 	const seeded = await lix.execute(
 		"SELECT key FROM lix_key_value WHERE key = $1",
 		[DEMO_MARKER],
@@ -156,6 +168,64 @@ export async function seedCommentsDemo(lix: Lix): Promise<void> {
 
 	await lix.execute("INSERT INTO lix_key_value (key, value) VALUES ($1, $2)", [
 		DEMO_MARKER,
+		true,
+	]);
+}
+
+/** Written by the active account: the preview reader's own. */
+async function seedOwnComments(lix: Lix): Promise<void> {
+	const seeded = await lix.execute(
+		"SELECT key FROM lix_key_value WHERE key = $1",
+		[OWN_COMMENTS_MARKER],
+	);
+	if (seeded.rows.length > 0) return;
+	const checkpoint = await lix.execute(
+		"SELECT id FROM lix_conversation WHERE title = $1 AND lixcol_global = true LIMIT 1",
+		["Research moved to archive"],
+	);
+	const checkpointConversation = checkpoint.rows[0]?.id;
+	if (typeof checkpointConversation === "string")
+		await lix.execute(
+			"INSERT INTO lix_comment (id, conversation_id, body, lixcol_global) VALUES ($1, $2, $3::jsonb, true)",
+			[
+				crypto.randomUUID(),
+				checkpointConversation,
+				JSON.stringify(
+					paragraph("Keeping /archive read-only until the links are fixed."),
+				),
+			],
+		);
+	try {
+		const block = await lix.execute(
+			`SELECT node.id AS node_id, file.id AS file_id
+			 FROM markdown_node AS node
+			 JOIN markdown_node AS root ON root.id = node.parent_id AND root.lixcol_file_id = node.lixcol_file_id
+			 JOIN lix_file AS file ON file.id = node.lixcol_file_id
+			 WHERE file.path = '/README.md' AND root.kind = 'document' AND node.kind = 'paragraph'
+			 ORDER BY node.order_key DESC, node.id DESC
+			 LIMIT 1`,
+		);
+		const row = block.rows[0];
+		if (row) {
+			const conversationId = crypto.randomUUID();
+			await lix.execute(
+				"INSERT INTO lix_conversation (id, target) VALUES ($1, lix_row_ref('markdown_node', $2, $3))",
+				[conversationId, row.file_id, row.node_id],
+			);
+			await lix.execute(
+				"INSERT INTO lix_comment (id, conversation_id, body) VALUES ($1, $2, $3::jsonb)",
+				[
+					crypto.randomUUID(),
+					conversationId,
+					JSON.stringify(paragraph("Should this link the discussions tab?")),
+				],
+			);
+		}
+	} catch (error) {
+		console.warn("Demo block conversation skipped", error);
+	}
+	await lix.execute("INSERT INTO lix_key_value (key, value) VALUES ($1, $2)", [
+		OWN_COMMENTS_MARKER,
 		true,
 	]);
 }

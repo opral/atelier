@@ -1609,3 +1609,148 @@ describe("a thread follows its text out of an emptied block", () => {
 		});
 	}
 });
+
+describe("deleting a comment on a block", () => {
+	const popover = () => document.querySelector(".markdown-comment-popover");
+
+	/** Deletes the comment holding `text` through its menu. */
+	async function deleteThrough(text: string) {
+		const row = await waitFor(() => {
+			const found = [
+				...document.querySelectorAll<HTMLElement>(
+					".markdown-comment-popover [data-comment-id]",
+				),
+			].find((candidate) => candidate.textContent?.includes(text));
+			if (!found) throw new Error(`no comment "${text}"`);
+			return found;
+		});
+		fireEvent.click(
+			within(row).getByRole("button", { name: "Comment actions" }),
+		);
+		fireEvent.click(
+			within(row).getByRole("menuitem", { name: /Delete comment/ }),
+		);
+		await act(async () => {
+			fireEvent.click(within(row).getByRole("menuitem", { name: "Delete" }));
+		});
+	}
+
+	test("the last comment takes its conversation, the block's mark and its count; the caret goes back to the document", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { lix, conversationId, editor } = view;
+			await openConversationFromCount();
+			await deleteThrough("On this block");
+			await waitFor(() => {
+				expect(popover()).toBeNull();
+				expect(document.querySelector(".markdown-comment-badge")).toBeNull();
+				expect(
+					document.querySelector(".ProseMirror > [data-block-comment]"),
+				).toBeNull();
+			});
+			const left = await lix.execute(
+				"SELECT id FROM lix_conversation WHERE id = $1",
+				[conversationId],
+			);
+			expect(left.rows).toHaveLength(0);
+			await waitFor(() => expect(editor.view.hasFocus()).toBe(true));
+			// Deleted on purpose: nothing to announce.
+			expect(document.querySelector(".markdown-comment-notice")).toBeNull();
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("only the reader's own replies offer Delete; the count follows a delete and focus goes to the reply field", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { lix, conversationId } = view;
+			const accountId = crypto.randomUUID();
+			await lix.execute(
+				"INSERT INTO lix_account (id, kind, name, status, lixcol_global) VALUES ($1, 'human', 'Mara', 'active', true)",
+				[accountId],
+			);
+			const mara = await lix.openAnotherSession({ accountId });
+			try {
+				await replyToBlockConversation(mara, conversationId, comment("Hers"));
+			} finally {
+				await mara.close();
+			}
+			await replyToBlockConversation(lix, conversationId, comment("Mine too"));
+			await waitFor(() =>
+				expect(
+					document
+						.querySelector(".markdown-comment-badge")
+						?.getAttribute("aria-label"),
+				).toBe("3 comments"),
+			);
+			await openConversationFromCount();
+			const rows = await waitFor(() => {
+				const found = [
+					...document.querySelectorAll<HTMLElement>(
+						".markdown-comment-popover [data-comment-id]",
+					),
+				];
+				expect(found).toHaveLength(3);
+				return found;
+			});
+			const hasActions = rows.map(
+				(row) =>
+					within(row).queryByRole("button", { name: "Comment actions" }) !==
+					null,
+			);
+			expect(hasActions).toEqual([true, false, true]);
+			await deleteThrough("Mine too");
+			await waitFor(() =>
+				expect(
+					document
+						.querySelector(".markdown-comment-badge")
+						?.getAttribute("aria-label"),
+				).toBe("2 comments"),
+			);
+			expect(popover()).not.toBeNull();
+			await waitFor(() =>
+				expect(document.activeElement).toBe(
+					document.querySelector(
+						'.markdown-comment-popover [role="textbox"][aria-label="Reply"]',
+					),
+				),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("Esc closes the comment's menu and leaves the conversation open", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			await openConversationFromCount();
+			const trigger = await waitFor(() =>
+				within(popover() as HTMLElement).getByRole("button", {
+					name: "Comment actions",
+				}),
+			);
+			act(() => trigger.focus());
+			fireEvent.click(trigger);
+			const menu = within(popover() as HTMLElement).getByRole("menu");
+			fireEvent.keyDown(document.activeElement ?? menu, { key: "Escape" });
+			expect(within(popover() as HTMLElement).queryByRole("menu")).toBeNull();
+			expect(document.activeElement).toBe(trigger);
+			expect(popover()).not.toBeNull();
+			// The next Esc is the conversation's, as before.
+			fireEvent.keyDown(trigger, { key: "Escape" });
+			await waitFor(() => expect(popover()).toBeNull());
+		} finally {
+			await view.close();
+		}
+	});
+});

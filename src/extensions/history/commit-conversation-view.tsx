@@ -13,6 +13,11 @@ import {
 } from "@/components/comments/comment-composer";
 import { CommentThread } from "@/components/comments/comment-thread";
 import {
+	deleteComment,
+	selectActiveAccountId,
+} from "@/lib/conversation-writes";
+import { ResolvedLine } from "@/components/comments/resolve-controls";
+import {
 	createCommitConversation,
 	replyToConversation,
 	selectConversationComments,
@@ -46,6 +51,8 @@ export function hasConversationDraft(draft: ConversationDraft): boolean {
 export function CommitConversationView({
 	commitId,
 	conversations,
+	resolved = [],
+	onReopen,
 	status,
 	onRefresh,
 	readOnly,
@@ -60,7 +67,14 @@ export function CommitConversationView({
 	open,
 }: {
 	readonly commitId: string;
+	/** The open conversations: their thread and the reply field. */
 	readonly conversations: readonly CommitConversation[];
+	/** Resolved ones, each folded to "Resolved · Reopen" (not lost). */
+	readonly resolved?: readonly {
+		readonly id: string;
+		readonly commentCount: number;
+	}[];
+	readonly onReopen?: (conversationId: string) => void;
 	readonly status: "pending" | "success" | "error";
 	/** Retry after a failed read. Writes need no refresh: reads are live. */
 	readonly onRefresh: () => void;
@@ -94,6 +108,9 @@ export function CommitConversationView({
 	if (conversationIds.length === 0) lastRowsRef.current = [];
 	else if (comments.status === "success") lastRowsRef.current = comments.rows;
 	const rows = lastRowsRef.current;
+	const account = useQueryResult(selectActiveAccountId, {
+		enabled: !readOnly,
+	});
 	// Closing a checkpoint takes focus out of a field that is folding away.
 	const returnFocusRef = useRef(returnFocus);
 	returnFocusRef.current = returnFocus;
@@ -139,6 +156,14 @@ export function CommitConversationView({
 			aria-label="Checkpoint conversation"
 			className="comment-surface flex flex-col gap-2"
 		>
+			{resolved.map((conversation) => (
+				<ResolvedLine
+					key={conversation.id}
+					commentCount={conversation.commentCount}
+					onReopen={onReopen ? () => onReopen(conversation.id) : undefined}
+					className="mr-2 ml-[23px]"
+				/>
+			))}
 			{rows.length > 0 ? (
 				<>
 					<div
@@ -151,6 +176,14 @@ export function CommitConversationView({
 						expanded={unfolded}
 						onExpandedChange={onUnfoldedChange}
 						foldWithin={foldWithinRef.current ?? rows.length}
+						accountId={account.rows[0]?.id ?? null}
+						onDelete={
+							readOnly
+								? undefined
+								: async (comment) => {
+										await deleteComment(lix, comment.id);
+									}
+						}
 					/>
 				</>
 			) : null}

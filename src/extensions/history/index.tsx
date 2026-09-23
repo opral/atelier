@@ -52,7 +52,20 @@ import {
 	setCommitConversationTitle,
 } from "./commit-conversations";
 import { emptyCommentDocument } from "@/components/comments/comment-composer";
+import {
+	ResolveButton,
+	useConversationsResolvable,
+} from "@/components/comments/resolve-controls";
+import { setConversationResolved } from "@/lib/conversation-writes";
 import { OpenConversationButton } from "../conversation/open-conversation";
+
+/**
+ * The open checkpoint's header links (Open conversation, Resolve): nothing
+ * at rest (4a); they show over the header's end while it, or one of them,
+ * is hovered or focused, and stay in the tab order.
+ */
+const HEADER_LINK_REVEAL =
+	"pointer-events-none absolute top-1.5 bg-accent-subtle text-history-selected-secondary opacity-0 hover:bg-accent-border/50 focus-visible:pointer-events-auto focus-visible:opacity-100 group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto group-has-[[data-attr=open-conversation]:hover]:opacity-100 group-has-[[data-attr=resolve-conversation]:hover]:pointer-events-auto group-has-[[data-attr=resolve-conversation]:hover]:opacity-100";
 
 export type HistoryScope = "file" | "repository";
 
@@ -776,12 +789,14 @@ function CheckpointPage({
 }) {
 	const [visible, setVisible] = useState(false);
 	const [conversationRetryKey, setConversationRetryKey] = useState(0);
+	const resolvable = useConversationsResolvable();
 	const conversations = useHeldResult(
 		useQueryResult(
 			(lix) =>
 				selectCheckpointConversations(
 					lix,
 					checkpoints.map((checkpoint) => checkpoint.commit_id),
+					resolvable,
 				),
 			{ retryKey: conversationRetryKey },
 		),
@@ -843,10 +858,14 @@ function CheckpointPage({
 							(conversation) => conversation.commit_id === checkpoint.commit_id,
 						)}
 						conversationStatus={conversations.status}
+						commentCounts={countsByConversation}
+						resolvable={resolvable}
+						// Resolved conversations are not counted.
 						commentCount={conversations.rows
 							.filter(
 								(conversation) =>
-									conversation.commit_id === checkpoint.commit_id,
+									conversation.commit_id === checkpoint.commit_id &&
+									!conversation.resolved,
 							)
 							.reduce(
 								(total, conversation) =>
@@ -876,6 +895,8 @@ function CheckpointItem({
 	conversations,
 	conversationStatus,
 	commentCount,
+	commentCounts,
+	resolvable,
 	onRefreshConversations,
 	activeFileId,
 	onPreviewVisible,
@@ -894,6 +915,10 @@ function CheckpointItem({
 	readonly conversations: readonly CommitConversation[];
 	readonly conversationStatus: "pending" | "success" | "error";
 	readonly commentCount: number;
+	/** Comments per conversation, for a resolved one's folded line. */
+	readonly commentCounts: ReadonlyMap<string, number>;
+	/** Whether this Lix can resolve a conversation (has the column). */
+	readonly resolvable: boolean;
 	readonly onRefreshConversations: () => void;
 	/** File scope: the file the rows are filtered by, marked in the previews. */
 	readonly activeFileId: string | null;
@@ -915,6 +940,14 @@ function CheckpointItem({
 		"commitId" in session.target &&
 		session.target.commitId === checkpoint.commit_id;
 	const conversationTitle = conversations[0]?.title;
+	// Resolved conversations fold to one line under the checkpoint; the
+	// thread and its reply field are the open ones'.
+	const openConversations = conversations.filter(
+		(conversation) => !conversation.resolved,
+	);
+	const resolvedConversations = conversations.filter(
+		(conversation) => conversation.resolved,
+	);
 	const rowMemory = useCheckpointRowMemory();
 	const [draft, setDraftState] = useState<ConversationDraft>(
 		() => rowMemory.drafts.get(checkpoint.commit_id) ?? emptyCommentDocument(),
@@ -1074,6 +1107,24 @@ function CheckpointItem({
 	const showCommentAction = !isViewing && !editingTitle && !atelier.readOnly;
 	const showOpenConversation =
 		isViewing && !editingTitle && Boolean(atelier.views && conversations[0]);
+	const resolveTarget =
+		resolvable && isViewing && !editingTitle && !atelier.readOnly
+			? (openConversations[0] ?? null)
+			: null;
+	async function resolve(conversationId: string, resolved: boolean) {
+		try {
+			// A written comment goes with the Resolve, as its note.
+			await setConversationResolved(
+				lix,
+				conversationId,
+				resolved,
+				resolved ? draft : null,
+			);
+			if (resolved) setDraft(emptyCommentDocument());
+		} catch (error) {
+			console.error(error);
+		}
+	}
 
 	return (
 		// The open checkpoint is where ⌘↵ sends a comment. Focus returns to its
@@ -1189,9 +1240,11 @@ function CheckpointItem({
 						// Wide rows end in file names; keep them clear of the hover button.
 						showCommentAction
 							? "group-hover:pr-[91px] group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:pr-[91px]"
-							: showOpenConversation
-								? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 group-has-[[data-attr=open-conversation]:hover]:pr-8 group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
-								: ""
+							: resolveTarget
+								? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-14 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-14 group-has-[[data-attr=open-conversation]:hover]:pr-14 group-has-[[data-attr=open-conversation]:focus-visible]:pr-14 group-has-[[data-attr=resolve-conversation]:hover]:pr-14 group-has-[[data-attr=resolve-conversation]:focus-visible]:pr-14"
+								: showOpenConversation
+									? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 group-has-[[data-attr=open-conversation]:hover]:pr-8 group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
+									: ""
 					} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
 				>
 					{flag}
@@ -1247,7 +1300,13 @@ function CheckpointItem({
 				<OpenConversationButton
 					atelier={{ views: atelier.views }}
 					conversationId={conversations[0].id}
-					className="pointer-events-none absolute top-1.5 right-[5px] bg-accent-subtle text-history-selected-secondary opacity-0 hover:bg-accent-border/50 focus-visible:pointer-events-auto focus-visible:opacity-100 group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto group-has-[[data-attr=open-conversation]:hover]:opacity-100"
+					className={`right-[5px] ${HEADER_LINK_REVEAL}`}
+				/>
+			) : null}
+			{resolveTarget ? (
+				<ResolveButton
+					onResolve={() => void resolve(resolveTarget.id, true)}
+					className={`${showOpenConversation ? "right-[29px]" : "right-[5px]"} ${HEADER_LINK_REVEAL}`}
 				/>
 			) : null}
 			{showCommentAction ? (
@@ -1283,7 +1342,14 @@ function CheckpointItem({
 					) : null}
 					<CommitConversationView
 						commitId={checkpoint.commit_id}
-						conversations={conversations}
+						conversations={openConversations}
+						resolved={resolvedConversations.map((conversation) => ({
+							id: conversation.id,
+							commentCount: commentCounts.get(conversation.id) ?? 0,
+						}))}
+						onReopen={
+							atelier.readOnly ? undefined : (id) => void resolve(id, false)
+						}
 						status={conversationStatus}
 						onRefresh={onRefreshConversations}
 						readOnly={atelier.readOnly}
@@ -1490,6 +1556,7 @@ function CheckpointFileList({
 		selectInstalledCommentableRelations(lix),
 	);
 	const installed = relations.rows.map((row) => row.schema_key).sort();
+	const resolvable = useConversationsResolvable();
 	const counts = useQueryResult(
 		(lix) =>
 			selectCheckpointFileConversationCounts(
@@ -1497,6 +1564,7 @@ function CheckpointFileList({
 				baseCommitId,
 				commitId,
 				installed,
+				resolvable,
 			),
 		{ enabled: relations.status === "success" && installed.length > 0 },
 	);

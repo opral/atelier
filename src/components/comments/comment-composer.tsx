@@ -219,7 +219,9 @@ export function Composer({
 	}
 
 	useEffect(() => {
-		editor.setRootElement(fieldRef.current);
+		const field = fieldRef.current;
+		editor.setRootElement(field);
+		if (field) fieldEditors.set(field, editor);
 		// Comments are written the way people write in chat: **bold**, `code`,
 		// "- " for a list, and bare URLs become links.
 		const unregisterPlugin = registerZettelLexicalPlugin(editor, {
@@ -289,6 +291,7 @@ export function Composer({
 			unregisterInlineHtml();
 			unregisterImages();
 			unregisterPlugin();
+			if (field) fieldEditors.delete(field);
 			editor.setRootElement(null);
 		};
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- mount only: `value` seeds the field once (see ComposerProps).
@@ -620,6 +623,28 @@ function isComposing(event: ReactKeyboardEvent): boolean {
 	// Safari reports the key that ends a composition with keyCode 229 and
 	// isComposing already false.
 	return event.nativeEvent.isComposing || event.keyCode === 229;
+}
+
+/** Each mounted field's editor, for `focusCommentField`. */
+const fieldEditors = new WeakMap<HTMLElement, LexicalEditor>();
+
+/**
+ * Puts the caret at the end of the comment field inside `scope` (a thread's
+ * surface), as its own focus request would. False when there is none.
+ */
+export function focusCommentField(scope: Element): boolean {
+	for (const field of scope.querySelectorAll<HTMLElement>(
+		"[data-attr=comment-composer] [role=textbox]",
+	)) {
+		const editor = fieldEditors.get(field);
+		if (!editor) continue;
+		// Focus first, in this task, so no key lands elsewhere; then the
+		// caret goes to the end of what is there.
+		field.focus({ preventScroll: true });
+		focusEnd(editor, field);
+		return true;
+	}
+	return false;
 }
 
 function focusEnd(editor: LexicalEditor, root: HTMLElement | null) {

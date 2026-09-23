@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { useState } from "react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
+import { Composer, emptyCommentDocument } from "./comment-composer";
 import { CommentThread, type ThreadComment } from "./comment-thread";
 
 function comment(
@@ -148,5 +157,218 @@ describe("CommentThread foldWithin", () => {
 		const revealed = within(list).getByText("comment 2").closest("li");
 		expect(document.activeElement).toBe(revealed);
 		expect(revealed).toHaveAttribute("tabindex", "-1");
+	});
+});
+
+describe("CommentThread delete", () => {
+	const ME = "account-me";
+	const own = (id: string, text: string): ThreadComment => ({
+		...comment(id, "Peter", [span(`${id}-s`, text)]),
+		author_id: ME,
+	});
+	const theirs = (id: string, text: string): ThreadComment => ({
+		...comment(id, "Mara", [span(`${id}-s`, text)]),
+		author_id: "account-mara",
+	});
+	const actionsIn = (text: string) =>
+		within(screen.getByText(text).closest("li")!).queryByRole("button", {
+			name: "Comment actions",
+		});
+
+	/** A thread and its reply field, deleting as the app would. */
+	function Surface({
+		initial,
+		onDeleted = () => {},
+	}: {
+		readonly initial: readonly ThreadComment[];
+		readonly onDeleted?: (comment: ThreadComment) => void;
+	}) {
+		const [comments, setComments] = useState(initial);
+		const [draft, setDraft] = useState(emptyCommentDocument);
+		return (
+			<div>
+				<CommentThread
+					comments={comments}
+					accountId={ME}
+					onDelete={async (gone) => {
+						onDeleted(gone);
+						setComments((current) =>
+							current.filter((candidate) => candidate.id !== gone.id),
+						);
+					}}
+				/>
+				<Composer
+					label="Reply"
+					placeholder="Reply"
+					value={draft}
+					onChange={setDraft}
+					onSubmit={async () => {}}
+				/>
+			</div>
+		);
+	}
+
+	async function deleteByKeyboard(text: string) {
+		const trigger = actionsIn(text)!;
+		act(() => trigger.focus());
+		fireEvent.click(trigger);
+		fireEvent.click(screen.getByRole("menuitem", { name: /Delete comment/ }));
+		expect(document.activeElement).toBe(
+			screen.getByRole("menuitem", { name: "Delete" }),
+		);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+		});
+	}
+
+	test("only the reader's own comments offer Delete, and only where writing is allowed", () => {
+		const comments = [theirs("c1", "Hers"), own("c2", "Mine")];
+		const { rerender } = render(
+			<CommentThread
+				comments={comments}
+				accountId={ME}
+				onDelete={async () => {}}
+			/>,
+		);
+		expect(actionsIn("Hers")).toBeNull();
+		expect(actionsIn("Mine")).not.toBeNull();
+		// Read-only: no onDelete.
+		rerender(<CommentThread comments={comments} accountId={ME} />);
+		expect(screen.queryByRole("button", { name: "Comment actions" })).toBe(
+			null,
+		);
+		// The account not known yet.
+		rerender(
+			<CommentThread
+				comments={comments}
+				accountId={null}
+				onDelete={async () => {}}
+			/>,
+		);
+		expect(screen.queryByRole("button", { name: "Comment actions" })).toBe(
+			null,
+		);
+	});
+
+	test("the menu asks before deleting; Cancel deletes nothing", async () => {
+		const onDelete = vi.fn(async () => {});
+		render(
+			<CommentThread
+				comments={[own("c1", "Mine")]}
+				accountId={ME}
+				onDelete={onDelete}
+			/>,
+		);
+		const trigger = actionsIn("Mine")!;
+		fireEvent.click(trigger);
+		expect(trigger).toHaveAttribute("aria-expanded", "true");
+		const item = screen.getByRole("menuitem", { name: /Delete comment/ });
+		expect(document.activeElement).toBe(item);
+		fireEvent.click(item);
+		expect(screen.getByText("Delete?")).toBeInTheDocument();
+		expect(onDelete).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+		expect(screen.queryByRole("menu")).toBeNull();
+		expect(document.activeElement).toBe(trigger);
+		expect(onDelete).not.toHaveBeenCalled();
+	});
+
+	test("arrow keys move through the question; Esc closes the menu and goes no further", () => {
+		render(
+			<CommentThread
+				comments={[own("c1", "Mine")]}
+				accountId={ME}
+				onDelete={async () => {}}
+			/>,
+		);
+		const outside = vi.fn((event: KeyboardEvent) => event.key);
+		document.addEventListener("keydown", outside);
+		try {
+			const trigger = actionsIn("Mine")!;
+			act(() => trigger.focus());
+			fireEvent.keyDown(trigger, { key: "ArrowDown" });
+			fireEvent.click(screen.getByRole("menuitem", { name: /Delete comment/ }));
+			const menu = screen.getByRole("menu");
+			fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+			expect(document.activeElement).toBe(
+				screen.getByRole("menuitem", { name: "Cancel" }),
+			);
+			fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+			expect(document.activeElement).toBe(
+				screen.getByRole("menuitem", { name: "Delete" }),
+			);
+			fireEvent.keyDown(menu, { key: "Escape" });
+			expect(screen.queryByRole("menu")).toBeNull();
+			expect(document.activeElement).toBe(trigger);
+			// The card, the checkpoint and the review never saw it.
+			expect(outside.mock.results.map((result) => result.value)).not.toContain(
+				"Escape",
+			);
+		} finally {
+			document.removeEventListener("keydown", outside);
+		}
+	});
+
+	test("after a delete the keyboard goes on to the next comment", async () => {
+		const onDeleted = vi.fn();
+		render(
+			<Surface
+				initial={[own("c1", "First"), theirs("c2", "Second")]}
+				onDeleted={onDeleted}
+			/>,
+		);
+		await deleteByKeyboard("First");
+		expect(onDeleted).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "c1" }),
+		);
+		expect(screen.queryByText("First")).toBeNull();
+		await waitFor(() =>
+			expect(document.activeElement).toBe(
+				screen.getByText("Second").closest("li"),
+			),
+		);
+	});
+
+	test("after deleting the last comment the keyboard goes to the reply field", async () => {
+		render(<Surface initial={[theirs("c1", "Hers"), own("c2", "Mine")]} />);
+		await deleteByKeyboard("Mine");
+		expect(screen.queryByText("Mine")).toBeNull();
+		await waitFor(() =>
+			expect(document.activeElement).toBe(
+				screen.getByRole("textbox", { name: "Reply" }),
+			),
+		);
+	});
+
+	test("a failed delete is said in the menu and the comment stays", async () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		try {
+			render(
+				<CommentThread
+					comments={[own("c1", "Mine")]}
+					accountId={ME}
+					onDelete={() => Promise.reject(new Error("offline"))}
+				/>,
+			);
+			fireEvent.click(actionsIn("Mine")!);
+			fireEvent.click(screen.getByRole("menuitem", { name: /Delete comment/ }));
+			await act(async () => {
+				fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+			});
+			expect(screen.getByRole("alert")).toHaveTextContent(
+				"Could not delete the comment.",
+			);
+			expect(screen.getByText("Mine")).toBeInTheDocument();
+		} finally {
+			error.mockRestore();
+		}
+	});
+
+	test("the actions are hidden at rest, so a thread looks as designed", () => {
+		const css = readFileSync(join(__dirname, "comments.css"), "utf8");
+		expect(css).toMatch(/\.comment-actions \{[^}]*opacity: 0;/);
+		expect(css).toMatch(
+			/\.comment-row:is\(:hover, :focus-within\) > \.comment-actions/,
+		);
 	});
 });

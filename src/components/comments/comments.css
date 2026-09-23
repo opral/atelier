@@ -24,6 +24,17 @@
 		--comment-avatar-ring: var(--atelier-accent-subtle);
 		--comment-body-size: 12.5px;
 		--comment-body-line-height: 18px;
+		/* A comment's "…", drawn as the checkpoint's "Open conversation". */
+		--comment-action-bg: var(--atelier-accent-subtle);
+		--comment-action-hover-bg: color-mix(
+			in srgb,
+			var(--atelier-accent-border) 50%,
+			var(--atelier-accent-subtle)
+		);
+		/* Level with the header's line; in History, in the column of the
+		   checkpoint's own "Open conversation". */
+		--comment-actions-top: -3px;
+		--comment-actions-right: 5px;
 	}
 	/* White surfaces: a document margin card, a host's own app. */
 	.comment-surface[data-tone="neutral"] {
@@ -32,6 +43,15 @@
 		--comment-field-bg: var(--atelier-bg-subtle);
 		--comment-fold-bg: var(--atelier-bg-hover);
 		--comment-avatar-ring: var(--atelier-panel);
+		--comment-action-bg: var(--atelier-panel);
+		--comment-action-hover-bg: var(--atelier-bg-hover);
+	}
+	/*
+	 * A card's corner is its conversation's (Open conversation, Resolve): a
+	 * surface with those redeclares `--comment-actions-right` to clear them.
+	 */
+	.comment-surface[data-size="document"] {
+		--comment-actions-right: -4px;
 	}
 	/*
 	 * The conversation view's reading column: a 14px body in the page's text
@@ -45,6 +65,8 @@
 		--comment-field-edge: var(--atelier-history-flag);
 		--comment-field-bg: var(--atelier-panel);
 		--comment-avatar-ring: var(--atelier-panel);
+		--comment-actions-top: -4px;
+		--comment-actions-right: -4px;
 	}
 	.comment-surface[data-size="view"]
 		li:not([data-comment-grouped])
@@ -217,5 +239,123 @@
 	/* A kept blank paragraph is a visible line, as it was in the field. */
 	.comment-body p.zettel_block:empty {
 		min-height: var(--comment-body-line-height);
+	}
+
+	/*
+	 * A comment's "…" and its menu. It takes no room: the header runs the
+	 * full width, as designed, and the icon shows over its end only while
+	 * the comment is pointed at or has focus, or its menu is open.
+	 */
+	.comment-row {
+		position: relative;
+	}
+	.comment-actions {
+		position: absolute;
+		z-index: 2;
+		top: var(--comment-actions-top);
+		right: var(--comment-actions-right);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--atelier-duration-fast) ease-out;
+	}
+	.comment-row:is(:hover, :focus-within) > .comment-actions,
+	.comment-actions[data-open] {
+		opacity: 1;
+		pointer-events: auto;
+	}
+	/* No pointer to hover with: always there, or it could not be reached. */
+	@media (hover: none) {
+		.comment-actions {
+			opacity: 1;
+			pointer-events: auto;
+		}
+	}
+	.comment-action {
+		display: inline-flex;
+		width: 24px;
+		height: 24px;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--atelier-radius-control);
+		background: var(--comment-action-bg);
+		color: var(--comment-secondary);
+		cursor: pointer;
+	}
+	.comment-action:hover,
+	.comment-actions[data-open] > .comment-action {
+		background: var(--comment-action-hover-bg);
+		color: var(--atelier-fg);
+	}
+	.comment-action:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px var(--atelier-ring);
+	}
+	.comment-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		display: flex;
+		min-width: 148px;
+		flex-direction: column;
+		padding: 4px;
+		border: 1px solid var(--atelier-border);
+		border-radius: var(--atelier-radius-panel);
+		background: var(--atelier-panel);
+		box-shadow: var(--atelier-shadow-lg);
+		font-family: var(--atelier-font-sans);
+	}
+	.comment-menu-item {
+		display: flex;
+		height: 28px;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 8px;
+		padding: 0 8px;
+		border-radius: 5px;
+		color: var(--atelier-fg);
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 16px;
+		text-align: left;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.comment-menu-item[data-tone="danger"] {
+		color: var(--atelier-danger);
+	}
+	.comment-menu-item:is(:hover, :focus-visible) {
+		outline: none;
+		background: var(--atelier-bg-hover);
+	}
+	.comment-menu-item[data-tone="danger"]:is(:hover, :focus-visible) {
+		background: var(--atelier-danger-subtle);
+	}
+	.comment-menu-item[aria-disabled="true"] {
+		cursor: progress;
+		opacity: 0.6;
+	}
+	/* The Delete item, asked about in its own place. */
+	.comment-menu-confirm {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	}
+	.comment-menu-question {
+		padding: 0 6px 0 8px;
+		color: var(--atelier-fg-muted);
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 28px;
+		white-space: nowrap;
+	}
+	.comment-menu-confirm > .comment-menu-item {
+		padding: 0 7px;
+	}
+	.comment-menu-error {
+		max-width: 220px;
+		margin: 2px 8px 4px;
+		color: var(--atelier-danger);
+		font-size: 11.5px;
+		line-height: 16px;
 	}
 }

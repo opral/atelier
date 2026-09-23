@@ -12,6 +12,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
 import { LixProvider } from "@/lib/lix-react";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
+import { deleteComment } from "@/lib/conversation-writes";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import {
@@ -1116,6 +1117,87 @@ describe("checkpoint conversation flows", () => {
 				"data-review-shortcut-ignore",
 			);
 			expect(field).toHaveTextContent("Keep me");
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("deleting the last comment of an untitled checkpoint conversation removes it; the Comment field takes focus", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await createCommitConversation(lix, commitId, commentBody("Mine only"));
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			const thread = await screen.findByRole("list", { name: "Comments" });
+			const row = (await within(thread).findByText("Mine only")).closest("li")!;
+			fireEvent.click(
+				within(row).getByRole("button", { name: "Comment actions" }),
+			);
+			fireEvent.click(
+				within(row).getByRole("menuitem", { name: /Delete comment/ }),
+			);
+			await act(async () => {
+				fireEvent.click(within(row).getByRole("menuitem", { name: "Delete" }));
+			});
+			await waitFor(() =>
+				expect(screen.queryByRole("list", { name: "Comments" })).toBeNull(),
+			);
+			expect(await selectCommitConversations(lix, commitId).execute()).toEqual(
+				[],
+			);
+			await waitFor(() =>
+				expect(
+					screen.getByRole("textbox", { name: "Comment on this checkpoint" }),
+				).toHaveFocus(),
+			);
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("a closed checkpoint's count drops when a comment is deleted; a titled conversation stays", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await setCommitConversationTitle(lix, commitId, null, "Sent to legal");
+		const conversation = (
+			await selectCommitConversations(lix, commitId).execute()
+		)[0]!;
+		await replyToConversation(lix, conversation.id, commentBody("One"));
+		await replyToConversation(lix, conversation.id, commentBody("Two"));
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub()} />
+			</LixProvider>,
+		);
+		try {
+			await waitFor(() =>
+				expect(screen.getByLabelText("2 comments")).toBeInTheDocument(),
+			);
+			const ids = await lix.execute(
+				"SELECT id FROM lix_comment WHERE conversation_id = $1 ORDER BY lixcol_created_at",
+				[conversation.id],
+			);
+			await act(async () => {
+				await deleteComment(lix, String(ids.rows[0]!.id));
+			});
+			await waitFor(() =>
+				expect(screen.getByLabelText("1 comment")).toBeInTheDocument(),
+			);
+			await act(async () => {
+				await deleteComment(lix, String(ids.rows[1]!.id));
+			});
+			await waitFor(() =>
+				expect(
+					document.querySelector("[data-attr=history-comment-count]"),
+				).toBeNull(),
+			);
+			expect(screen.getByText("Sent to legal")).toBeInTheDocument();
 		} finally {
 			view.unmount();
 			await lix.close();

@@ -4,11 +4,14 @@ import {
 	useRef,
 	useState,
 	type MouseEvent as ReactMouseEvent,
+	type ReactNode,
 } from "react";
 import { toHtml } from "@opral/zettel-html";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
+import { CommentActions } from "./comment-actions";
 import { CommentAvatar } from "./comment-avatar";
+import { focusCommentField } from "./comment-composer";
 import { asCommentText } from "./comment-document";
 import "./comments.css";
 
@@ -17,6 +20,8 @@ export type ThreadComment = {
 	readonly body: unknown;
 	readonly lixcol_created_at: string | null;
 	readonly author_name: string | null;
+	/** The account that wrote it: the reader's own comments offer Delete. */
+	readonly author_id?: string | null;
 };
 
 /** Threads longer than this fold their middle (design 4a, "Long, folded"). */
@@ -177,15 +182,25 @@ function CommentRow({
 	grouped,
 	size,
 	revealed,
+	actions,
 }: {
 	readonly comment: ThreadComment;
 	readonly grouped: boolean;
 	readonly size: CommentThreadSize;
 	readonly revealed: boolean;
+	/** The "…" on the reader's own comment. */
+	readonly actions: ReactNode;
 }) {
 	const name = authorName(comment);
 	if (size === "view")
-		return <ViewCommentRow comment={comment} grouped={grouped} />;
+		return (
+			<ViewCommentRow
+				comment={comment}
+				grouped={grouped}
+				revealed={revealed}
+				actions={actions}
+			/>
+		);
 	const inDocument = size === "document";
 	const focus = revealed ? { tabIndex: -1 } : undefined;
 	if (grouped) {
@@ -194,9 +209,10 @@ function CommentRow({
 				data-comment-id={comment.id}
 				data-comment-grouped=""
 				{...focus}
-				className={`${inDocument ? "-mt-1.5 pl-7" : "-mt-2 pl-[48px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
+				className={`comment-row ${inDocument ? "-mt-1.5 pl-7" : "-mt-2 pl-[48px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 			>
 				<CommentBody body={comment.body} />
+				{actions}
 			</li>
 		);
 	}
@@ -204,7 +220,7 @@ function CommentRow({
 		<li
 			data-comment-id={comment.id}
 			{...focus}
-			className={`${inDocument ? "flex gap-2" : "flex gap-[7px] pl-[23px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
+			className={`comment-row ${inDocument ? "flex gap-2" : "flex gap-[7px] pl-[23px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 		>
 			<CommentAvatar name={name} size={inDocument ? "lg" : "md"} />
 			<div className="min-w-0 flex-1">
@@ -230,6 +246,7 @@ function CommentRow({
 				</div>
 				<CommentBody body={comment.body} />
 			</div>
+			{actions}
 		</li>
 	);
 }
@@ -238,24 +255,35 @@ function CommentRow({
 function ViewCommentRow({
 	comment,
 	grouped,
+	revealed,
+	actions,
 }: {
 	readonly comment: ThreadComment;
 	readonly grouped: boolean;
+	readonly revealed: boolean;
+	readonly actions: ReactNode;
 }) {
+	const focus = revealed ? { tabIndex: -1 } : undefined;
 	if (grouped) {
 		return (
 			<li
 				data-comment-id={comment.id}
 				data-comment-grouped=""
-				className="-mt-3.5 pl-[34px]"
+				{...focus}
+				className={`comment-row -mt-3.5 pl-[34px] ${revealed ? REVEALED_FOCUS : ""}`}
 			>
 				<CommentBody body={comment.body} />
+				{actions}
 			</li>
 		);
 	}
 	const name = authorName(comment);
 	return (
-		<li data-comment-id={comment.id} className="flex gap-2.5">
+		<li
+			data-comment-id={comment.id}
+			{...focus}
+			className={`comment-row flex gap-2.5 ${revealed ? REVEALED_FOCUS : ""}`}
+		>
 			<CommentAvatar name={name} size="2xl" />
 			<div className="min-w-0 flex-1">
 				<div className="flex items-baseline gap-2 leading-4">
@@ -274,6 +302,7 @@ function ViewCommentRow({
 				</div>
 				<CommentBody body={comment.body} />
 			</div>
+			{actions}
 		</li>
 	);
 }
@@ -377,6 +406,10 @@ function FoldRow({
  * One conversation's comments: one avatar column, every comment aligned to
  * it, 14px between comments, same-author runs under one header. Past four
  * comments the middle folds; unfolding is one click and stays open.
+ *
+ * With `onDelete`, the reader's own comments (`author_id` is `accountId`)
+ * have a "…" with Delete. Once one is deleted, the keyboard goes on to the
+ * comment after it, or to the reply field when it was the last.
  */
 export function CommentThread({
 	comments,
@@ -388,8 +421,20 @@ export function CommentThread({
 	onExpandedChange,
 	collapsible = false,
 	foldWithin,
+	accountId = null,
+	onDelete,
 }: {
 	readonly comments: readonly ThreadComment[];
+	/** The reader's account: their comments can be deleted. */
+	readonly accountId?: string | null;
+	/**
+	 * Deletes a comment; absent where nothing may be written (read-only).
+	 * Resolves `{ focusHandled: true }` when the surface has sent the
+	 * keyboard elsewhere itself (a card that closed with its last comment).
+	 */
+	readonly onDelete?: (
+		comment: ThreadComment,
+	) => Promise<{ readonly focusHandled?: boolean } | void>;
 	/**
 	 * Fold only among the first this-many comments; later ones always show
 	 * after the fold. History passes the count when the checkpoint opened,
@@ -421,7 +466,9 @@ export function CommentThread({
 	const listRef = useRef<HTMLOListElement>(null);
 	// Unfolding removes the fold row, which had focus; the first comment it
 	// revealed takes it, so a keyboard reader goes on from where it was.
+	// A deletion hands focus on the same way, to the comment after it.
 	const [revealedId, setRevealedId] = useState<string | null>(null);
+	const [focusTick, setFocusTick] = useState(0);
 	const focusRevealedRef = useRef(false);
 	useLayoutEffect(() => {
 		if (!focusRevealedRef.current || revealedId === null) return;
@@ -431,7 +478,42 @@ export function CommentThread({
 		if (!row) return;
 		focusRevealedRef.current = false;
 		row.focus({ preventScroll: true });
-	}, [revealedId, expanded]);
+	}, [revealedId, expanded, focusTick]);
+
+	async function deleteComment(comment: ThreadComment) {
+		if (!onDelete) return;
+		const list = listRef.current;
+		const row = list?.querySelector(
+			`[data-comment-id="${CSS.escape(comment.id)}"]`,
+		);
+		// Read before the row goes: what follows it on screen, a comment or
+		// the fold, and the field the thread is answered in.
+		const next = row?.nextElementSibling ?? null;
+		const scope = list?.parentElement ?? null;
+		const result = await onDelete(comment);
+		// The menu had focus. When the surface moved it (a card closing with
+		// its last comment), that is where it stays.
+		if (result?.focusHandled) return;
+		const active = document.activeElement;
+		if (active && active !== document.body && !list?.contains(active)) return;
+		const nextId = next?.getAttribute("data-comment-id");
+		if (next?.isConnected && nextId) {
+			focusRevealedRef.current = true;
+			setRevealedId(nextId);
+			setFocusTick((tick) => tick + 1);
+			return;
+		}
+		const fold = next?.isConnected ? next.querySelector("button") : null;
+		if (fold) {
+			fold.focus({ preventScroll: true });
+			return;
+		}
+		if (scope?.isConnected) focusCommentField(scope);
+	}
+	const actionsFor = (comment: ThreadComment) =>
+		onDelete && accountId && comment.author_id === accountId ? (
+			<CommentActions onDelete={() => deleteComment(comment)} />
+		) : null;
 	const setExpanded = (value: boolean) => {
 		setLocalExpanded(value);
 		onExpandedChange?.(value);
@@ -461,6 +543,7 @@ export function CommentThread({
 				comment={comment}
 				size={size}
 				revealed={comment.id === revealedId}
+				actions={actionsFor(comment)}
 				grouped={
 					// The first comment after the fold row starts a new header.
 					!(offset > 0 && index === 0 && hidden.length > 0) &&

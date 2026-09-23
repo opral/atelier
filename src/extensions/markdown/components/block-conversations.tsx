@@ -37,7 +37,16 @@ import {
 	authorName,
 	formatCommentTime,
 	parseCommentBody,
+	type ThreadComment,
 } from "@/components/comments/comment-thread";
+import {
+	deleteComment,
+	setConversationResolved,
+} from "@/lib/conversation-writes";
+import {
+	ResolveButton,
+	useConversationsResolvable,
+} from "@/components/comments/resolve-controls";
 import { CommentAvatar } from "@/components/comments/comment-avatar";
 import { useEditorCtx } from "../editor/editor-context";
 import { mountedView, useEditorViewMounted } from "../editor/mounted-view";
@@ -166,6 +175,15 @@ type BlockConversationsState = {
 		conversationId: string,
 		body: Document,
 	) => Promise<void>;
+	/** Deletes one of the reader's comments (`accountId` wrote it). */
+	readonly deleteComment: (
+		comment: ThreadComment,
+	) => Promise<{ readonly focusHandled: boolean }>;
+	readonly accountId: string | null;
+	/** Whether this Lix can resolve a conversation (has the column). */
+	readonly resolvable: boolean;
+	/** Resolves a conversation, posting its written reply first. */
+	readonly resolveConversation: (conversationId: string) => Promise<void>;
 	readonly authorName: string;
 	/** Said when comments could not be kept on their blocks by a save. */
 	readonly notice: string | null;
@@ -182,12 +200,12 @@ const BlockConversationsStateContext =
 
 const EMPTY_ROWS: readonly never[] = [];
 
-function selectActiveAccountName(lix: Parameters<typeof qb>[0]) {
+function selectActiveAccount(lix: Parameters<typeof qb>[0]) {
 	return qb(lix)
 		.selectFrom("lix_account")
-		.select("name")
+		.select(["id", "name"])
 		.where("id", "=", sql<string>`lix_active_account_id()`)
-		.$castTo<{ name: string | null }>();
+		.$castTo<{ id: string; name: string | null }>();
 }
 
 /**
@@ -431,10 +449,11 @@ const BlockConversationsController = memo(
 		const blocksResult = useQueryResult<MarkdownBlockRow>((session) =>
 			selectMarkdownBlocks(session, fileId),
 		);
+		const resolvable = useConversationsResolvable();
 		const commentsResult = useQueryResult((session) =>
-			selectBlockComments(session, fileId),
+			selectBlockComments(session, fileId, resolvable),
 		);
-		const accountResult = useQueryResult(selectActiveAccountName);
+		const accountResult = useQueryResult(selectActiveAccount);
 		const rows = blocksResult.rows.length ? blocksResult.rows : EMPTY_ROWS;
 		const commentRows = commentsResult.rows.length
 			? commentsResult.rows
@@ -607,8 +626,16 @@ const BlockConversationsController = memo(
 			available,
 			threadAtBlock,
 			placed,
+			rowOfBlock: alignment.rowOfBlock,
 		});
-		latest.current = { threads, layout, available, threadAtBlock, placed };
+		latest.current = {
+			threads,
+			layout,
+			available,
+			threadAtBlock,
+			placed,
+			rowOfBlock: alignment.rowOfBlock,
+		};
 
 		const activate = useCallback(
 			(
@@ -854,6 +881,80 @@ const BlockConversationsController = memo(
 			(conversationId: string, body: Document) =>
 				replyToBlockConversation(lix, conversationId, body),
 			[lix],
+		);
+
+		const placedWith = useCallback(
+			(conversationId: string) =>
+				latest.current.placed.find((candidate) =>
+					candidate.conversations.some(
+						(conversation) => conversation.conversationId === conversationId,
+					),
+				),
+			[],
+		);
+		// A conversation that left an open card (deleted with its last comment,
+		// or resolved): another thread on the block takes the caret in its
+		// reply field; with none, the card closes into the document.
+		const leaveConversation = useCallback(
+			(conversationId: string, entry: PlacedThread | undefined) => {
+				const other = entry?.conversations.find(
+					(conversation) => conversation.conversationId !== conversationId,
+				);
+				if (other) requestConversation(other.conversationId, entry!.index);
+				else if (activeRef.current?.nodeId === entry?.key) returnToEditor();
+			},
+			[requestConversation, returnToEditor],
+		);
+
+		// A comment deleted from an open card. Its conversation goes with its
+		// last comment, and the card with its last conversation: a reply
+		// written under it is kept as the block's new comment (Comment brings
+		// it back) and the caret goes back to the document. With another
+		// thread still on the block, that one's reply field takes the caret.
+		const deleteBlockComment = useCallback(
+			async (comment: ThreadComment) => {
+				const { conversationId, conversationDeleted } = await deleteComment(
+					lix,
+					comment.id,
+				);
+				if (!conversationDeleted) return { focusHandled: false };
+				const entry = placedWith(conversationId);
+				const reply = drafts.reply(conversationId);
+				if (reply && hasCommentText(reply)) {
+					drafts.setReply(conversationId, EMPTY_DRAFT);
+					if (entry && entry.index < editor.state.doc.childCount) {
+						const blockId = blockNodeId(editor.state.doc.child(entry.index));
+						drafts.setComment(
+							fileId,
+							pendingDraftKeys(
+								{ blockId, index: entry.index },
+								latest.current.rowOfBlock[entry.index] ?? null,
+							),
+							reply,
+						);
+					}
+				}
+				leaveConversation(conversationId, entry);
+				return { focusHandled: true };
+			},
+			[drafts, editor, fileId, leaveConversation, lix, placedWith],
+		);
+
+		// Resolve: what the reply field holds is posted with it, and the
+		// conversation leaves the card as a deleted one does.
+		const resolveConversation = useCallback(
+			async (conversationId: string) => {
+				const entry = placedWith(conversationId);
+				await setConversationResolved(
+					lix,
+					conversationId,
+					true,
+					drafts.reply(conversationId),
+				);
+				drafts.setReply(conversationId, EMPTY_DRAFT);
+				leaveConversation(conversationId, entry);
+			},
+			[drafts, leaveConversation, lix, placedWith],
 		);
 
 		const replyDraft = useCallback(
@@ -1514,6 +1615,7 @@ const BlockConversationsController = memo(
 			[requestConversation, startComment],
 		);
 		const name = accountResult.rows[0]?.name?.trim() || "You";
+		const accountId = accountResult.rows[0]?.id ?? null;
 		const state = useMemo<BlockConversationsState>(
 			() => ({
 				editor,
@@ -1534,15 +1636,21 @@ const BlockConversationsController = memo(
 				replyDraft,
 				setReplyDraft,
 				submitReply,
+				deleteComment: deleteBlockComment,
+				accountId,
+				resolvable,
+				resolveConversation,
 				authorName: name,
 				notice,
 				removed,
 				dismissRemoved,
 			}),
 			[
+				accountId,
 				active,
 				activate,
 				cancelPending,
+				deleteBlockComment,
 				editor,
 				hovered,
 				layout,
@@ -1551,6 +1659,8 @@ const BlockConversationsController = memo(
 				pending,
 				removed,
 				dismissRemoved,
+				resolvable,
+				resolveConversation,
 				pendingDraft,
 				pendingIndex,
 				placed,
@@ -2034,6 +2144,16 @@ function ConversationBody({
 								className="markdown-comment-open"
 							/>
 						) : null}
+						{state.resolvable ? (
+							<ResolveButton
+								className="markdown-comment-resolve"
+								onResolve={() =>
+									void state
+										.resolveConversation(conversationId)
+										.catch((error: unknown) => console.error(error))
+								}
+							/>
+						) : null}
 						<CommentThread
 							comments={conversation.comments}
 							label={
@@ -2043,6 +2163,8 @@ function ConversationBody({
 							}
 							tone="neutral"
 							size="document"
+							accountId={state.accountId}
+							onDelete={state.deleteComment}
 						/>
 						<Composer
 							label={several ? `Reply to thread ${index + 1}` : "Reply"}

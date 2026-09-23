@@ -3,6 +3,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { toPlainText } from "@opral/zettel-lexical";
 import { qb, sql } from "@/lib/lix-kysely";
+import { unresolved } from "@/lib/conversation-writes";
 
 /*
  * Block conversations: a comment on a Markdown document belongs to one
@@ -32,6 +33,13 @@ export type BlockCommentRow = {
 
 export type BlockComment = Omit<BlockCommentRow, "change_id"> & {
 	readonly author_name: string | null;
+	readonly author_id: string | null;
+};
+
+export type CommentAuthor = {
+	change_id: string;
+	author_name: string | null;
+	author_id: string | null;
 };
 
 /**
@@ -61,9 +69,15 @@ export function selectMarkdownBlocks(lix: Lix, fileId: string) {
 /**
  * Every comment on a block of this file, oldest first. One live query for
  * the whole document; it names the change that wrote each comment rather
- * than joining `lix_change`, which a live query must not observe.
+ * than joining `lix_change`, which a live query must not observe. With
+ * `resolvable` (the Lix has the column), resolved conversations are left
+ * out: their blocks are not marked and not counted.
  */
-export function selectBlockComments(lix: Lix, fileId: string) {
+export function selectBlockComments(
+	lix: Lix,
+	fileId: string,
+	resolvable = false,
+) {
 	return qb(lix)
 		.selectFrom("lix_comment as comment")
 		.innerJoin(
@@ -87,6 +101,7 @@ export function selectBlockComments(lix: Lix, fileId: string) {
 		.where("block.lixcol_file_id", "=", fileId)
 		.where("conversation.lixcol_global", "=", false)
 		.where("comment.lixcol_global", "=", false)
+		.$if(resolvable, (query) => query.where(unresolved("conversation")))
 		.orderBy("comment.lixcol_created_at", "asc")
 		.orderBy("comment.id", "asc")
 		.$castTo<BlockCommentRow>();
@@ -97,22 +112,28 @@ export function selectCommentAuthors(lix: Lix, changeIds: readonly string[]) {
 	return qb(lix)
 		.selectFrom("lix_change as change")
 		.innerJoin("lix_account as author", "author.id", "change.account_id")
-		.select(["change.id as change_id", "author.name as author_name"])
+		.select([
+			"change.id as change_id",
+			"author.name as author_name",
+			"author.id as author_id",
+		])
 		.where("change.id", "in", changeIds.length ? [...changeIds] : [""])
-		.$castTo<{ change_id: string; author_name: string | null }>();
+		.$castTo<CommentAuthor>();
 }
 
 export function withAuthors(
 	rows: readonly BlockCommentRow[],
-	authors: readonly { change_id: string; author_name: string | null }[],
+	authors: readonly CommentAuthor[],
 ): BlockComment[] {
-	const names = new Map(
-		authors.map((author) => [author.change_id, author.author_name]),
-	);
-	return rows.map(({ change_id, ...comment }) => ({
-		...comment,
-		author_name: change_id ? (names.get(change_id) ?? null) : null,
-	}));
+	const byChange = new Map(authors.map((author) => [author.change_id, author]));
+	return rows.map(({ change_id, ...comment }) => {
+		const author = change_id ? byChange.get(change_id) : undefined;
+		return {
+			...comment,
+			author_name: author?.author_name ?? null,
+			author_id: author?.author_id ?? null,
+		};
+	});
 }
 
 export type FileConversationCount = {

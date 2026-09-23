@@ -20,8 +20,18 @@ import {
 	blockRowText,
 	selectCommentAuthors,
 	selectMarkdownBlocks,
+	type CommentAuthor,
 	type MarkdownBlockRow,
 } from "@/extensions/markdown/block-conversations";
+import {
+	deleteComment,
+	selectActiveAccountId,
+	setConversationResolved,
+} from "@/lib/conversation-writes";
+import {
+	ResolvedChip,
+	useConversationsResolvable,
+} from "@/components/comments/resolve-controls";
 import type {
 	ExtensionRuntime,
 	ExtensionView,
@@ -192,10 +202,7 @@ function selectFileChange(lix: Lix, fileId: string) {
 		.$castTo<{ lixcol_change_id: string | null }>();
 }
 
-const EMPTY_AUTHORS: readonly {
-	change_id: string;
-	author_name: string | null;
-}[] = [];
+const EMPTY_AUTHORS: readonly CommentAuthor[] = [];
 
 /** Comments with their authors: the thread is live, authors read once per set. */
 function useThreadComments(
@@ -217,15 +224,19 @@ function useThreadComments(
 	const authors =
 		authorsResult.status === "success" ? authorsResult.rows : EMPTY_AUTHORS;
 	return useMemo(() => {
-		const names = new Map(
-			authors.map((author) => [author.change_id, author.author_name]),
+		const byChange = new Map(
+			authors.map((author) => [author.change_id, author]),
 		);
-		return rows.map((row) => ({
-			id: row.id,
-			body: row.body,
-			lixcol_created_at: row.lixcol_created_at,
-			author_name: row.change_id ? (names.get(row.change_id) ?? null) : null,
-		}));
+		return rows.map((row) => {
+			const author = row.change_id ? byChange.get(row.change_id) : undefined;
+			return {
+				id: row.id,
+				body: row.body,
+				lixcol_created_at: row.lixcol_created_at,
+				author_name: author?.author_name ?? null,
+				author_id: author?.author_id ?? null,
+			};
+		});
 	}, [authors, rows]);
 }
 
@@ -239,8 +250,9 @@ function ConversationReader({
 	readonly conversationId: string;
 }) {
 	const lix = useLix();
+	const resolvable = useConversationsResolvable();
 	const result = useQueryResult((session) =>
-		selectConversation(session, conversationId),
+		selectConversation(session, conversationId, resolvable),
 	);
 	// The reply being typed outlives the conversation: if it disappears
 	// mid-sentence, the text stays on screen instead of vanishing with it.
@@ -375,6 +387,9 @@ function LiveConversation({
 		),
 	);
 	const comments = useThreadComments(threadResult.rows);
+	const account = useQueryResult(selectActiveAccountId, {
+		enabled: !atelier.readOnly,
+	});
 	const title = conversation.title?.trim() || null;
 	const label =
 		title ??
@@ -398,6 +413,20 @@ function LiveConversation({
 					readOnly={atelier.readOnly}
 					onSave={(next) => setConversationTitle(lix, conversation, next)}
 				/>
+				{conversation.resolved ? (
+					<ResolvedChip
+						onReopen={
+							atelier.readOnly
+								? undefined
+								: () =>
+										void setConversationResolved(
+											lix,
+											conversation.id,
+											false,
+										).catch((error: unknown) => console.error(error))
+						}
+					/>
+				) : null}
 				{anchor.value ? (
 					<ContextLine
 						anchor={anchor.value}
@@ -421,7 +450,17 @@ function LiveConversation({
 					<Hairline />
 				</>
 			) : null}
-			<Thread comments={comments} />
+			<Thread
+				comments={comments}
+				accountId={account.rows[0]?.id ?? null}
+				onDelete={
+					atelier.readOnly
+						? undefined
+						: async (comment) => {
+								await deleteComment(lix, comment.id);
+							}
+				}
+			/>
 			{atelier.readOnly ? null : (
 				<ReplyBox
 					draft={draft}
@@ -968,7 +1007,15 @@ function Hairline() {
 
 /* ── Comments and the reply box ─────────────────────────────────────── */
 
-function Thread({ comments }: { readonly comments: readonly ThreadComment[] }) {
+function Thread({
+	comments,
+	accountId,
+	onDelete,
+}: {
+	readonly comments: readonly ThreadComment[];
+	readonly accountId?: string | null;
+	readonly onDelete?: (comment: ThreadComment) => Promise<void>;
+}) {
 	if (comments.length === 0) {
 		return (
 			<p className="text-[13.5px] leading-[1.2] text-history-secondary">
@@ -977,7 +1024,14 @@ function Thread({ comments }: { readonly comments: readonly ThreadComment[] }) {
 		);
 	}
 	return (
-		<CommentThread comments={comments} tone="neutral" size="view" collapsible />
+		<CommentThread
+			comments={comments}
+			tone="neutral"
+			size="view"
+			collapsible
+			accountId={accountId}
+			onDelete={onDelete}
+		/>
 	);
 }
 

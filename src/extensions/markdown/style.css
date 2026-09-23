@@ -3015,13 +3015,18 @@
 			flex-direction: column;
 			gap: inherit;
 		}
+		/* A comment's "…" keeps clear of the section's corner. */
+		.markdown-comment-section > .comment-surface[data-size="document"] {
+			--comment-actions-right: 20px;
+		}
 
 		/* "Open conversation": the thread in its own tab, top right of its
 		   section, where the card's corner is for the first one. It takes no
 		   room: the comments run the full width, as designed, and it shows
 		   over them only while its section is pointed at or has focus, Tab
 		   reaching it first. */
-		.markdown-comment-open {
+		.markdown-comment-open,
+		.markdown-comment-resolve {
 			position: absolute;
 			top: -4px;
 			right: -4px;
@@ -3030,13 +3035,24 @@
 			pointer-events: none;
 			transition: opacity var(--atelier-duration-fast) ease-out;
 		}
-		.markdown-comment-thread-next > .markdown-comment-open {
+		.markdown-comment-thread-next
+			> :is(.markdown-comment-open, .markdown-comment-resolve) {
 			top: 6px;
 		}
 		.markdown-comment-section:is(:hover, :focus-within)
-			> .markdown-comment-open {
+			> :is(.markdown-comment-open, .markdown-comment-resolve) {
 			opacity: 1;
 			pointer-events: auto;
+		}
+		/* Resolve (where the Lix has it) sits just before Open conversation,
+		   and a comment's "…" before both. */
+		.markdown-comment-open ~ .markdown-comment-resolve {
+			right: 20px;
+		}
+		.markdown-comment-open
+			~ .markdown-comment-resolve
+			~ .comment-surface[data-size="document"] {
+			--comment-actions-right: 44px;
 		}
 
 		.markdown-comment-notice-action {
