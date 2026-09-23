@@ -718,19 +718,32 @@ const BlockConversationsController = memo(
 		// writer is told, with the way to the conversation's removed page.
 		const [removed, setRemoved] = useState<readonly string[]>([]);
 		const dismissRemoved = useCallback(() => setRemoved([]), []);
-		const seenThreads = useRef(new Map<string, BlockThread>());
+		// The threads known to be on this file. One that goes missing stays
+		// known until a lookup has settled what became of it: the comments are
+		// re-read many times around one write, and a read that lands while the
+		// lookup is out must find it missing again, not forget it.
+		const knownThreads = useRef(new Map<string, BlockThread>());
+		const lookingUp = useRef(new Set<string>());
+		const mounted = useRef(true);
+		useEffect(() => {
+			mounted.current = true;
+			return () => {
+				mounted.current = false;
+			};
+		}, []);
 		useEffect(() => {
 			if (commentsResult.status !== "success") return;
-			const left = [...seenThreads.current.values()].filter(
+			const missing = [...knownThreads.current.values()].filter(
 				(thread) =>
 					!threads.has(thread.conversationId) &&
-					!detachedIds.current.has(thread.conversationId),
+					!detachedIds.current.has(thread.conversationId) &&
+					!lookingUp.current.has(thread.conversationId),
 			);
-			seenThreads.current = new Map(threads);
-			if (left.length === 0) return;
-			let cancelled = false;
+			for (const [id, thread] of threads) knownThreads.current.set(id, thread);
+			if (missing.length === 0) return;
+			const ids = missing.map((thread) => thread.conversationId);
+			for (const id of ids) lookingUp.current.add(id);
 			void (async () => {
-				const ids = left.map((thread) => thread.conversationId);
 				const list = (values: readonly string[]) =>
 					values.map((_, index) => `$${index + 1}`).join(", ");
 				const existing = await lix.execute(
@@ -740,29 +753,40 @@ const BlockConversationsController = memo(
 				const exists = new Set(
 					existing.rows.map((row) => String((row as { id: unknown }).id)),
 				);
-				const deleted = left.filter(
+				const deleted = missing.filter(
 					(thread) => !exists.has(thread.conversationId),
 				);
-				if (deleted.length === 0) return;
-				const nodeIds = deleted.map((thread) => thread.nodeId);
-				const blockRows = await lix.execute(
-					`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
-					[...nodeIds, fileId],
-				);
-				const stillThere = new Set(
-					blockRows.rows.map((row) => String((row as { id: unknown }).id)),
-				);
-				for (const thread of deleted)
-					carriers.current.delete(thread.conversationId);
-				const withBlock = deleted
-					.filter((thread) => !stillThere.has(thread.nodeId))
-					.map((thread) => thread.conversationId);
-				if (!cancelled && withBlock.length > 0)
-					setRemoved((current) => [...current, ...withBlock]);
-			})().catch((error: unknown) => console.error(error));
-			return () => {
-				cancelled = true;
-			};
+				let withBlock: string[] = [];
+				if (deleted.length > 0) {
+					const nodeIds = deleted.map((thread) => thread.nodeId);
+					const blockRows = await lix.execute(
+						`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
+						[...nodeIds, fileId],
+					);
+					const stillThere = new Set(
+						blockRows.rows.map((row) => String((row as { id: unknown }).id)),
+					);
+					for (const thread of deleted)
+						carriers.current.delete(thread.conversationId);
+					withBlock = deleted
+						.filter((thread) => !stillThere.has(thread.nodeId))
+						.map((thread) => thread.conversationId);
+				}
+				// Settled: a thread that has not come back is no longer known.
+				for (const id of ids) {
+					lookingUp.current.delete(id);
+					if (!latest.current.threads.has(id)) knownThreads.current.delete(id);
+				}
+				if (mounted.current && withBlock.length > 0)
+					setRemoved((current) => [
+						...current,
+						...withBlock.filter((id) => !current.includes(id)),
+					]);
+			})().catch((error: unknown) => {
+				// Unsettled: the next read looks again.
+				for (const id of ids) lookingUp.current.delete(id);
+				console.error(error);
+			});
 		}, [commentsResult.status, fileId, lix, threads]);
 		useEffect(() => {
 			const onTransaction = ({ transaction }: { transaction: Transaction }) => {

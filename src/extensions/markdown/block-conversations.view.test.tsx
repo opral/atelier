@@ -10,6 +10,7 @@ import { MarkdownView } from "./index";
 import {
 	blockRowText,
 	createBlockConversation,
+	replyToBlockConversation,
 	selectMarkdownBlocks,
 	type MarkdownBlockRow,
 } from "./block-conversations";
@@ -544,6 +545,76 @@ describe("block conversations follow their block through edits", () => {
 					document.querySelector(".markdown-comment-notice")?.textContent,
 				).toContain("A comment thread was removed with its block."),
 			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("the removal is announced when the comments are re-read while it is being looked up", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nThird para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId } = view;
+			// More threads, so the comments are read again around the write.
+			const rows = (await selectMarkdownBlocks(
+				lix,
+				fileId,
+			).execute()) as MarkdownBlockRow[];
+			const others: string[] = [];
+			for (const text of ["First para.", "Third para."]) {
+				const row = rows.find((candidate) => blockRowText(candidate) === text);
+				others.push(
+					await createBlockConversation(lix, fileId, row!.id, comment(text)),
+				);
+			}
+			await waitFor(() =>
+				expect(
+					document.querySelectorAll(".ProseMirror > [data-block-comment]"),
+				).toHaveLength(3),
+			);
+			// Hold the lookup of what became of a missing thread.
+			let lookups = 0;
+			let release!: () => void;
+			const held = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const execute = lix.execute.bind(lix);
+			lix.execute = (async (...args: Parameters<Lix["execute"]>) => {
+				if (
+					typeof args[0] === "string" &&
+					args[0].startsWith("SELECT id FROM lix_conversation WHERE id IN")
+				) {
+					lookups++;
+					await held;
+				}
+				return execute(...args);
+			}) as Lix["execute"];
+
+			await lix.execute(
+				"UPDATE lix_file SET content = $2 WHERE id = $1",
+				[
+					fileId,
+					new TextEncoder().encode(
+						"# Title\n\nFirst para.\n\nThird para.\n\nTail.\n",
+					),
+				],
+				{ originKey: "an-agent" },
+			);
+			await waitFor(() => expect(lookups).toBe(1));
+			// The comments are read again while the lookup is out.
+			await act(async () => {
+				await replyToBlockConversation(lix, others[0]!, comment("A reply"));
+				await new Promise((resolve) => setTimeout(resolve, 300));
+			});
+			release();
+			await waitFor(() =>
+				expect(
+					document.querySelector(".markdown-comment-notice")?.textContent,
+				).toContain("A comment thread was removed with its block."),
+			);
+			expect(editor.state.doc.textContent).not.toContain("Second para.");
 		} finally {
 			await view.close();
 		}
