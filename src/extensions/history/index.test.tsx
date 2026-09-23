@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { $getRoot, type LexicalEditor } from "lexical";
 import {
 	act,
 	fireEvent,
@@ -15,6 +16,7 @@ import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { HistoryScopeSwitch, HistoryView, resolveHistoryScope } from ".";
 import {
+	commentBody,
 	createCommitConversation,
 	replyToConversation,
 	selectCommitConversations,
@@ -859,13 +861,26 @@ describe("checkpoint conversation flows", () => {
 			const field = await screen.findByRole("textbox", { name: "New comment" });
 			act(() => field.focus());
 			expect(field).toHaveFocus();
-			fireEvent.change(field, { target: { value: "Remember this thought" } });
+			const editor = (
+				field as HTMLDivElement & { __zettelEditor?: LexicalEditor }
+			).__zettelEditor!;
+			await act(async () =>
+				editor.update(
+					() => {
+						$getRoot().selectEnd().insertText("Remember this thought");
+					},
+					{ discrete: true },
+				),
+			);
+			await waitFor(() =>
+				expect(screen.getByText("Draft", { exact: true })).toBeVisible(),
+			);
 			view.rerender(renderHistory(second.commitId));
 			expect(screen.getByText("Draft", { exact: true })).toBeVisible();
 			view.rerender(renderHistory(first.commitId));
-			expect(screen.getByRole("textbox", { name: "New comment" })).toHaveValue(
-				"Remember this thought",
-			);
+			expect(
+				screen.getByRole("textbox", { name: "New comment" }),
+			).toHaveTextContent("Remember this thought");
 			expect(
 				screen.getByRole("textbox", { name: "New comment" }),
 			).not.toHaveFocus();
@@ -878,12 +893,16 @@ describe("checkpoint conversation flows", () => {
 	test("keeps the first and latest comments visible, then unfolds the whole middle", async () => {
 		const lix = await openLix();
 		const { commitId } = await createCheckpoint(lix);
-		await createCommitConversation(lix, commitId, "First");
+		await createCommitConversation(lix, commitId, commentBody("First"));
 		const conversation = (
 			await selectCommitConversations(lix, commitId).execute()
 		)[0]!;
 		for (let index = 2; index <= 6; index++)
-			await replyToConversation(lix, conversation.id, `Comment ${index}`);
+			await replyToConversation(
+				lix,
+				conversation.id,
+				commentBody(`Comment ${index}`),
+			);
 		const view = render(
 			<LixProvider lix={lix}>
 				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />

@@ -1,4 +1,6 @@
 import type { Lix } from "@lix-js/sdk";
+import { assertDocument, type Document } from "@opral/zettel-ast";
+import { toPlainText } from "@opral/zettel-lexical";
 import { qb, sql } from "@/lib/lix-kysely";
 
 export type CommitConversation = {
@@ -93,7 +95,7 @@ export function selectConversationComments(lix: Lix, conversationId: string) {
 		.$castTo<ConversationComment>();
 }
 
-export function commentBody(text: string) {
+export function commentBody(text: string): Document {
 	return {
 		_type: "zettel_doc",
 		blocks: text.split(/\n\s*\n/).map((paragraph) => ({
@@ -111,6 +113,27 @@ export function commentBody(text: string) {
 			],
 		})),
 	};
+}
+
+export function emptyCommentBody(): Document {
+	return {
+		_type: "zettel_doc",
+		blocks: [
+			{
+				_type: "zettel_block",
+				_key: crypto.randomUUID(),
+				style: "normal",
+				markDefs: [],
+				children: [],
+			},
+		],
+	};
+}
+
+export function parseCommentBody(body: unknown): Document {
+	const value = typeof body === "string" ? JSON.parse(body) : body;
+	assertDocument(value);
+	return value;
 }
 
 /** The initial composer writes plain text Zettel blocks; read them safely as text. */
@@ -142,7 +165,8 @@ export function commentParagraphs(body: unknown): string[] {
 }
 
 /** A useful immediate label until the reader chooses a checkpoint title. */
-export function titleFromFirstComment(text: string): string {
+export function titleFromFirstComment(document: Document): string {
+	const text = toPlainText(document);
 	const firstLine =
 		text.trim().split(/\r?\n/, 1)[0]?.replace(/\s+/g, " ").trim() ?? "";
 	if (firstLine.length <= 60) return firstLine;
@@ -177,22 +201,20 @@ export async function setCommitConversationTitle(
 export async function createCommitConversation(
 	lix: Lix,
 	commitId: string,
-	text: string,
+	body: Document,
 ): Promise<void> {
+	assertDocument(body);
+	if (!toPlainText(body).trim()) throw new Error("Comment cannot be empty.");
 	const conversationId = crypto.randomUUID();
 	const transaction = await lix.beginTransaction();
 	try {
 		await transaction.execute(
 			"INSERT INTO lix_conversation (id, target, title, lixcol_global) VALUES ($1, lix_row_ref('lix_commit', NULL, $2), $3, true)",
-			[conversationId, commitId, titleFromFirstComment(text)],
+			[conversationId, commitId, titleFromFirstComment(body)],
 		);
 		await transaction.execute(
 			"INSERT INTO lix_comment (id, conversation_id, body, lixcol_global) VALUES ($1, $2, $3::jsonb, true)",
-			[
-				crypto.randomUUID(),
-				conversationId,
-				JSON.stringify(commentBody(text.trim())),
-			],
+			[crypto.randomUUID(), conversationId, JSON.stringify(body)],
 		);
 		await transaction.commit();
 	} catch (error) {
@@ -204,15 +226,13 @@ export async function createCommitConversation(
 export async function replyToConversation(
 	lix: Lix,
 	conversationId: string,
-	text: string,
+	body: Document,
 ): Promise<void> {
+	assertDocument(body);
+	if (!toPlainText(body).trim()) throw new Error("Comment cannot be empty.");
 	const result = await lix.execute(
 		"INSERT INTO lix_comment (id, conversation_id, body, lixcol_global) SELECT $1, id, $2::jsonb, lixcol_global FROM lix_conversation WHERE id = $3 AND lixcol_global = true RETURNING id",
-		[
-			crypto.randomUUID(),
-			JSON.stringify(commentBody(text.trim())),
-			conversationId,
-		],
+		[crypto.randomUUID(), JSON.stringify(body), conversationId],
 	);
 	if (result.rows.length === 0)
 		throw new Error("Conversation no longer exists.");

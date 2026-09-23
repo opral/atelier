@@ -1,0 +1,64 @@
+diff --git a/dist/plugin.js b/dist/plugin.js
+index d66368dc849a1474ce684eb6d20bd6ea2dc969ad..53bbd99e36b05d00347097b117210c4cb7c05a7c 100644
+--- a/dist/plugin.js
++++ b/dist/plugin.js
+@@ -62,13 +62,28 @@ export function registerZettelLexicalPlugin(editor, options = {}) {
+         initialRoot.__zettelEditor = editor;
+     const unregisterRoot = editor.registerRootListener((root, previous) => {
+         previous?.removeEventListener("change", onChecklistChange);
++        previous?.removeEventListener("beforeinput", onPlainTextBeforeInput, true);
+         const currentRoot = root;
+         currentRoot?.classList.add("zettel");
+         currentRoot?.setAttribute("data-zettel-doc", "true");
+         if (currentRoot)
+             currentRoot.__zettelEditor = editor;
+         currentRoot?.addEventListener("change", onChecklistChange);
++        currentRoot?.addEventListener("beforeinput", onPlainTextBeforeInput, true);
+     });
++    function onPlainTextBeforeInput(event) {
++        const input = event;
++        if (event.defaultPrevented || input.inputType !== "insertText" || input.isComposing || input.data === null)
++            return;
++        // Zettel spans are custom TextNodes. Native browser insertion after a
++        // formatting boundary can place the next character before a trailing
++        // space even when Lexical's selection is after it. Keep ordinary typing
++        // on the same controlled path as empty-block insertion. Composition stays
++        // native so IME input is not interrupted.
++        event.preventDefault();
++        event.stopImmediatePropagation();
++        editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, input.data);
++    }
+     return mergeRegister(unregisterRoot, editor.registerCommand(SET_ZETTEL_LINK_COMMAND, $setZettelLink, COMMAND_PRIORITY_EDITOR), registerHistory(editor, createEmptyHistoryState(), 300), 
+     // Lexical routes typing in empty blocks (and other controlled insertion
+     // cases) through this command rather than a native text-node mutation.
+diff --git a/src/plugin.ts b/src/plugin.ts
+index f3642fa4ab12b5745320c550295cc64ce8f67a7f..509aae3ccafb8b7b8ae2d141504cc4a9aac22f19 100644
+--- a/src/plugin.ts
++++ b/src/plugin.ts
+@@ -94,12 +94,26 @@ export function registerZettelLexicalPlugin(editor: LexicalEditor, options: Zett
+   if (initialRoot) initialRoot.__zettelEditor = editor;
+   const unregisterRoot = editor.registerRootListener((root, previous) => {
+     previous?.removeEventListener("change", onChecklistChange);
++    previous?.removeEventListener("beforeinput", onPlainTextBeforeInput, true);
+     const currentRoot = root as (HTMLElement & { __zettelEditor?: LexicalEditor }) | null;
+     currentRoot?.classList.add("zettel");
+     currentRoot?.setAttribute("data-zettel-doc", "true");
+     if (currentRoot) currentRoot.__zettelEditor = editor;
+     currentRoot?.addEventListener("change", onChecklistChange);
++    currentRoot?.addEventListener("beforeinput", onPlainTextBeforeInput, true);
+   });
++  function onPlainTextBeforeInput(event: Event): void {
++    const input = event as InputEvent;
++    if (event.defaultPrevented || input.inputType !== "insertText" || input.isComposing || input.data === null) return;
++    // Zettel spans are custom TextNodes. Native browser insertion after a
++    // formatting boundary can place the next character before a trailing
++    // space even when Lexical's selection is after it. Keep ordinary typing
++    // on the same controlled path as empty-block insertion. Composition stays
++    // native so IME input is not interrupted.
++    event.preventDefault();
++    event.stopImmediatePropagation();
++    editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, input.data);
++  }
+   return mergeRegister(
+     unregisterRoot,
+     editor.registerCommand(SET_ZETTEL_LINK_COMMAND, $setZettelLink, COMMAND_PRIORITY_EDITOR),

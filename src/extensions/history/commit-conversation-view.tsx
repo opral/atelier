@@ -6,12 +6,24 @@ import {
 	type KeyboardEvent,
 	type SetStateAction,
 } from "react";
+import {
+	createZettelEditor,
+	exportDocument,
+	loadDocument,
+	registerZettelLexicalPlugin,
+	toPlainText,
+	type Document,
+} from "@opral/zettel-lexical";
+import { toHtml } from "@opral/zettel-html";
+import "@opral/zettel-html/style.css";
+import "./comment-zettel.css";
 import { Send } from "lucide-react";
 import { useLix, useQueryResult } from "@/lib/lix-react";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import {
-	commentParagraphs,
 	createCommitConversation,
+	emptyCommentBody,
+	parseCommentBody,
 	replyToConversation,
 	selectConversationComments,
 	type CommitConversation,
@@ -19,14 +31,16 @@ import {
 } from "./commit-conversations";
 
 export type ConversationDrafts = {
-	text: string;
-	replies: Record<string, string>;
+	text: Document;
+	replies: Record<string, Document>;
 };
 
 export function hasConversationDraft(drafts: ConversationDrafts): boolean {
 	return Boolean(
-		drafts.text.trim() ||
-		Object.values(drafts.replies).some((text) => text.trim()),
+		toPlainText(drafts.text).trim() ||
+		Object.values(drafts.replies).some((document) =>
+			toPlainText(document).trim(),
+		),
 	);
 }
 
@@ -45,19 +59,57 @@ function Composer({
 	onEscape,
 }: {
 	label: string;
-	value: string;
-	onChange: (text: string) => void;
+	value: Document;
+	onChange: (document: Document) => void;
 	placeholder: string;
-	onSubmit: (text: string) => Promise<void>;
+	onSubmit: (document: Document) => Promise<void>;
 	focusRequest?: number;
 	onFocusHandled?: () => void;
 	onEscape?: () => void;
 }) {
-	const fieldRef = useRef<HTMLTextAreaElement>(null);
+	const fieldRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const [active, setActive] = useState(Boolean(value));
+	const editorRef = useRef<ReturnType<typeof createZettelEditor> | null>(null);
+	if (!editorRef.current) {
+		editorRef.current = createZettelEditor({
+			namespace: "atelier-checkpoint-comment",
+			onError: (cause) => {
+				throw cause;
+			},
+		});
+	}
+	const editor = editorRef.current;
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+	const initialValueRef = useRef(value);
+	const serializedRef = useRef(JSON.stringify(value));
+	const [active, setActive] = useState(Boolean(toPlainText(value).trim()));
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const hasText = Boolean(toPlainText(value).trim());
+	useEffect(() => {
+		editor.setRootElement(fieldRef.current);
+		const unregisterPlugin = registerZettelLexicalPlugin(editor);
+		loadDocument(editor, initialValueRef.current);
+		const unregisterChanges = editor.registerUpdateListener(() => {
+			const document = exportDocument(editor);
+			const serialized = JSON.stringify(document);
+			if (serialized === serializedRef.current) return;
+			serializedRef.current = serialized;
+			onChangeRef.current(document);
+		});
+		return () => {
+			unregisterChanges();
+			unregisterPlugin();
+			editor.setRootElement(null);
+		};
+	}, [editor]);
+	useEffect(() => {
+		const serialized = JSON.stringify(value);
+		if (serialized === serializedRef.current) return;
+		serializedRef.current = serialized;
+		loadDocument(editor, value);
+	}, [editor, value]);
 	useEffect(() => {
 		if (focusRequest === 0) return;
 		setActive(true);
@@ -66,12 +118,16 @@ function Composer({
 	}, [focusRequest, onFocusHandled]);
 
 	async function send() {
-		if (!value.trim() || sending) return;
+		const document = exportDocument(editor);
+		if (!toPlainText(document).trim() || sending) return;
 		setSending(true);
 		setError(null);
 		try {
-			await onSubmit(value);
-			onChange("");
+			await onSubmit(document);
+			const empty = emptyCommentBody();
+			serializedRef.current = JSON.stringify(empty);
+			loadDocument(editor, empty);
+			onChange(empty);
 			fieldRef.current?.blur();
 			setActive(false);
 		} catch (cause) {
@@ -80,7 +136,7 @@ function Composer({
 			setSending(false);
 		}
 	}
-	function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+	function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
 		if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
 			event.preventDefault();
 			event.stopPropagation();
@@ -89,42 +145,56 @@ function Composer({
 		if (event.key === "Escape") {
 			event.preventDefault();
 			event.stopPropagation();
-			event.currentTarget.blur();
+			fieldRef.current?.blur();
 			setActive(false);
 			onEscape?.();
 		}
 	}
 	return (
-		<div ref={containerRef} data-review-shortcut-ignore="" className="mt-2">
+		<div
+			ref={containerRef}
+			data-review-shortcut-ignore=""
+			className="mt-2"
+			onKeyDownCapture={onKeyDown}
+		>
 			<div
-				className="flex items-end gap-2 rounded-control border border-history-input-border px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring"
+				className="flex items-end gap-2 rounded-control border border-accent-border px-2 py-1.5 focus-within:border-history-input-border"
 				style={REPLY_FIELD_BACKGROUND}
 			>
-				<textarea
-					ref={fieldRef}
-					aria-label={label}
-					value={value}
-					onChange={(event) => onChange(event.target.value)}
-					onFocus={() => setActive(true)}
-					onBlur={(event) => {
-						if (
-							!value.trim() &&
-							!containerRef.current?.contains(event.relatedTarget)
-						)
-							setActive(false);
-					}}
-					onKeyDown={onKeyDown}
-					placeholder={placeholder}
-					rows={active ? 2 : 1}
-					className={`min-w-0 flex-1 bg-transparent text-[12.5px] leading-5 text-fg outline-none placeholder:text-history-selected-secondary ${active ? "min-h-10 resize-y" : "min-h-5 resize-none"}`}
-				/>
-				{active || value ? (
+				<div className="relative min-w-0 flex-1">
+					{!hasText ? (
+						<span
+							aria-hidden="true"
+							className="pointer-events-none absolute left-0 top-0 text-[12.5px] leading-5 text-history-selected-secondary"
+						>
+							{placeholder}
+						</span>
+					) : null}
+					<div
+						ref={fieldRef}
+						aria-label={label}
+						role="textbox"
+						aria-multiline="true"
+						contentEditable
+						suppressContentEditableWarning
+						onFocus={() => setActive(true)}
+						onBlur={(event) => {
+							if (
+								!toPlainText(exportDocument(editor)).trim() &&
+								!containerRef.current?.contains(event.relatedTarget)
+							)
+								setActive(false);
+						}}
+						className={`history-comment-editor min-w-0 bg-transparent text-[12.5px] leading-5 text-fg outline-none ${active ? "min-h-10" : "min-h-5"}`}
+					/>
+				</div>
+				{active || hasText ? (
 					<button
 						type="button"
 						onClick={() => void send()}
-						disabled={!value.trim() || sending}
+						disabled={!hasText || sending}
 						aria-label={sending ? "Sending comment" : "Send comment"}
-						className="rounded-control p-1.5 text-accent hover:bg-accent-subtle disabled:opacity-40"
+						className="cursor-pointer rounded-control p-1.5 text-accent hover:bg-accent-subtle disabled:cursor-default disabled:opacity-40"
 					>
 						<Send aria-hidden="true" className="size-3.5" />
 					</button>
@@ -142,6 +212,14 @@ function Composer({
 			) : null}
 		</div>
 	);
+}
+
+function renderedComment(body: unknown): string | null {
+	try {
+		return toHtml(parseCommentBody(body));
+	} catch {
+		return null;
+	}
 }
 
 /** A short, uninterrupted run by one author reads as one reply in the mockup. */
@@ -168,8 +246,8 @@ function Thread({
 }: {
 	conversation: CommitConversation;
 	readOnly: boolean;
-	draft: string;
-	onDraftChange: (text: string) => void;
+	draft: Document;
+	onDraftChange: (document: Document) => void;
 	focusRequest: number;
 	onFocusHandled: () => void;
 }) {
@@ -217,6 +295,7 @@ function Thread({
 				{visible.map((index) => {
 					const comment = comments[index];
 					if (!comment) return null;
+					const html = renderedComment(comment.body);
 					const grouped =
 						!(folded && index === comments.length - 2) &&
 						sharesCommentHeader(comments[index - 1], comment);
@@ -271,15 +350,17 @@ function Thread({
 											) : null}
 										</div>
 									) : null}
-									{commentParagraphs(comment.body).map(
-										(paragraph, paragraphIndex) => (
-											<p
-												key={paragraphIndex}
-												className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg-muted"
-											>
-												{paragraph}
-											</p>
-										),
+									{html === null ? (
+										<p className="text-[12.5px] text-danger">
+											Unsupported comment document.
+										</p>
+									) : (
+										<div
+											className="history-comment-content"
+											dangerouslySetInnerHTML={{
+												__html: html,
+											}}
+										/>
 									)}
 								</div>
 							</div>
@@ -299,8 +380,8 @@ function Thread({
 					onChange={onDraftChange}
 					focusRequest={focusRequest}
 					onFocusHandled={onFocusHandled}
-					onSubmit={async (text) => {
-						await replyToConversation(lix, conversation.id, text);
+					onSubmit={async (document) => {
+						await replyToConversation(lix, conversation.id, document);
 						setRetryKey((key) => key + 1);
 					}}
 				/>
@@ -333,15 +414,16 @@ export function CommitConversationView({
 	open: boolean;
 }) {
 	const lix = useLix();
+	const [emptyDraft] = useState(emptyCommentBody);
 	const rootRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (!open && rootRef.current?.contains(document.activeElement))
 			(document.activeElement as HTMLElement).blur();
 	}, [open]);
-	async function create(text: string) {
-		await createCommitConversation(lix, commitId, text);
+	async function create(document: Document) {
+		await createCommitConversation(lix, commitId, document);
 		onRefresh();
-		setDrafts((current) => ({ ...current, text: "" }));
+		setDrafts((current) => ({ ...current, text: emptyCommentBody() }));
 	}
 	return (
 		<div
@@ -372,11 +454,11 @@ export function CommitConversationView({
 							key={conversation.id}
 							conversation={conversation}
 							readOnly={readOnly}
-							draft={drafts.replies[conversation.id] ?? ""}
-							onDraftChange={(text) =>
+							draft={drafts.replies[conversation.id] ?? emptyDraft}
+							onDraftChange={(document) =>
 								setDrafts((current) => ({
 									...current,
-									replies: { ...current.replies, [conversation.id]: text },
+									replies: { ...current.replies, [conversation.id]: document },
 								}))
 							}
 							focusRequest={index === 0 ? focusNewRequest : 0}
@@ -390,7 +472,9 @@ export function CommitConversationView({
 					label="New comment"
 					placeholder="Comment on this checkpoint…"
 					value={drafts.text}
-					onChange={(text) => setDrafts((current) => ({ ...current, text }))}
+					onChange={(document) =>
+						setDrafts((current) => ({ ...current, text: document }))
+					}
 					onSubmit={create}
 					focusRequest={focusNewRequest}
 					onFocusHandled={onNewComposerFocused}

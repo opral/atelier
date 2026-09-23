@@ -1,8 +1,12 @@
 import { describe, expect, test } from "vitest";
+import { toHtml } from "@opral/zettel-html";
+import type { Document } from "@opral/zettel-ast";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import {
 	commentParagraphs,
+	commentBody,
+	parseCommentBody,
 	createCommitConversation,
 	replyToConversation,
 	selectCheckpointConversations,
@@ -20,7 +24,7 @@ describe("commit conversations", () => {
 			await createCommitConversation(
 				lix,
 				commitId,
-				"First note\n\nSecond paragraph",
+				commentBody("First note\n\nSecond paragraph"),
 			);
 			const conversations = await selectCommitConversations(
 				lix,
@@ -42,7 +46,7 @@ describe("commit conversations", () => {
 				"First note",
 				"Second paragraph",
 			]);
-			await replyToConversation(lix, conversationId, "A reply");
+			await replyToConversation(lix, conversationId, commentBody("A reply"));
 			comments = await selectConversationComments(
 				lix,
 				conversationId,
@@ -79,10 +83,60 @@ describe("commit conversations", () => {
 			expect(
 				(await selectCommitConversations(lix, commitId).execute())[0]?.title,
 			).toBeNull();
-			await replyToConversation(lix, conversation.id, "First comment");
+			await replyToConversation(
+				lix,
+				conversation.id,
+				commentBody("First comment"),
+			);
 			expect(
 				(await selectCommitConversations(lix, commitId).execute())[0]?.title,
 			).toBeNull();
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("stores Zettel marks and links without flattening them to text", async () => {
+		const lix = await openLix();
+		try {
+			const { commitId } = await createCheckpoint(lix);
+			const body: Document = {
+				_type: "zettel_doc",
+				blocks: [
+					{
+						_type: "zettel_block",
+						_key: "p1",
+						style: "normal",
+						markDefs: [
+							{
+								_type: "zettel_link",
+								_key: "link1",
+								href: "https://example.com",
+							},
+						],
+						children: [
+							{
+								_type: "zettel_span",
+								_key: "s1",
+								text: "Review",
+								marks: ["strong", "link1"],
+							},
+						],
+					},
+				],
+			};
+			await createCommitConversation(lix, commitId, body);
+			const conversation = (
+				await selectCommitConversations(lix, commitId).execute()
+			)[0]!;
+			const stored = (
+				await selectConversationComments(lix, conversation.id).execute()
+			)[0]!;
+			expect(parseCommentBody(stored.body)).toEqual(body);
+			expect(toHtml(parseCommentBody(stored.body))).toContain(
+				"https://example.com",
+			);
+			expect(toHtml(parseCommentBody(stored.body))).toContain("<strong>");
 		} finally {
 			await lix.close();
 		}

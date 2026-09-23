@@ -48,6 +48,7 @@ import {
 	type ConversationDrafts,
 } from "./commit-conversation-view";
 import {
+	emptyCommentBody,
 	selectConversationCounts,
 	setCommitConversationTitle,
 } from "./commit-conversations";
@@ -768,7 +769,7 @@ function CheckpointItem({
 		session.target.commitId === checkpoint.commit_id;
 	const conversationTitle = conversations[0]?.title;
 	const [drafts, setDrafts] = useState<ConversationDrafts>({
-		text: "",
+		text: emptyCommentBody(),
 		replies: {},
 	});
 	const [focusNewRequest, setFocusNewRequest] = useState(0);
@@ -928,7 +929,7 @@ function CheckpointItem({
 					>
 						<span
 							data-checkpoint-title=""
-							className={`group/title inline-flex min-w-0 items-center gap-1 truncate text-[13px] leading-4 font-semibold text-fg ${atelier.readOnly ? "" : "cursor-text"}`}
+							className={`group/title inline-flex min-w-0 items-center gap-1 truncate text-[13px] leading-4 font-semibold text-fg ${atelier.readOnly ? "" : "cursor-pointer"}`}
 						>
 							{conversationTitle || label}
 							{!atelier.readOnly ? (
@@ -985,7 +986,7 @@ function CheckpointItem({
 						setFocusNewRequest((value) => value + 1);
 						openCheckpoint();
 					}}
-					className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-control border border-history-input-border bg-bg px-2 py-1 text-[11px] font-semibold text-fg shadow-sm opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 rounded-control border border-accent-border bg-bg px-2 py-1 text-[11px] font-semibold text-fg opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
 					<MessageSquarePlus aria-hidden="true" className="size-3.5" /> Comment
 				</button>

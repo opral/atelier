@@ -17,6 +17,9 @@ minimumReleaseAgeExclude:
   - "@lix-js/sdk-linux-x64"
   - "@lix-js/sdk-win32-x64"
   - "@lix-js/sdk"
+  - "@opral/zettel-ast"
+  - "@opral/zettel-html"
+  - "@opral/zettel-lexical"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
@@ -28,6 +31,7 @@ overrides:
   prosemirror-view: 1.42.0
 patchedDependencies:
   '@glideapps/glide-data-grid@6.0.3': patches/@glideapps__glide-data-grid@6.0.3.patch
+  '@opral/zettel-lexical@1.1.0': patches/@opral__zettel-lexical@1.1.0.patch
   "@pierre/trees": patches/@pierre__trees.patch
 
 peerDependencyRules:
