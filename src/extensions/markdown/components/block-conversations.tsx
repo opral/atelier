@@ -121,10 +121,10 @@ type BlockConversationsState = {
 	readonly activate: (nodeId: string | null, focus?: boolean) => void;
 	readonly hovered: string | null;
 	readonly setHovered: (nodeId: string | null) => void;
-	readonly replyDraft: (nodeId: string) => Document;
-	readonly setReplyDraft: (nodeId: string, draft: Document) => void;
+	/** Drafts are kept per conversation: each thread has its own reply field. */
+	readonly replyDraft: (conversationId: string) => Document;
+	readonly setReplyDraft: (conversationId: string, draft: Document) => void;
 	readonly submitReply: (
-		nodeId: string,
 		conversationId: string,
 		body: Document,
 	) => Promise<void>;
@@ -646,11 +646,11 @@ const BlockConversationsController = memo(
 		);
 
 		const submitReply = useCallback(
-			async (nodeId: string, conversationId: string, body: Document) => {
+			async (conversationId: string, body: Document) => {
 				await replyToBlockConversation(lix, conversationId, body);
 				setReplyDrafts((drafts) => {
 					const next = new Map(drafts);
-					next.delete(nodeId);
+					next.delete(conversationId);
 					return next;
 				});
 			},
@@ -658,12 +658,16 @@ const BlockConversationsController = memo(
 		);
 
 		const replyDraft = useCallback(
-			(nodeId: string) => replyDrafts.get(nodeId) ?? EMPTY_DRAFT,
+			(conversationId: string) =>
+				replyDrafts.get(conversationId) ?? EMPTY_DRAFT,
 			[replyDrafts],
 		);
-		const setReplyDraft = useCallback((nodeId: string, draft: Document) => {
-			setReplyDrafts((drafts) => new Map(drafts).set(nodeId, draft));
-		}, []);
+		const setReplyDraft = useCallback(
+			(conversationId: string, draft: Document) => {
+				setReplyDrafts((drafts) => new Map(drafts).set(conversationId, draft));
+			},
+			[],
+		);
 
 		// The marks: which blocks carry a wash, and how deep.
 		useEffect(() => {
@@ -1614,48 +1618,65 @@ function ConversationBody({
 }) {
 	const nodeId = entry.key;
 	const views = useConversationViews();
-	// The reply field sits under the last thread, so a reply goes to it.
-	const replyTo = entry.conversations.at(-1)!.conversationId;
+	const several = entry.conversations.length > 1;
+	// Opened from the keyboard, the caret goes into the first thread's reply.
+	const focus = state.active?.nodeId === nodeId ? state.active.focus : 0;
+	// Two conversations meet on one block when a merge joins their blocks.
+	// Each stays its own thread, with its own reply field and its own way
+	// to its page: a reply goes to the thread it is written under.
 	return (
 		<>
-			{views ? (
-				<OpenConversationButton
-					atelier={{ views }}
-					conversationId={replyTo}
-					className="markdown-comment-open"
-				/>
-			) : null}
-			{entry.conversations.map((conversation, index) => (
-				<CommentThread
-					key={conversation.conversationId}
-					comments={conversation.comments}
-					label={
-						entry.conversations.length > 1
-							? `Comments on this block, thread ${index + 1}`
-							: "Comments on this block"
-					}
-					tone="neutral"
-					size="document"
-					className={index > 0 ? "markdown-comment-thread-next" : ""}
-				/>
-			))}
-			<Composer
-				label="Reply"
-				placeholder="Reply"
-				value={state.replyDraft(nodeId)}
-				onChange={(draft) => state.setReplyDraft(nodeId, draft)}
-				onSubmit={(body) => state.submitReply(nodeId, replyTo, body)}
-				onCancel={() => {
-					state.activate(null);
-					if (!state.editor.isDestroyed)
-						state.editor.chain().focus(null, { scrollIntoView: false }).run();
-				}}
-				submitHint="reply"
-				sendLabel="Send reply"
-				focusRequest={state.active?.nodeId === nodeId ? state.active.focus : 0}
-				tone="neutral"
-				size="document"
-			/>
+			{entry.conversations.map((conversation, index) => {
+				const { conversationId } = conversation;
+				return (
+					<section
+						key={conversationId}
+						className={`markdown-comment-section${
+							index > 0 ? " markdown-comment-thread-next" : ""
+						}`}
+						data-conversation-id={conversationId}
+						aria-label={several ? `Thread ${index + 1}` : undefined}
+					>
+						{views ? (
+							<OpenConversationButton
+								atelier={{ views }}
+								conversationId={conversationId}
+								className="markdown-comment-open"
+							/>
+						) : null}
+						<CommentThread
+							comments={conversation.comments}
+							label={
+								several
+									? `Comments on this block, thread ${index + 1}`
+									: "Comments on this block"
+							}
+							tone="neutral"
+							size="document"
+						/>
+						<Composer
+							label={several ? `Reply to thread ${index + 1}` : "Reply"}
+							placeholder="Reply"
+							value={state.replyDraft(conversationId)}
+							onChange={(draft) => state.setReplyDraft(conversationId, draft)}
+							onSubmit={(body) => state.submitReply(conversationId, body)}
+							onCancel={() => {
+								state.activate(null);
+								if (!state.editor.isDestroyed)
+									state.editor
+										.chain()
+										.focus(null, { scrollIntoView: false })
+										.run();
+							}}
+							submitHint="reply"
+							sendLabel="Send reply"
+							focusRequest={index === 0 ? focus : 0}
+							tone="neutral"
+							size="document"
+						/>
+					</section>
+				);
+			})}
 		</>
 	);
 }

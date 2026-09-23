@@ -1,12 +1,27 @@
 import { Suspense } from "react";
-import { act, configure, render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import {
+	act,
+	configure,
+	fireEvent,
+	render,
+	waitFor,
+	within,
+} from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	getNearestEditorFromDOMNode,
+} from "lexical";
 import { bundledPluginArchives } from "@lix-js/sdk";
 import type { Editor } from "@tiptap/core";
 import type { Document } from "@opral/zettel-ast";
 import { LixProvider } from "@/lib/lix-react";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { MarkdownView } from "./index";
+import type { AtelierViewsApi } from "@/extension-api";
+import { ConversationViewsContext } from "../conversation/open-conversation";
 import {
 	blockRowText,
 	createBlockConversation,
@@ -45,7 +60,10 @@ function comment(text: string): Document {
 async function setup(
 	markdown: string,
 	commentedText: string,
-	{ last = false }: { readonly last?: boolean } = {},
+	{
+		last = false,
+		views = null,
+	}: { readonly last?: boolean; readonly views?: AtelierViewsApi | null } = {},
 ) {
 	const lix = await openLix();
 	const plugin = (await bundledPluginArchives()).find(
@@ -80,9 +98,11 @@ async function setup(
 	await act(async () => {
 		utils = render(
 			<LixProvider lix={lix}>
-				<Suspense fallback={null}>
-					<MarkdownView fileId={fileId} filePath="/doc.md" />
-				</Suspense>
+				<ConversationViewsContext.Provider value={views}>
+					<Suspense fallback={null}>
+						<MarkdownView fileId={fileId} filePath="/doc.md" />
+					</Suspense>
+				</ConversationViewsContext.Provider>
 			</LixProvider>,
 		);
 	});
@@ -744,6 +764,121 @@ describe("block conversations follow their block through edits", () => {
 			);
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			expect(await conversationChanges()).toBe(before);
+		} finally {
+			await view.close();
+		}
+	});
+});
+
+describe("two conversations on one block", () => {
+	/** Types into a comment field the way Lexical takes input. */
+	async function typeInto(field: HTMLElement, text: string) {
+		const lexical = getNearestEditorFromDOMNode(field);
+		if (!lexical) throw new Error("the field has no Lexical editor");
+		await act(async () => {
+			lexical.update(
+				() => {
+					const paragraph = $createParagraphNode();
+					paragraph.append($createTextNode(text));
+					$getRoot().clear().append(paragraph);
+				},
+				{ discrete: true },
+			);
+		});
+	}
+
+	test("each thread is its own section, with its own reply field and way to its page", async () => {
+		const open = vi.fn(async () => {});
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+			{ views: { open } as unknown as AtelierViewsApi },
+		);
+		try {
+			const { lix, fileId, conversationId: first } = view;
+			const rows = (await selectMarkdownBlocks(
+				lix,
+				fileId,
+			).execute()) as MarkdownBlockRow[];
+			const row = rows.find(
+				(candidate) => blockRowText(candidate) === "Second para.",
+			)!;
+			const second = await createBlockConversation(
+				lix,
+				fileId,
+				row.id,
+				comment("Second thread"),
+			);
+			const badge = await waitFor(() => {
+				const found = document.querySelector<HTMLButtonElement>(
+					".markdown-comment-badge",
+				);
+				expect(found?.getAttribute("aria-label")).toBe("2 comments");
+				return found!;
+			});
+			await act(async () => {
+				fireEvent.click(badge);
+			});
+			const sections = await waitFor(() => {
+				const found = [
+					...document.querySelectorAll<HTMLElement>(
+						".markdown-comment-popover .markdown-comment-section",
+					),
+				];
+				expect(found).toHaveLength(2);
+				return found;
+			});
+			expect(sections.map((section) => section.dataset.conversationId)).toEqual(
+				[first, second],
+			);
+			for (const [index, section] of sections.entries()) {
+				const scope = within(section);
+				expect(
+					scope.getByRole("textbox", { name: `Reply to thread ${index + 1}` }),
+				).toBeTruthy();
+				expect(
+					scope.getAllByRole("button", { name: "Send reply" }),
+				).toHaveLength(1);
+				expect(
+					scope.getAllByRole("button", { name: "Open conversation" }),
+				).toHaveLength(1);
+			}
+
+			// The first thread's link opens the first thread.
+			await act(async () => {
+				fireEvent.click(
+					within(sections[0]!).getByRole("button", {
+						name: "Open conversation",
+					}),
+				);
+			});
+			expect(open).toHaveBeenCalledTimes(1);
+			expect(JSON.stringify(open.mock.calls[0])).toContain(first);
+			expect(JSON.stringify(open.mock.calls[0])).not.toContain(second);
+
+			// A reply written under the first thread goes to the first thread.
+			await typeInto(
+				within(sections[0]!).getByRole("textbox", {
+					name: "Reply to thread 1",
+				}),
+				"Reply to the first",
+			);
+			const send = within(sections[0]!).getByRole("button", {
+				name: "Send reply",
+			});
+			await waitFor(() => expect(send).not.toBeDisabled());
+			await act(async () => {
+				fireEvent.click(send);
+			});
+			const repliesOf = async (conversationId: string) =>
+				(
+					await lix.execute(
+						"SELECT count(*) AS n FROM lix_comment WHERE conversation_id = $1",
+						[conversationId],
+					)
+				).rows[0]!.n;
+			await waitFor(async () => expect(Number(await repliesOf(first))).toBe(2));
+			expect(Number(await repliesOf(second))).toBe(1);
 		} finally {
 			await view.close();
 		}
