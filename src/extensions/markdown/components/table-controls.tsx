@@ -268,8 +268,9 @@ function dropLocationAt(
 	const start = axis === "row" ? first.top : first.left;
 	const end = axis === "row" ? last.bottom : last.right;
 	if (coordinate < start || coordinate > end) return null;
-	const midpointIndex = bounds.findIndex((box) =>
-		coordinate <
+	const midpointIndex = bounds.findIndex(
+		(box) =>
+			coordinate <
 			(axis === "row" ? box.top + box.height / 2 : box.left + box.width / 2),
 	);
 	const index = midpointIndex < 0 ? bounds.length - 1 : midpointIndex;
@@ -302,10 +303,7 @@ function dropLocationAt(
 }
 
 /** The slim line that previews where a dragged row or column will land. */
-function measureDropIndicator(
-	editor: Editor,
-	drag: DragPreview,
-): Rect | null {
+function measureDropIndicator(editor: Editor, drag: DragPreview): Rect | null {
 	if (!drag.location) return null;
 	const elements = tableElements(editor, drag.source.tablePos);
 	if (!elements) return null;
@@ -700,8 +698,7 @@ export function TableControls() {
 			if (location.destination === sourceIndex) return;
 			if (drag.axis === "row")
 				editor.commands.moveTableRowTo(location.destination, drag.source);
-			else
-				editor.commands.moveTableColumnTo(location.destination, drag.source);
+			else editor.commands.moveTableColumnTo(location.destination, drag.source);
 			setHover(null);
 		},
 		[editor],
@@ -772,7 +769,8 @@ export function TableControls() {
 			if (drag?.pointerId === event.pointerId) {
 				if (
 					!drag.started &&
-					Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4
+					Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <
+						4
 				)
 					return;
 				drag.started = true;
@@ -1067,7 +1065,9 @@ export function TableControls() {
 							className="markdown-table-grip"
 							data-axis="column"
 							data-active={gripMenu?.axis === "column" ? "true" : undefined}
-							data-dragging={dragPreview?.axis === "column" ? "true" : undefined}
+							data-dragging={
+								dragPreview?.axis === "column" ? "true" : undefined
+							}
 							style={layout.columnGrip}
 							aria-label={`Column ${active.column + 1} options`}
 							aria-haspopup="menu"

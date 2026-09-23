@@ -10,6 +10,7 @@ import {
 	selectMarkdownBlocks,
 	type MarkdownBlockRow,
 } from "../block-conversations";
+import { useBlockComments } from "./block-comments-context";
 
 function blockElement(editor: Editor, index: number): HTMLElement | null {
 	const { doc } = editor.state;
@@ -58,6 +59,7 @@ export function RevealMarkdownBlock({
 			editor.off("create", bump);
 		};
 	}, [editor]);
+	const blockComments = useBlockComments();
 	const revealed = useRef<string | null>(null);
 	useEffect(() => {
 		const rowId = reveal.rowId;
@@ -77,6 +79,9 @@ export function RevealMarkdownBlock({
 		if (!element) return;
 		revealed.current = reveal.key;
 		reveal.consume();
+		// A request for one conversation opens it, the caret in its reply.
+		if (reveal.conversationId)
+			blockComments?.openConversation(reveal.conversationId);
 		// After the document region has laid the document out.
 		requestAnimationFrame(() => {
 			element.scrollIntoView({ block: "center" });
@@ -89,6 +94,6 @@ export function RevealMarkdownBlock({
 					{ duration: 1600, easing: "ease-out" },
 				);
 		});
-	}, [blocks.rows, blocks.status, editor, reveal, revision]);
+	}, [blockComments, blocks.rows, blocks.status, editor, reveal, revision]);
 	return null;
 }

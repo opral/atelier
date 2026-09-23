@@ -104,6 +104,11 @@ type ActiveConversation = {
 	readonly nodeId: string;
 	/** Increment to put the caret in its reply field. */
 	readonly focus: number;
+	/**
+	 * The thread whose reply field takes the caret, when the block has
+	 * several (a conversation opened by its id); the first otherwise.
+	 */
+	readonly conversationId?: string | null;
 };
 
 /**
@@ -131,15 +136,19 @@ type BlockConversationsState = {
 	readonly submitPending: (body: Document) => Promise<void>;
 	readonly cancelPending: (refocus: boolean) => void;
 	readonly active: ActiveConversation | null;
-	readonly activate: (nodeId: string | null, focus?: boolean) => void;
+	readonly activate: (
+		nodeId: string | null,
+		focus?: boolean,
+		conversationId?: string | null,
+	) => void;
 	/** Closes the open conversation and puts the caret back in the document. */
 	readonly returnToEditor: () => void;
 	readonly hovered: Hover | null;
 	readonly setHovered: (hover: Hover | null) => void;
-	readonly replyDraft: (nodeId: string) => Document;
-	readonly setReplyDraft: (nodeId: string, draft: Document) => void;
+	/** Drafts are kept per conversation: each thread has its own reply field. */
+	readonly replyDraft: (conversationId: string) => Document;
+	readonly setReplyDraft: (conversationId: string, draft: Document) => void;
 	readonly submitReply: (
-		nodeId: string,
 		conversationId: string,
 		body: Document,
 	) => Promise<void>;
@@ -573,14 +582,40 @@ const BlockConversationsController = memo(
 		});
 		latest.current = { threads, layout, available, threadAtBlock, placed };
 
-		const activate = useCallback((nodeId: string | null, focus = false) => {
-			setActive((current) => {
-				if (nodeId === null) return null;
-				const focusCount = (current?.focus ?? 0) + (focus ? 1 : 0);
-				return { nodeId, focus: focusCount };
-			});
-			if (nodeId !== null) setPending(null);
+		const activate = useCallback(
+			(
+				nodeId: string | null,
+				focus = false,
+				conversationId: string | null = null,
+			) => {
+				setActive((current) => {
+					if (nodeId === null) return null;
+					const focusCount = (current?.focus ?? 0) + (focus ? 1 : 0);
+					return { nodeId, focus: focusCount, conversationId };
+				});
+				if (nodeId !== null) setPending(null);
+			},
+			[],
+		);
+
+		// A conversation asked for by its id (a reveal from the conversation
+		// view) opens on its block, with the caret in its own reply field,
+		// once its thread is placed.
+		const [requested, setRequested] = useState<string | null>(null);
+		const requestConversation = useCallback((conversationId: string) => {
+			setRequested(conversationId);
 		}, []);
+		useEffect(() => {
+			if (!requested) return;
+			const entry = placed.find((candidate) =>
+				candidate.conversations.some(
+					(conversation) => conversation.conversationId === requested,
+				),
+			);
+			if (!entry) return;
+			setRequested(null);
+			activate(entry.key, true, requested);
+		}, [activate, placed, requested]);
 
 		const activeRef = useRef(active);
 		activeRef.current = active;
@@ -698,11 +733,11 @@ const BlockConversationsController = memo(
 		);
 
 		const submitReply = useCallback(
-			async (nodeId: string, conversationId: string, body: Document) => {
+			async (conversationId: string, body: Document) => {
 				await replyToBlockConversation(lix, conversationId, body);
 				setReplyDrafts((drafts) => {
 					const next = new Map(drafts);
-					next.delete(nodeId);
+					next.delete(conversationId);
 					return next;
 				});
 			},
@@ -710,12 +745,16 @@ const BlockConversationsController = memo(
 		);
 
 		const replyDraft = useCallback(
-			(nodeId: string) => replyDrafts.get(nodeId) ?? EMPTY_DRAFT,
+			(conversationId: string) =>
+				replyDrafts.get(conversationId) ?? EMPTY_DRAFT,
 			[replyDrafts],
 		);
-		const setReplyDraft = useCallback((nodeId: string, draft: Document) => {
-			setReplyDrafts((drafts) => new Map(drafts).set(nodeId, draft));
-		}, []);
+		const setReplyDraft = useCallback(
+			(conversationId: string, draft: Document) => {
+				setReplyDrafts((drafts) => new Map(drafts).set(conversationId, draft));
+			},
+			[],
+		);
 
 		// The marks: which blocks carry a wash, and how deep.
 		useEffect(() => {
@@ -770,51 +809,101 @@ const BlockConversationsController = memo(
 		// writer is told, with the way to the conversation's removed page.
 		const [removed, setRemoved] = useState<readonly string[]>([]);
 		const dismissRemoved = useCallback(() => setRemoved([]), []);
-		const seenThreads = useRef(new Map<string, BlockThread>());
+		// The threads known to be on this file. One that goes missing stays
+		// known until a lookup has settled what became of it: the comments are
+		// re-read many times around one write, and a read that lands while the
+		// lookup is out must find it missing again, not forget it.
+		const knownThreads = useRef(new Map<string, BlockThread>());
+		const lookingUp = useRef(new Set<string>());
+		// Threads that came back while their lookup was out: its answer is
+		// about a moment that has passed.
+		const cameBack = useRef(new Set<string>());
+		const mounted = useRef(true);
+		useEffect(() => {
+			mounted.current = true;
+			return () => {
+				mounted.current = false;
+			};
+		}, []);
 		useEffect(() => {
 			if (commentsResult.status !== "success") return;
-			const left = [...seenThreads.current.values()].filter(
+			const lookUp = (missing: readonly BlockThread[]) => {
+				const ids = missing.map((thread) => thread.conversationId);
+				for (const id of ids) lookingUp.current.add(id);
+				void (async () => {
+					const list = (values: readonly string[]) =>
+						values.map((_, index) => `$${index + 1}`).join(", ");
+					const existing = await lix.execute(
+						`SELECT id FROM lix_conversation WHERE id IN (${list(ids)})`,
+						ids,
+					);
+					const exists = new Set(
+						existing.rows.map((row) => String((row as { id: unknown }).id)),
+					);
+					const deleted = missing.filter(
+						(thread) => !exists.has(thread.conversationId),
+					);
+					let withBlock: string[] = [];
+					if (deleted.length > 0) {
+						const nodeIds = deleted.map((thread) => thread.nodeId);
+						const blockRows = await lix.execute(
+							`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
+							[...nodeIds, fileId],
+						);
+						const stillThere = new Set(
+							blockRows.rows.map((row) => String((row as { id: unknown }).id)),
+						);
+						for (const thread of deleted)
+							carriers.current.delete(thread.conversationId);
+						withBlock = deleted
+							.filter((thread) => !stillThere.has(thread.nodeId))
+							.map((thread) => thread.conversationId);
+					}
+					// Settled: a thread that has not come back is no longer known,
+					// unless it came back and went again while this lookup was out;
+					// that one is looked up again.
+					const again: BlockThread[] = [];
+					for (const thread of missing) {
+						const id = thread.conversationId;
+						lookingUp.current.delete(id);
+						const returned = cameBack.current.delete(id);
+						if (latest.current.threads.has(id)) continue;
+						if (
+							returned &&
+							exists.has(id) &&
+							!detachedIds.current.has(id) &&
+							knownThreads.current.has(id)
+						)
+							again.push(knownThreads.current.get(id)!);
+						else knownThreads.current.delete(id);
+					}
+					if (!mounted.current) return;
+					if (withBlock.length > 0)
+						setRemoved((current) => [
+							...current,
+							...withBlock.filter((id) => !current.includes(id)),
+						]);
+					if (again.length > 0) lookUp(again);
+				})().catch((error: unknown) => {
+					// Unsettled: the next read looks again.
+					for (const id of ids) {
+						lookingUp.current.delete(id);
+						cameBack.current.delete(id);
+					}
+					console.error(error);
+				});
+			};
+			const missing = [...knownThreads.current.values()].filter(
 				(thread) =>
 					!threads.has(thread.conversationId) &&
-					!detachedIds.current.has(thread.conversationId),
+					!detachedIds.current.has(thread.conversationId) &&
+					!lookingUp.current.has(thread.conversationId),
 			);
-			seenThreads.current = new Map(threads);
-			if (left.length === 0) return;
-			let cancelled = false;
-			void (async () => {
-				const ids = left.map((thread) => thread.conversationId);
-				const list = (values: readonly string[]) =>
-					values.map((_, index) => `$${index + 1}`).join(", ");
-				const existing = await lix.execute(
-					`SELECT id FROM lix_conversation WHERE id IN (${list(ids)})`,
-					ids,
-				);
-				const exists = new Set(
-					existing.rows.map((row) => String((row as { id: unknown }).id)),
-				);
-				const deleted = left.filter(
-					(thread) => !exists.has(thread.conversationId),
-				);
-				if (deleted.length === 0) return;
-				const nodeIds = deleted.map((thread) => thread.nodeId);
-				const blockRows = await lix.execute(
-					`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
-					[...nodeIds, fileId],
-				);
-				const stillThere = new Set(
-					blockRows.rows.map((row) => String((row as { id: unknown }).id)),
-				);
-				for (const thread of deleted)
-					carriers.current.delete(thread.conversationId);
-				const withBlock = deleted
-					.filter((thread) => !stillThere.has(thread.nodeId))
-					.map((thread) => thread.conversationId);
-				if (!cancelled && withBlock.length > 0)
-					setRemoved((current) => [...current, ...withBlock]);
-			})().catch((error: unknown) => console.error(error));
-			return () => {
-				cancelled = true;
-			};
+			for (const [id, thread] of threads) {
+				knownThreads.current.set(id, thread);
+				if (lookingUp.current.has(id)) cameBack.current.add(id);
+			}
+			if (missing.length > 0) lookUp(missing);
 		}, [commentsResult.status, fileId, lix, threads]);
 		useEffect(() => {
 			const onTransaction = ({ transaction }: { transaction: Transaction }) => {
@@ -1255,8 +1344,8 @@ const BlockConversationsController = memo(
 		}, [editor, isOpen, returnToEditor, viewReady]);
 
 		const api = useMemo<BlockCommentsApi>(
-			() => ({ startComment }),
-			[startComment],
+			() => ({ startComment, openConversation: requestConversation }),
+			[requestConversation, startComment],
 		);
 		const name = accountResult.rows[0]?.name?.trim() || "You";
 		const state = useMemo<BlockConversationsState>(
@@ -1678,48 +1767,70 @@ function ConversationBody({
 }) {
 	const nodeId = entry.key;
 	const views = useConversationViews();
-	// The reply field sits under the last thread, so a reply goes to it.
-	const replyTo = entry.conversations.at(-1)!.conversationId;
+	const several = entry.conversations.length > 1;
+	// Opened from the keyboard, the caret goes into the first thread's reply;
+	// opened for one conversation, into that one's.
+	const focus = state.active?.nodeId === nodeId ? state.active.focus : 0;
+	const focusIndex = Math.max(
+		0,
+		entry.conversations.findIndex(
+			(conversation) =>
+				conversation.conversationId === state.active?.conversationId,
+		),
+	);
+	// Two conversations meet on one block when a merge joins their blocks.
+	// Each stays its own thread, with its own reply field and its own way
+	// to its page: a reply goes to the thread it is written under.
 	return (
 		<>
-			{views ? (
-				<OpenConversationButton
-					atelier={{ views }}
-					conversationId={replyTo}
-					className="markdown-comment-open"
-				/>
-			) : null}
-			{entry.conversations.map((conversation, index) => (
-				<CommentThread
-					key={conversation.conversationId}
-					comments={conversation.comments}
-					label={
-						entry.conversations.length > 1
-							? `Comments on this block, thread ${index + 1}`
-							: "Comments on this block"
-					}
-					tone="neutral"
-					size="document"
-					className={index > 0 ? "markdown-comment-thread-next" : ""}
-				/>
-			))}
-			<Composer
-				label="Reply"
-				placeholder="Reply"
-				value={state.replyDraft(nodeId)}
-				onChange={(draft) => state.setReplyDraft(nodeId, draft)}
-				onSubmit={(body) => state.submitReply(nodeId, replyTo, body)}
-				// Esc with a reply written lets go of the field and keeps the
-				// draft; the next Esc (or the first, on an empty field) closes.
-				onCancel={(draft) => {
-					if (!hasCommentText(draft)) state.returnToEditor();
-				}}
-				submitHint="reply"
-				sendLabel="Send reply"
-				focusRequest={state.active?.nodeId === nodeId ? state.active.focus : 0}
-				tone="neutral"
-				size="document"
-			/>
+			{entry.conversations.map((conversation, index) => {
+				const { conversationId } = conversation;
+				return (
+					<section
+						key={conversationId}
+						className={`markdown-comment-section${
+							index > 0 ? " markdown-comment-thread-next" : ""
+						}`}
+						data-conversation-id={conversationId}
+						aria-label={several ? `Thread ${index + 1}` : undefined}
+					>
+						{views ? (
+							<OpenConversationButton
+								atelier={{ views }}
+								conversationId={conversationId}
+								className="markdown-comment-open"
+							/>
+						) : null}
+						<CommentThread
+							comments={conversation.comments}
+							label={
+								several
+									? `Comments on this block, thread ${index + 1}`
+									: "Comments on this block"
+							}
+							tone="neutral"
+							size="document"
+						/>
+						<Composer
+							label={several ? `Reply to thread ${index + 1}` : "Reply"}
+							placeholder="Reply"
+							value={state.replyDraft(conversationId)}
+							onChange={(draft) => state.setReplyDraft(conversationId, draft)}
+							onSubmit={(body) => state.submitReply(conversationId, body)}
+							// Esc with a reply written lets go of the field and keeps the
+							// draft; the next Esc (or the first, on an empty field) closes.
+							onCancel={(draft) => {
+								if (!hasCommentText(draft)) state.returnToEditor();
+							}}
+							submitHint="reply"
+							sendLabel="Send reply"
+							focusRequest={index === focusIndex ? focus : 0}
+							tone="neutral"
+							size="document"
+						/>
+					</section>
+				);
+			})}
 		</>
 	);
 }

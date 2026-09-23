@@ -633,7 +633,10 @@ export function moveColumn(direction: -1 | 1, target?: TableTarget): Command {
 }
 
 /** Moves one column to its final position, carrying its alignment and cells. */
-export function moveColumnTo(destination: number, target?: TableTarget): Command {
+export function moveColumnTo(
+	destination: number,
+	target?: TableTarget,
+): Command {
 	return tableCommand(target, (context) => {
 		const source = context.target.column;
 		if (

@@ -3005,24 +3005,33 @@
 			animation: markdown-selection-toolbar-in 140ms ease;
 		}
 
-		/* "Open conversation": the thread in its own tab, top right of the
-		   open card or popover (both are positioned). It takes no room: the
-		   comments run the full width, as designed, and it shows over them
-		   only while the card is pointed at or has focus, Tab reaching it
-		   first. */
+		/* One conversation in an open card or popover: its thread, its own
+		   reply field, and its own "Open conversation". */
+		.markdown-comment-section {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			gap: inherit;
+		}
+
+		/* "Open conversation": the thread in its own tab, top right of its
+		   section, where the card's corner is for the first one. It takes no
+		   room: the comments run the full width, as designed, and it shows
+		   over them only while its section is pointed at or has focus, Tab
+		   reaching it first. */
 		.markdown-comment-open {
 			position: absolute;
-			top: 6px;
-			right: 6px;
+			top: -4px;
+			right: -4px;
 			background: var(--atelier-panel);
 			opacity: 0;
 			pointer-events: none;
 			transition: opacity var(--atelier-duration-fast) ease-out;
 		}
-
-		.markdown-comment-card[data-state="active"]:is(:hover, :focus-within)
-			> .markdown-comment-open,
-		.markdown-comment-popover:is(:hover, :focus-within)
+		.markdown-comment-thread-next > .markdown-comment-open {
+			top: 6px;
+		}
+		.markdown-comment-section:is(:hover, :focus-within)
 			> .markdown-comment-open {
 			opacity: 1;
 			pointer-events: auto;
@@ -3040,7 +3049,7 @@
 		}
 
 		/* Two conversations on one block (their blocks were merged): each its
-		   own thread, one under the other. */
+		   own section, one under the other. */
 		.markdown-comment-thread-next {
 			padding-top: 10px;
 			border-top: 1px solid var(--atelier-border-subtle);

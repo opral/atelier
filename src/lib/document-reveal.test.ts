@@ -1,5 +1,10 @@
-import { describe, expect, test } from "vitest";
-import { documentReveal, documentRevealState } from "./document-reveal";
+import { describe, expect, test, vi } from "vitest";
+import type { AtelierViewsApi } from "@/extension-api";
+import {
+	clearDocumentReveal,
+	documentReveal,
+	documentRevealState,
+} from "./document-reveal";
 
 describe("documentReveal", () => {
 	test("reads a request from a view's state, keyed so each request is new", () => {
@@ -30,5 +35,37 @@ describe("documentReveal", () => {
 		).toBeNull();
 		// Cleared once consumed.
 		expect(documentReveal({ reveal: null })).toBeNull();
+	});
+});
+
+describe("clearDocumentReveal", () => {
+	test("clears the request in the area the view is in", async () => {
+		const open = vi.fn(async () => {});
+		const views = { open } as unknown as AtelierViewsApi;
+		clearDocumentReveal(views, "markdown", {
+			instanceId: "markdown-1",
+			area: "right",
+		})();
+		clearDocumentReveal(views, "csv", { instanceId: "csv-1", area: "main" })();
+		expect(open.mock.calls).toEqual([
+			[
+				"markdown",
+				{
+					instanceId: "markdown-1",
+					area: "right",
+					state: { reveal: null },
+					activate: false,
+				},
+			],
+			[
+				"csv",
+				{
+					instanceId: "csv-1",
+					area: "main",
+					state: { reveal: null },
+					activate: false,
+				},
+			],
+		]);
 	});
 });

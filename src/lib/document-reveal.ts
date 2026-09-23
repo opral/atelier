@@ -1,4 +1,4 @@
-import type { AtelierViewsApi } from "@/extension-api";
+import type { AtelierExtensionView, AtelierViewsApi } from "@/extension-api";
 
 /**
  * A request, carried in a document view's state as `reveal`, to bring one
@@ -36,17 +36,20 @@ export function documentRevealIsCurrent(
 
 /**
  * Clears a consumed request from a view's state, so a remount or a restored
- * workspace does not reveal the row again.
+ * workspace does not reveal the row again. The view is named by its instance
+ * and its area: a state update goes to the area it names (the main area when
+ * none), so a view in a side area must say so or nothing is cleared.
  */
 export function clearDocumentReveal(
 	views: AtelierViewsApi,
 	extensionId: string,
-	instanceId: string,
+	view: Pick<AtelierExtensionView, "instanceId" | "area">,
 ): () => void {
 	return () => {
 		void views
 			.open(extensionId, {
-				instanceId,
+				instanceId: view.instanceId,
+				area: view.area,
 				state: { reveal: null },
 				activate: false,
 			})

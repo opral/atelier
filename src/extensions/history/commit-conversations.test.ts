@@ -155,10 +155,10 @@ describe("per-file conversation counts under a checkpoint", () => {
 				(archive) => archive.key === "plugin_markdown",
 			);
 			if (!plugin) throw new Error("expected the bundled Markdown plugin");
-			await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
-				`/.lix/plugins/${plugin.key}.lixplugin`,
-				plugin.archiveBytes,
-			]);
+			await lix.execute(
+				"INSERT INTO lix_file (path, content) VALUES ($1, $2)",
+				[`/.lix/plugins/${plugin.key}.lixplugin`, plugin.archiveBytes],
+			);
 			const encode = (text: string) => new TextEncoder().encode(text);
 			const fileId = (
 				await lix.execute(

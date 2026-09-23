@@ -1300,11 +1300,7 @@ export const extension = createReactExtensionDefinition({
 							focusOnLoad={Boolean(view.state.focusOnLoad)}
 							reveal={documentReveal(
 								view.state,
-								clearDocumentReveal(
-									atelier.views,
-									manifestJson.id,
-									view.instanceId,
-								),
+								clearDocumentReveal(atelier.views, manifestJson.id, view),
 							)}
 							defaultBlock={
 								view.state.defaultBlock === "heading1" ? "heading1" : undefined

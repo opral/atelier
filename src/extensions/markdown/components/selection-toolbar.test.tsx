@@ -279,7 +279,10 @@ describe("SelectionToolbar", () => {
 
 		test("shows under the formatting row when the selection sits in one block", async () => {
 			const startComment = vi.fn();
-			const { editor } = createEditor(twoParagraphs, { startComment });
+			const { editor } = createEditor(twoParagraphs, {
+				startComment,
+				openConversation: vi.fn(),
+			});
 			await select(editor, "paragraph here");
 			await screen.findByRole("toolbar");
 			const row = commentRow();
@@ -295,6 +298,7 @@ describe("SelectionToolbar", () => {
 		test("hides when the selection spans blocks", async () => {
 			const { editor } = createEditor(twoParagraphs, {
 				startComment: vi.fn(),
+				openConversation: vi.fn(),
 			});
 			const from = textSelection(editor, "paragraph here").from;
 			const to = textSelection(editor, "paragraph there").to;

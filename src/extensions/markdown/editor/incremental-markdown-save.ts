@@ -142,6 +142,19 @@ function nodeSerialization(
 	return serialized;
 }
 
+/**
+ * A top-level node's Markdown as a save writes it (`afterBlock`: a block is
+ * written before it), or null when the node cannot be serialized on its own.
+ * Two nodes with the same text are the same to the file, whatever else the
+ * editor keeps on them: ids, a trailing space, an empty paragraph's shape.
+ */
+export function topLevelNodeMarkdown(
+	node: ProseMirrorNode,
+	afterBlock: boolean,
+): string | null {
+	return nodeSerialization(node, afterBlock)?.text ?? null;
+}
+
 function runText(
 	nodes: readonly ProseMirrorNode[],
 	afterBlock: boolean,
