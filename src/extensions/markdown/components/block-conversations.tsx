@@ -104,6 +104,11 @@ type ActiveConversation = {
 	readonly nodeId: string;
 	/** Increment to put the caret in its reply field. */
 	readonly focus: number;
+	/**
+	 * The thread whose reply field takes the caret, when the block has
+	 * several (a conversation opened by its id); the first otherwise.
+	 */
+	readonly conversationId?: string | null;
 };
 
 type BlockConversationsState = {
@@ -118,7 +123,11 @@ type BlockConversationsState = {
 	readonly submitPending: (body: Document) => Promise<void>;
 	readonly cancelPending: (refocus: boolean) => void;
 	readonly active: ActiveConversation | null;
-	readonly activate: (nodeId: string | null, focus?: boolean) => void;
+	readonly activate: (
+		nodeId: string | null,
+		focus?: boolean,
+		conversationId?: string | null,
+	) => void;
 	readonly hovered: string | null;
 	readonly setHovered: (nodeId: string | null) => void;
 	/** Drafts are kept per conversation: each thread has its own reply field. */
@@ -548,14 +557,40 @@ const BlockConversationsController = memo(
 		const latest = useRef({ threads, layout, available, threadAtBlock });
 		latest.current = { threads, layout, available, threadAtBlock };
 
-		const activate = useCallback((nodeId: string | null, focus = false) => {
-			setActive((current) => {
-				if (nodeId === null) return null;
-				const focusCount = (current?.focus ?? 0) + (focus ? 1 : 0);
-				return { nodeId, focus: focusCount };
-			});
-			if (nodeId !== null) setPending(null);
+		const activate = useCallback(
+			(
+				nodeId: string | null,
+				focus = false,
+				conversationId: string | null = null,
+			) => {
+				setActive((current) => {
+					if (nodeId === null) return null;
+					const focusCount = (current?.focus ?? 0) + (focus ? 1 : 0);
+					return { nodeId, focus: focusCount, conversationId };
+				});
+				if (nodeId !== null) setPending(null);
+			},
+			[],
+		);
+
+		// A conversation asked for by its id (a reveal from the conversation
+		// view) opens on its block, with the caret in its own reply field,
+		// once its thread is placed.
+		const [requested, setRequested] = useState<string | null>(null);
+		const requestConversation = useCallback((conversationId: string) => {
+			setRequested(conversationId);
 		}, []);
+		useEffect(() => {
+			if (!requested) return;
+			const entry = placed.find((candidate) =>
+				candidate.conversations.some(
+					(conversation) => conversation.conversationId === requested,
+				),
+			);
+			if (!entry) return;
+			setRequested(null);
+			activate(entry.key, true, requested);
+		}, [activate, placed, requested]);
 
 		const startComment = useCallback(() => {
 			if (editor.isDestroyed || !latest.current.available) return;
@@ -1230,8 +1265,8 @@ const BlockConversationsController = memo(
 		}, [activate, editor, startComment, viewReady]);
 
 		const api = useMemo<BlockCommentsApi>(
-			() => ({ startComment }),
-			[startComment],
+			() => ({ startComment, openConversation: requestConversation }),
+			[requestConversation, startComment],
 		);
 		const name = accountResult.rows[0]?.name?.trim() || "You";
 		const state = useMemo<BlockConversationsState>(
@@ -1645,8 +1680,16 @@ function ConversationBody({
 	const nodeId = entry.key;
 	const views = useConversationViews();
 	const several = entry.conversations.length > 1;
-	// Opened from the keyboard, the caret goes into the first thread's reply.
+	// Opened from the keyboard, the caret goes into the first thread's reply;
+	// opened for one conversation, into that one's.
 	const focus = state.active?.nodeId === nodeId ? state.active.focus : 0;
+	const focusIndex = Math.max(
+		0,
+		entry.conversations.findIndex(
+			(conversation) =>
+				conversation.conversationId === state.active?.conversationId,
+		),
+	);
 	// Two conversations meet on one block when a merge joins their blocks.
 	// Each stays its own thread, with its own reply field and its own way
 	// to its page: a reply goes to the thread it is written under.
@@ -1696,7 +1739,7 @@ function ConversationBody({
 							}}
 							submitHint="reply"
 							sendLabel="Send reply"
-							focusRequest={index === 0 ? focus : 0}
+							focusRequest={index === focusIndex ? focus : 0}
 							tone="neutral"
 							size="document"
 						/>

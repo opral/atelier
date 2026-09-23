@@ -12,6 +12,7 @@ import {
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
+	$getSelection,
 	getNearestEditorFromDOMNode,
 } from "lexical";
 import { bundledPluginArchives } from "@lix-js/sdk";
@@ -22,6 +23,7 @@ import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { MarkdownView } from "./index";
 import type { AtelierViewsApi } from "@/extension-api";
 import { ConversationViewsContext } from "../conversation/open-conversation";
+import type { DocumentReveal } from "@/lib/document-reveal";
 import {
 	blockRowText,
 	createBlockConversation,
@@ -124,6 +126,24 @@ async function setup(
 		fileId,
 		conversationId,
 		editor,
+		/** Renders the view again with a reveal request. */
+		async reveal(request: DocumentReveal) {
+			await act(async () => {
+				utils?.rerender(
+					<LixProvider lix={lix}>
+						<ConversationViewsContext.Provider value={views}>
+							<Suspense fallback={null}>
+								<MarkdownView
+									fileId={fileId}
+									filePath="/doc.md"
+									reveal={request}
+								/>
+							</Suspense>
+						</ConversationViewsContext.Provider>
+					</LixProvider>,
+				);
+			});
+		},
 		async close() {
 			await act(async () => utils?.unmount());
 			await lix.close();
@@ -946,6 +966,67 @@ describe("two conversations on one block", () => {
 				).rows[0]!.n;
 			await waitFor(async () => expect(Number(await repliesOf(first))).toBe(2));
 			expect(Number(await repliesOf(second))).toBe(1);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("a reveal for the second thread puts the caret in the second thread's reply", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { lix, fileId } = view;
+			const rows = (await selectMarkdownBlocks(
+				lix,
+				fileId,
+			).execute()) as MarkdownBlockRow[];
+			const row = rows.find(
+				(candidate) => blockRowText(candidate) === "Second para.",
+			)!;
+			const second = await createBlockConversation(
+				lix,
+				fileId,
+				row.id,
+				comment("Second thread"),
+			);
+			await waitFor(() =>
+				expect(
+					document
+						.querySelector(".markdown-comment-badge")
+						?.getAttribute("aria-label"),
+				).toBe("2 comments"),
+			);
+			// jsdom lays nothing out; the reply field scrolls itself into view.
+			Element.prototype.scrollIntoView ??= () => {};
+			await view.reveal({
+				key: "reveal-second",
+				rowId: row.id,
+				rowNumber: null,
+				conversationId: second,
+				at: Date.now(),
+				consume: () => {},
+			});
+			// The field that took the caret (Lexical placed its selection):
+			// the second thread's reply, and only it.
+			await waitFor(() => {
+				const withCaret = [
+					...document.querySelectorAll<HTMLElement>(
+						".markdown-comment-popover .markdown-comment-section",
+					),
+				]
+					.filter((section) => {
+						const field =
+							section.querySelector<HTMLElement>('[role="textbox"]');
+						const lexical = field && getNearestEditorFromDOMNode(field);
+						return Boolean(
+							lexical?.getEditorState().read(() => $getSelection()),
+						);
+					})
+					.map((section) => section.dataset.conversationId);
+				expect(withCaret).toEqual([second]);
+			});
 		} finally {
 			await view.close();
 		}
