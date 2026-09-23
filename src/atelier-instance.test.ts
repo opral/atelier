@@ -11,6 +11,7 @@ vi.mock("./shell/agent-turn-review-range", () => ({
 }));
 
 import {
+	AtelierDocumentCommandNotCompletedError,
 	bindAtelierDocumentsRuntime,
 	createAtelier,
 	getAtelierConfiguration,
@@ -256,6 +257,40 @@ describe("createAtelier", () => {
 		});
 		await open;
 		expect(resolved).toBe(true);
+	});
+
+	test("rejects a displaced open and releases the command queue", async () => {
+		vi.useFakeTimers();
+		try {
+			const atelier = createAtelier({ lix: {} as Lix });
+			const binding: AtelierDocumentsRuntimeBinding = {
+				open: (path) => ({
+					isComplete: (state) => state.activePath === path,
+				}),
+				startNew: vi.fn(),
+				closeActive: vi.fn(),
+				close: vi.fn(),
+				closeAll: vi.fn(),
+				openView: vi.fn(),
+			};
+			bindAtelierDocumentsRuntime(atelier, binding, {
+				activePath: null,
+				openPaths: [],
+				activeViewInstance: null,
+			});
+			const open = atelier.documents.open("/lost.md");
+			const firstResult = expect(open).rejects.toBeInstanceOf(
+				AtelierDocumentCommandNotCompletedError,
+			);
+			const close = atelier.documents.closeActive();
+			expect(binding.closeActive).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(5_000);
+			await firstResult;
+			await close;
+			expect(binding.closeActive).toHaveBeenCalledOnce();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	test("does not deliver the next command before the first panel transition", async () => {

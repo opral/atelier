@@ -92,6 +92,14 @@ export type AtelierConfiguration = Omit<AtelierOptions, "lix"> & {
 const CONFIGURATION = Symbol.for("@opral/atelier/configuration");
 const DOCUMENTS_RUNTIME = Symbol.for("@opral/atelier/documents-runtime");
 
+/** A command ran, but its requested view never became active. */
+export class AtelierDocumentCommandNotCompletedError extends Error {
+	constructor() {
+		super("Atelier document command did not complete before its deadline.");
+		this.name = "AtelierDocumentCommandNotCompletedError";
+	}
+}
+
 type AtelierDocumentsCommand =
 	| {
 			readonly kind: "open";
@@ -492,14 +500,12 @@ function waitForAtelierDocumentsCompletion(
 	}
 
 	return new Promise<void>((resolve, reject) => {
-		// A command's completion can be stolen after it executes — e.g. a
-		// session-state restore replacing the areas right after an open-view
-		// added its tab. Without a deadline that wait never settles and, worse,
-		// deadlocks the whole command queue behind it. The command itself DID
-		// run; resolving on the deadline is the safe outcome.
+		// A session-state restore can replace the view after the command runs.
+		// Release the queue at the deadline, but never report an inactive view
+		// as a successful open. The caller can retry after restoration settles.
 		const deadline = setTimeout(() => {
 			runtime.listeners.delete(listener);
-			resolve();
+			reject(new AtelierDocumentCommandNotCompletedError());
 		}, 5_000);
 		const listener = () => {
 			try {

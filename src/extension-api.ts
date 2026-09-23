@@ -178,12 +178,12 @@ export type AtelierViewOpenOptions = {
 };
 
 export type AtelierViewsApi = {
-	/** Opens (or activates) a registered extension view. */
+	/** Resolves when the registered extension view is active. */
 	open(extensionId: string, options?: AtelierViewOpenOptions): Promise<void>;
 };
 
 export type AtelierDocumentsApi = {
-	/** Opens a document by workspace path. */
+	/** Resolves when the document is active; rejects if its activation is displaced. */
 	open(path: string, options?: AtelierDocumentOpenOptions): Promise<void>;
 	/** Requests Atelier's contextual new-document UI. */
 	startNew(): Promise<void>;
