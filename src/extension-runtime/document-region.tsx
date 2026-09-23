@@ -15,7 +15,7 @@ import {
  * documents at most: the one on screen and, while a reader is handing the
  * frame the next one, that one laid out over it out of sight. Headless
  * readers under the frame hand documents in with `useShownDocument`; a
- * document says it has painted with `useDocumentReady`, and only then does
+ * document says its content is ready with `useDocumentReady`, and only then does
  * it replace the one on screen. Nothing in the region ever paints blank
  * between two documents, and a document that must not be seen before it is
  * complete — a file stepped to inside a review — is never seen before then.
@@ -29,11 +29,11 @@ export type DocumentRegionHandle = {
 	/**
 	 * Hand a document to the region. The document already on screen, named
 	 * by the same key, is updated in place; another document is mounted out
-	 * of sight until it says it is ready, and only then replaces the one on
+	 * of sight until its content is ready, and only then replaces the one on
 	 * screen.
 	 */
 	readonly show: (key: string, element: ReactNode) => void;
-	/** The document named by `key` has painted its content. */
+	/** The document named by `key` has prepared its content for display. */
 	readonly ready: (key: string) => void;
 };
 
@@ -164,11 +164,13 @@ function DocumentSlotView({
 	);
 	return (
 		<div
-			className={
-				hidden
-					? "invisible absolute inset-0 flex min-h-0 flex-col"
-					: "flex h-full min-h-0 flex-1 flex-col"
-			}
+			// Both slots keep the same viewport geometry throughout a hand-off.
+			// Only visibility changes when a prepared document is promoted. If the
+			// shown slot returns to normal flow here, `h-full` depends on an
+			// indirect/auto height and can collapse the editor after a review step.
+			className={`absolute inset-0 flex min-h-0 flex-col ${
+				hidden ? "invisible pointer-events-none" : "visible"
+			}`}
 			aria-hidden={hidden || undefined}
 			{...{ [attribute]: slotKey }}
 		>
@@ -204,7 +206,7 @@ export function HandDocument({
 	return null;
 }
 
-/** Tells the region, before the browser paints, that this document is shown in full. */
+/** Tells the region that this document's content is ready to be shown. */
 export function useDocumentReady(ready: boolean) {
 	const slot = useContext(DocumentSlotContext);
 	if (!slot) throw new Error("A document renders inside a document slot.");

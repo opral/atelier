@@ -1107,7 +1107,9 @@ describe("MarkdownView", () => {
 			toolbar,
 		);
 		expect(host.querySelector('[data-attr="markdown-editor"]')).toBe(column);
-		expect(shownProseMirror(host)).toHaveTextContent(/First/);
+		// A fast history read may have promoted the new document by the end of
+		// this act; either way, the frame must still contain a document.
+		expect(shownProseMirror(host)).not.toBeNull();
 		expect(screen.queryByRole("status")).toBeNull();
 		await waitFor(() => {
 			expect(shownProseMirror(host)).toHaveTextContent(/Second/);
@@ -1115,6 +1117,27 @@ describe("MarkdownView", () => {
 				shownProseMirror(host)!.querySelector("[data-review-change-id]"),
 			).not.toBeNull();
 		});
+		const secondSlot = shownProseMirror(host)!.closest(
+			"[data-markdown-document]",
+		);
+		expect(secondSlot?.className).toContain("absolute inset-0");
+
+		// Stepping back must promote the previous document into the same kind
+		// of fixed viewport slot. This catches direction-dependent collapse:
+		// the next diff must be visible whether reached forward or backward.
+		await act(async () => {
+			utils!.rerender(view(first, "/checkpoint-first.md"));
+		});
+		await waitFor(() => {
+			expect(shownProseMirror(host)).toHaveTextContent(/First/);
+			expect(
+				shownProseMirror(host)!.querySelector("[data-review-change-id]"),
+			).not.toBeNull();
+		});
+		const returnedFirstSlot = shownProseMirror(host)!.closest(
+			"[data-markdown-document]",
+		);
+		expect(returnedFirstSlot?.className).toContain("absolute inset-0");
 		observer.disconnect();
 		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
 			toolbar,
@@ -1130,6 +1153,83 @@ describe("MarkdownView", () => {
 		await act(async () => {
 			utils?.unmount();
 		});
+		host.remove();
+		await lix.close();
+	});
+
+	test("review stepping from a blank added file to README keeps both projections visible", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		const readmeId = fakeUuid("file_review_empty_then_readme");
+		const emptyId = fakeUuid("file_review_empty_added");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: readmeId,
+				path: "/README.md",
+				content: new TextEncoder().encode("# Before"),
+			})
+			.execute();
+		const base = await createCheckpoint(lix);
+		await qb(lix)
+			.updateTable("lix_file")
+			.set({ content: new TextEncoder().encode("# After") })
+			.where("id", "=", readmeId)
+			.execute();
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: emptyId,
+				path: "/new-file.md",
+				content: new TextEncoder().encode("<span></span>"),
+			})
+			.execute();
+		const target = await createCheckpoint(lix);
+		const view = (fileId: string, filePath: string) => (
+			<LixProvider lix={lix}>
+				<Suspense fallback={null}>
+					<MarkdownView
+						fileId={fileId}
+						filePath={filePath}
+						activeBranchId={activeBranchId}
+						beforeCommitId={base.commitId}
+						afterCommitId={target.commitId}
+						beforeExists={fileId !== emptyId}
+						isActiveView
+						isPanelFocused
+					/>
+				</Suspense>
+			</LixProvider>
+		);
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		let utils: {
+			rerender: (ui: Parameters<typeof render>[0]) => void;
+			unmount: () => void;
+		};
+		await act(async () => {
+			utils = render(view(emptyId, "/new-file.md"), { container: host });
+		});
+		await waitFor(() =>
+			expect(host.querySelector(".markdown-view")).toHaveAttribute(
+				"data-document",
+				"",
+			),
+		);
+		await act(async () => {
+			utils!.rerender(view(readmeId, "/README.md"));
+		});
+		await waitFor(() => {
+			expect(shownProseMirror(host)).toHaveTextContent("After");
+			expect(
+				shownProseMirror(host)?.querySelector("[data-review-change-id]"),
+			).not.toBeNull();
+		});
+		expect(
+			shownProseMirror(host)!.closest("[data-markdown-document]")?.className,
+		).toContain("absolute inset-0");
+
+		await act(async () => utils!.unmount());
 		host.remove();
 		await lix.close();
 	});
@@ -1387,9 +1487,7 @@ describe("MarkdownView", () => {
 			})
 			.execute();
 
-		await lix.execute("SELECT commit_id FROM lix_restore($1)", [
-			restoreTarget,
-		]);
+		await lix.execute("SELECT commit_id FROM lix_restore($1)", [restoreTarget]);
 		const workingDiff = await lix.execute(
 			"SELECT row_ref FROM lix_diff('lix_file', $1, lix_active_branch_commit_id())",
 			[restoreTarget],
