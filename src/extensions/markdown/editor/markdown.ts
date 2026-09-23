@@ -606,7 +606,11 @@ function prepareAstForMarkdown(value: any): any {
 	) {
 		out.spread = false;
 	}
-	if (isInlineContainer(out) && Array.isArray(out.children)) {
+	// The serializer emits edge spaces in prose as &#x20;, which round-trips
+	// through Markdown. Trimming here silently discards text typed at the start
+	// or end of a paragraph and leaves an open editor ahead of its saved file.
+	// Table padding is syntax, so keep its existing normalization.
+	if (out.type === "tableCell" && Array.isArray(out.children)) {
 		out.children = trimInlineBoundaryWhitespace(out.children);
 	}
 	if (Array.isArray(out.children) && out.children.some(isLiteralAutolink)) {
@@ -650,14 +654,6 @@ function bareAutolinkFits(before: any, after: any): boolean {
 		(after.type === "text" &&
 			/^(?:\s|[.,:;!?]+(?:\s|$))/.test(after.value ?? ""));
 	return opens && closes;
-}
-
-function isInlineContainer(node: Record<string, any>): boolean {
-	return (
-		node.type === "paragraph" ||
-		node.type === "heading" ||
-		node.type === "tableCell"
-	);
 }
 
 function trimInlineBoundaryWhitespace(children: any[]): any[] {

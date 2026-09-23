@@ -2,6 +2,27 @@ import { describe, expect, test } from "vitest";
 import { normalizeAst, parseMarkdown, serializeAst } from "./markdown";
 
 describe("markdown parser", () => {
+	test("preserves spaces typed at prose boundaries", () => {
+		const ast = {
+			type: "root",
+			children: [
+				{
+					type: "heading",
+					depth: 1,
+					children: [{ type: "text", value: " title " }],
+				},
+				{ type: "paragraph", children: [{ type: "text", value: " online " }] },
+			],
+		};
+		const markdown = serializeAst(ast);
+		expect(markdown).toContain("&#x20;");
+		expect(
+			parseMarkdown(markdown).children.map(
+				(child: any) => child.children?.[0]?.value,
+			),
+		).toEqual([" title ", " online "]);
+	});
+
 	test("parses GFM tables with inline content and alignment", () => {
 		const ast = parseMarkdown("| A | B |\n| :- | -: |\n| **a** | `b` |\n");
 		const table = ast.children[0];
