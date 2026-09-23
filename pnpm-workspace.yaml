@@ -31,6 +31,7 @@ overrides:
   prosemirror-view: 1.42.0
 patchedDependencies:
   '@glideapps/glide-data-grid@6.0.3': patches/@glideapps__glide-data-grid@6.0.3.patch
+  '@opral/zettel-ast@1.1.0': patches/@opral__zettel-ast@1.1.0.patch
   '@opral/zettel-html@1.1.0': patches/@opral__zettel-html@1.1.0.patch
   '@opral/zettel-lexical@1.1.0': patches/@opral__zettel-lexical@1.1.0.patch
   "@pierre/trees": patches/@pierre__trees.patch
