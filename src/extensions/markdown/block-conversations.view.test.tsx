@@ -1,5 +1,12 @@
 import { Suspense } from "react";
-import { act, configure, render, waitFor } from "@testing-library/react";
+import {
+	act,
+	configure,
+	fireEvent,
+	render,
+	waitFor,
+} from "@testing-library/react";
+import { $getRoot, type LexicalEditor } from "lexical";
 import { describe, expect, test } from "vitest";
 import { bundledPluginArchives } from "@lix-js/sdk";
 import type { Editor } from "@tiptap/core";
@@ -674,6 +681,149 @@ describe("block conversations follow their block through edits", () => {
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			expect(await conversationChanges()).toBe(before);
 		} finally {
+			await view.close();
+		}
+	});
+});
+
+/*
+ * "One active card at a time; Esc returns to the editor" (design N4, N5).
+ * The panel is narrow here (the test surface has no width), so the
+ * conversation opens from its count as a popover.
+ */
+describe("Esc returns to the editor from an open conversation", () => {
+	async function openFromCount() {
+		const badge = await waitFor(() => {
+			const found = document.querySelector<HTMLButtonElement>(
+				".markdown-comment-badge",
+			);
+			if (!found) throw new Error("no count yet");
+			return found;
+		});
+		// From the keyboard: the caret goes on into the reply field.
+		act(() => badge.click());
+		return waitFor(() => {
+			const field = document.querySelector<HTMLElement>(
+				'.markdown-comment-popover [role="textbox"][aria-label="Reply"]',
+			);
+			if (!field) throw new Error("no conversation yet");
+			return field;
+		});
+	}
+
+	const popover = () => document.querySelector(".markdown-comment-popover");
+
+	/** The top-level index of the block holding the editor's caret. */
+	const caretBlock = (editor: Editor) => editor.state.selection.$from.index(0);
+
+	test("from the page, after a click left focus nowhere", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			await openFromCount();
+			act(() => (document.activeElement as HTMLElement | null)?.blur());
+			expect(document.activeElement).toBe(document.body);
+			fireEvent.keyDown(document.body, { key: "Escape" });
+			await waitFor(() => expect(popover()).toBeNull());
+			expect(editor.view.hasFocus()).toBe(true);
+			expect(caretBlock(editor)).toBe(2);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("from the count that opened it", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			await openFromCount();
+			const badge = document.querySelector<HTMLElement>(
+				".markdown-comment-badge",
+			)!;
+			act(() => badge.focus());
+			fireEvent.keyDown(badge, { key: "Escape" });
+			await waitFor(() => expect(popover()).toBeNull());
+			expect(editor.view.hasFocus()).toBe(true);
+			expect(caretBlock(editor)).toBe(2);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("a written reply lets go of its field first, and is kept", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			const field = await openFromCount();
+			const lexical = (
+				field as HTMLElement & { __zettelEditor?: LexicalEditor }
+			).__zettelEditor!;
+			await act(async () =>
+				lexical.update(
+					() => $getRoot().selectEnd().insertText("Half a thought"),
+					{
+						discrete: true,
+					},
+				),
+			);
+			fireEvent.keyDown(field, { key: "Escape" });
+			// Still open; the field no longer has the caret.
+			expect(popover()).not.toBeNull();
+			expect(field.contains(document.activeElement)).toBe(false);
+			// The next Esc, from where the field left focus, closes.
+			fireEvent.keyDown(document.activeElement ?? document.body, {
+				key: "Escape",
+			});
+			await waitFor(() => expect(popover()).toBeNull());
+			expect(editor.view.hasFocus()).toBe(true);
+			// Opening it again finds the reply as it was left.
+			const again = await openFromCount();
+			expect(again).toHaveTextContent("Half a thought");
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("an empty reply field closes on the first Esc", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			const field = await openFromCount();
+			fireEvent.keyDown(field, { key: "Escape" });
+			await waitFor(() => expect(popover()).toBeNull());
+			expect(editor.view.hasFocus()).toBe(true);
+			expect(caretBlock(editor)).toBe(2);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("Esc elsewhere in the workspace is not the conversation's", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		const outside = document.createElement("input");
+		document.body.append(outside);
+		try {
+			await openFromCount();
+			act(() => outside.focus());
+			fireEvent.keyDown(outside, { key: "Escape" });
+			expect(popover()).not.toBeNull();
+		} finally {
+			outside.remove();
 			await view.close();
 		}
 	});

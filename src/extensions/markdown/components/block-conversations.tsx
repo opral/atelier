@@ -18,7 +18,7 @@ import {
 import type { Editor } from "@tiptap/core";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { MessageSquare } from "lucide-react";
+import { CommentBubble } from "./comment-icons";
 import { toPlainText } from "@opral/zettel-lexical";
 import type { Document } from "@opral/zettel-ast";
 import { useLix, useQueryResult } from "@/lib/lix-react";
@@ -106,6 +106,19 @@ type ActiveConversation = {
 	readonly focus: number;
 };
 
+/**
+ * What the pointer is on: a commented block, or its card or count. Each
+ * tints the other (design N4), never itself.
+ */
+type Hover = {
+	readonly nodeId: string;
+	readonly from: "block" | "margin";
+};
+
+function sameHover(a: Hover | null, b: Hover | null): boolean {
+	return a?.nodeId === b?.nodeId && a?.from === b?.from;
+}
+
 type BlockConversationsState = {
 	readonly editor: Editor;
 	readonly layout: BlockCommentLayout;
@@ -119,8 +132,10 @@ type BlockConversationsState = {
 	readonly cancelPending: (refocus: boolean) => void;
 	readonly active: ActiveConversation | null;
 	readonly activate: (nodeId: string | null, focus?: boolean) => void;
-	readonly hovered: string | null;
-	readonly setHovered: (nodeId: string | null) => void;
+	/** Closes the open conversation and puts the caret back in the document. */
+	readonly returnToEditor: () => void;
+	readonly hovered: Hover | null;
+	readonly setHovered: (hover: Hover | null) => void;
 	readonly replyDraft: (nodeId: string) => Document;
 	readonly setReplyDraft: (nodeId: string, draft: Document) => void;
 	readonly submitReply: (
@@ -509,7 +524,11 @@ const BlockConversationsController = memo(
 			ReadonlyMap<string, Document>
 		>(() => new Map());
 		const [active, setActive] = useState<ActiveConversation | null>(null);
-		const [hovered, setHovered] = useState<string | null>(null);
+		const [hovered, setHoveredState] = useState<Hover | null>(null);
+		// The same hover again is no change (every pointer event reports it).
+		const setHovered = useCallback((next: Hover | null) => {
+			setHoveredState((current) => (sameHover(current, next) ? current : next));
+		}, []);
 		const [replyDrafts, setReplyDrafts] = useState<
 			ReadonlyMap<string, Document>
 		>(() => new Map());
@@ -545,8 +564,14 @@ const BlockConversationsController = memo(
 			() => new Map(placed.map((entry) => [entry.index, entry.key])),
 			[placed],
 		);
-		const latest = useRef({ threads, layout, available, threadAtBlock });
-		latest.current = { threads, layout, available, threadAtBlock };
+		const latest = useRef({
+			threads,
+			layout,
+			available,
+			threadAtBlock,
+			placed,
+		});
+		latest.current = { threads, layout, available, threadAtBlock, placed };
 
 		const activate = useCallback((nodeId: string | null, focus = false) => {
 			setActive((current) => {
@@ -556,6 +581,33 @@ const BlockConversationsController = memo(
 			});
 			if (nodeId !== null) setPending(null);
 		}, []);
+
+		const activeRef = useRef(active);
+		activeRef.current = active;
+		// Esc from a conversation: the editor takes focus back, with the caret
+		// in the commented block unless it already is (a click into the block
+		// opened it). From a card or a count the focus was never there.
+		const returnToEditor = useCallback(() => {
+			const nodeId = activeRef.current?.nodeId;
+			setActive(null);
+			if (!nodeId || !hasView(editor) || editor.view.hasFocus()) return;
+			const entry = latest.current.placed.find(
+				(candidate) => candidate.key === nodeId,
+			);
+			const offset = entry ? topLevelOffset(editor, entry.index) : null;
+			editor
+				.chain()
+				.focus(null, { scrollIntoView: false })
+				.command(({ tr }) => {
+					if (offset === null) return true;
+					const block = tr.doc.child(entry!.index);
+					const { from } = tr.selection;
+					if (from > offset && from < offset + block.nodeSize) return true;
+					tr.setSelection(TextSelection.near(tr.doc.resolve(offset + 1)));
+					return true;
+				})
+				.run();
+		}, [editor]);
 
 		const startComment = useCallback(() => {
 			if (editor.isDestroyed || !latest.current.available) return;
@@ -686,7 +738,7 @@ const BlockConversationsController = memo(
 					id,
 					active?.nodeId === key
 						? "active"
-						: hovered === key
+						: hovered?.from === "margin" && hovered.nodeId === key
 							? "hover"
 							: "rest",
 				);
@@ -1114,7 +1166,7 @@ const BlockConversationsController = memo(
 			};
 		}, [editor, fileId, lix]);
 
-		// ⌘⌥M, Esc, and clicking into a commented block.
+		// ⌘⌥M, and clicking into a commented block.
 		useEffect(() => {
 			if (!viewReady) return;
 			const dom = editor.view.dom;
@@ -1137,9 +1189,7 @@ const BlockConversationsController = memo(
 				if (isBlockCommentShortcut(event)) {
 					event.preventDefault();
 					startComment();
-					return;
 				}
-				if (event.key === "Escape") setActive(null);
 			};
 			// The block under the click, not the state's selection: ProseMirror
 			// may not have read the click's caret yet.
@@ -1158,7 +1208,7 @@ const BlockConversationsController = memo(
 			};
 			const onMouseOver = (event: MouseEvent) => {
 				const nodeId = nodeIdAt(event.target);
-				setHovered((current) => (current === nodeId ? current : nodeId));
+				setHovered(nodeId ? { nodeId, from: "block" } : null);
 			};
 			// Pointer events, like the cards' and counts': a mouse event from the
 			// document arrives after the pointer events of what it moved onto.
@@ -1173,7 +1223,36 @@ const BlockConversationsController = memo(
 				dom.removeEventListener("pointerover", onMouseOver);
 				dom.removeEventListener("pointerleave", onMouseLeave);
 			};
-		}, [activate, editor, startComment, viewReady]);
+		}, [activate, editor, setHovered, startComment, viewReady]);
+
+		// Esc closes the open conversation wherever the focus is in this
+		// document: the editor, the card or popover, the page (a click on a
+		// card leaves it there), or a reply field that has let go of its text
+		// (the composer takes the first Esc). Esc another handler took, or
+		// pressed elsewhere in the workspace, is not ours. (ProseMirror
+		// prevents every Esc in the editor, so there that says nothing.)
+		const isOpen = active !== null;
+		useEffect(() => {
+			if (!isOpen || !viewReady) return;
+			const onKeyDown = (event: KeyboardEvent) => {
+				if (event.key !== "Escape" || event.isComposing) return;
+				const target = event.target;
+				const root = editor.view.dom;
+				const inEditor = target instanceof Node && root.contains(target);
+				if (event.defaultPrevented && !inEditor) return;
+				const surface = root.closest(".tiptap-container") ?? root;
+				const ours =
+					inEditor ||
+					target === document.body ||
+					target === document.documentElement ||
+					(target instanceof Node && surface.contains(target));
+				if (!ours) return;
+				event.preventDefault();
+				returnToEditor();
+			};
+			document.addEventListener("keydown", onKeyDown);
+			return () => document.removeEventListener("keydown", onKeyDown);
+		}, [editor, isOpen, returnToEditor, viewReady]);
 
 		const api = useMemo<BlockCommentsApi>(
 			() => ({ startComment }),
@@ -1194,6 +1273,7 @@ const BlockConversationsController = memo(
 				cancelPending,
 				active,
 				activate,
+				returnToEditor,
 				hovered,
 				setHovered,
 				replyDraft,
@@ -1220,6 +1300,8 @@ const BlockConversationsController = memo(
 				pendingIndex,
 				placed,
 				replyDraft,
+				returnToEditor,
+				setHovered,
 				setPendingDraft,
 				setReplyDraft,
 				submitPending,
@@ -1450,7 +1532,13 @@ function RemovedNotice({ state }: { readonly state: BlockConversationsState }) {
 }
 
 const POPOVER_WIDTH = 360;
-const POPOVER_OFFSET = 8;
+/**
+ * How far under its block's last line each popover opens, as the design
+ * draws them: the composer (N2) clears the block by more than the
+ * conversation opened from a count (N5).
+ */
+const COMPOSER_DROP = 29.75;
+const CONVERSATION_DROP = 19;
 
 function popoverLeft(box: BlockBox, surfaceWidth: number): number {
 	return Math.max(0, Math.min(box.left, surfaceWidth - POPOVER_WIDTH - 8));
@@ -1464,11 +1552,11 @@ function popoverLeft(box: BlockBox, surfaceWidth: number): number {
 function usePointerHover(
 	element: HTMLElement | null,
 	nodeId: string,
-	setHovered: (nodeId: string | null) => void,
+	setHovered: (hover: Hover | null) => void,
 ) {
 	useEffect(() => {
 		if (!element) return;
-		const enter = () => setHovered(nodeId);
+		const enter = () => setHovered({ nodeId, from: "margin" });
 		const leave = () => setHovered(null);
 		element.addEventListener("pointerenter", enter);
 		element.addEventListener("pointerleave", leave);
@@ -1521,7 +1609,7 @@ function PendingComposer({
 			className="markdown-comment-popover"
 			data-attr="markdown-comment-composer"
 			style={{
-				top: box.bottom + POPOVER_OFFSET,
+				top: box.bottom + COMPOSER_DROP,
 				left: popoverLeft(box, surfaceWidth),
 			}}
 		>
@@ -1572,7 +1660,7 @@ function ConversationPopover({
 			className="markdown-comment-popover"
 			data-attr="markdown-comment-popover"
 			style={{
-				top: box.bottom + POPOVER_OFFSET,
+				top: box.bottom + CONVERSATION_DROP,
 				left: popoverLeft(box, surfaceWidth),
 			}}
 		>
@@ -1621,10 +1709,10 @@ function ConversationBody({
 				value={state.replyDraft(nodeId)}
 				onChange={(draft) => state.setReplyDraft(nodeId, draft)}
 				onSubmit={(body) => state.submitReply(nodeId, replyTo, body)}
-				onCancel={() => {
-					state.activate(null);
-					if (!state.editor.isDestroyed)
-						state.editor.chain().focus(null, { scrollIntoView: false }).run();
+				// Esc with a reply written lets go of the field and keeps the
+				// draft; the next Esc (or the first, on an empty field) closes.
+				onCancel={(draft) => {
+					if (!hasCommentText(draft)) state.returnToEditor();
 				}}
 				submitHint="reply"
 				sendLabel="Send reply"
@@ -1650,6 +1738,8 @@ function CountBadge({
 }) {
 	const nodeId = entry.key;
 	const open = state.active?.nodeId === nodeId;
+	const hovered =
+		state.hovered?.from === "block" && state.hovered.nodeId === nodeId;
 	const count = commentCount(entry);
 	const [element, setElement] = useState<HTMLButtonElement | null>(null);
 	usePointerHover(element, nodeId, state.setHovered);
@@ -1659,27 +1749,26 @@ function CountBadge({
 			type="button"
 			className="markdown-comment-badge"
 			data-comment-badge={nodeId}
-			data-state={open ? "open" : undefined}
+			data-state={open ? "open" : hovered ? "hover" : undefined}
 			aria-expanded={open}
 			aria-label={`${count} ${count === 1 ? "comment" : "comments"}`}
 			style={{
 				top: box.top + Math.max(0, (box.lineHeight - 22) / 2),
 				left: Math.max(box.right, columnRight) + 16,
 			}}
-			onMouseDown={(event) => event.preventDefault()}
+			// A caret in the document keeps its focus; from anywhere else the
+			// count takes it, so Esc in the conversation is the document's.
+			onMouseDown={(event) => {
+				if (hasView(state.editor) && state.editor.view.hasFocus())
+					event.preventDefault();
+			}}
 			// From the keyboard (no pointer, `detail` 0) the caret goes on into
 			// the reply field.
 			onClick={(event) =>
 				state.activate(open ? null : nodeId, !open && event.detail === 0)
 			}
-			onKeyDown={(event) => {
-				if (event.key === "Escape" && open) {
-					event.preventDefault();
-					state.activate(null);
-				}
-			}}
 		>
-			<MessageSquare aria-hidden />
+			<CommentBubble aria-hidden />
 			{count}
 		</button>
 	);
@@ -1694,10 +1783,10 @@ function previewText(body: unknown): string {
 }
 
 /**
- * A card is level with its block's box, which reaches 4px above the text
- * (design: the block wrapper's padding), not with the first line.
+ * A card's top edge sits this far below the top of its block's first line,
+ * which puts the author's name 18.5px below it (design N3, N4).
  */
-const CARD_RISE = 4;
+const CARD_DROP = 8.5;
 
 /** N3/N4: one card per commented block, level with its block. */
 function MarginCards({
@@ -1717,7 +1806,7 @@ function MarginCards({
 
 	const stack = useCallback(() => {
 		const cards = entries.map((entry) => ({
-			top: geometry.boxes.get(entry.index)!.top - CARD_RISE,
+			top: geometry.boxes.get(entry.index)!.top + CARD_DROP,
 			height: cardRefs.current.get(entry.key)?.offsetHeight ?? 0,
 		}));
 		const tops = stackMarginCards(cards, activeIndex);
@@ -1739,7 +1828,7 @@ function MarginCards({
 	useEffect(() => {
 		const cleanups: (() => void)[] = [];
 		for (const [nodeId, card] of cardRefs.current) {
-			const enter = () => setHovered(nodeId);
+			const enter = () => setHovered({ nodeId, from: "margin" });
 			const leave = () => setHovered(null);
 			card.addEventListener("pointerenter", enter);
 			card.addEventListener("pointerleave", leave);
@@ -1780,15 +1869,17 @@ function MarginCards({
 					},
 					className: "markdown-comment-card",
 					"data-attr": "markdown-comment-card",
+					// Pointing at the block tints its card; pointing at the card
+					// tints the block, not the card.
 					"data-state": isActive
 						? "active"
-						: hovered === nodeId
+						: hovered?.from === "block" && hovered.nodeId === nodeId
 							? "hover"
 							: "rest",
 					style: {
 						left,
 						width: MARGIN_CARD_WIDTH,
-						top: geometry.boxes.get(entry.index)!.top - CARD_RISE,
+						top: geometry.boxes.get(entry.index)!.top + CARD_DROP,
 					},
 				};
 				if (isActive) {
@@ -1847,7 +1938,7 @@ function MarginCards({
 							</div>
 						</div>
 						{replies > 0 || otherThreads > 0 ? (
-							<div className="pl-7 text-[12px] font-semibold text-history-secondary">
+							<div className="pl-7 text-[12px] leading-[normal] font-semibold text-history-secondary">
 								{[
 									replies > 0
 										? `${replies} ${replies === 1 ? "reply" : "replies"}`

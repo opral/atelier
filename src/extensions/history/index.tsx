@@ -10,12 +10,7 @@ import {
 	type ReactNode,
 	type SetStateAction,
 } from "react";
-import {
-	ArrowLeftRight,
-	History,
-	MessageSquare,
-	MessageSquarePlus,
-} from "lucide-react";
+import { ArrowLeftRight, History } from "lucide-react";
 import type {
 	AtelierDiffSession,
 	AtelierExtensionPreferences,
@@ -195,12 +190,14 @@ export function HistoryScopeSwitch({
  * and names what happened to it at each one.
  */
 /**
- * Every row is the chip the section header is: the header's label sits 6px
- * inside the panel (`px-1.5` on the picker in panel-v2), so a row's glyph
- * column starts there too. Vertically a row keeps design 4a's 6px, so it is
- * 46px. The open row's edge is an inset ring, which takes no space.
+ * Design 4a's row inset: 5px, closed or open, so the flag stays put when a
+ * checkpoint opens and the files, hairline and fields below line up with the
+ * title (23px). Its ink lands a pixel past the section header's label, which
+ * sits 6px in (`px-1.5` on the picker in panel-v2). Vertically a row keeps
+ * 4a's 6px, so it is 46px. The open row's edge is an inset ring, which takes
+ * no space.
  */
-const ROW_INSET = "px-1.5";
+const ROW_INSET = "px-[5px]";
 
 function HistoryFilePath({ path }: { readonly path: string }) {
 	return <span className="min-w-0 truncate">{splitPathLabel(path).name}</span>;
@@ -504,11 +501,7 @@ function ReviewFileList({
 									aria-label={`${conversationCounts.get(file.id)} ${conversationCounts.get(file.id) === 1 ? "conversation" : "conversations"}`}
 									className="mr-0.5 ml-auto flex shrink-0 items-center gap-[3px] text-[10.5px] font-semibold text-accent-hover"
 								>
-									<MessageSquare
-										aria-hidden="true"
-										className="size-2.5"
-										strokeWidth={2.2}
-									/>
+									<CommentBubble className="size-2.5" />
 									{conversationCounts.get(file.id)}
 								</span>
 							) : null}
@@ -941,6 +934,8 @@ function CheckpointItem({
 		</span>
 	);
 	const showCommentAction = !isViewing && !editingTitle && !atelier.readOnly;
+	const showOpenConversation =
+		isViewing && !editingTitle && Boolean(atelier.views && conversations[0]);
 
 	return (
 		<li
@@ -1033,9 +1028,9 @@ function CheckpointItem({
 					className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
 						// Wide rows end in file names; keep them clear of the hover button.
 						showCommentAction
-							? "group-hover:pr-[94px] group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:pr-[94px]"
-							: isViewing && atelier.views && conversations[0]
-								? "pr-8"
+							? "group-hover:pr-[91px] group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:pr-[91px]"
+							: showOpenConversation
+								? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 group-has-[[data-attr=open-conversation]:hover]:pr-8 group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
 								: ""
 					} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
 				>
@@ -1080,21 +1075,19 @@ function CheckpointItem({
 							aria-label={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`}
 							className={`flex h-5 shrink-0 items-center gap-1 pr-1 pl-2 text-[11px] font-semibold text-history-secondary ${showCommentAction ? "group-hover:invisible group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:invisible" : ""}`}
 						>
-							<MessageSquare
-								aria-hidden="true"
-								className="size-3"
-								strokeWidth={2.2}
-							/>
+							<CommentBubble className="size-3" />
 							{commentCount}
 						</span>
 					) : null}
 				</button>
 			)}
-			{isViewing && !editingTitle && atelier.views && conversations[0] ? (
+			{showOpenConversation && atelier.views && conversations[0] ? (
+				// 4a has nothing here at rest: the link appears over the header's
+				// end while it is hovered or focused, and stays in the tab order.
 				<OpenConversationButton
 					atelier={{ views: atelier.views }}
 					conversationId={conversations[0].id}
-					className="absolute top-1.5 right-1.5 text-history-selected-secondary hover:bg-accent-border/50"
+					className="pointer-events-none absolute top-1.5 right-[5px] bg-accent-subtle text-history-selected-secondary opacity-0 hover:bg-accent-border/50 focus-visible:pointer-events-auto focus-visible:opacity-100 group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto group-has-[[data-attr=open-conversation]:hover]:opacity-100"
 				/>
 			) : null}
 			{showCommentAction ? (
@@ -1107,19 +1100,14 @@ function CheckpointItem({
 						setFocusRequest((value) => value + 1);
 						openCheckpoint();
 					}}
-					className="pointer-events-none absolute top-1.5 right-1.5 inline-flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] bg-panel px-[7px] text-[11px] font-semibold text-fg-muted opacity-0 ring-1 ring-border-strong group-hover:pointer-events-auto group-hover:opacity-100 hover:text-fg focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="pointer-events-none absolute top-1.5 right-[5px] inline-flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] bg-panel px-[7px] text-[11px] font-semibold text-fg-muted opacity-0 ring-1 ring-border-strong group-hover:pointer-events-auto group-hover:opacity-100 hover:text-fg focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
-					<MessageSquarePlus
-						aria-hidden="true"
-						className="size-3"
-						strokeWidth={2.2}
-					/>
+					<CommentBubble plus className="size-3" />
 					Comment
 				</button>
 			) : null}
 			<AnimatedHistoryDisclosure open={isViewing}>
-				{/* 4a measures from a 5px row inset; ours is the header's 6px. */}
-				<div className="flex flex-col gap-2 pt-2 pb-2.5 pl-px">
+				<div className="flex flex-col gap-2 pt-2 pb-2.5">
 					{!wide ? (
 						<CheckpointFileList
 							atelier={atelier}
@@ -1398,6 +1386,32 @@ function ChangeKindDot({
 			size={10}
 			className={`ml-auto shrink-0 ${className}`}
 		/>
+	);
+}
+
+/**
+ * The classic speech bubble 4a draws (not Lucide's newer rounded one), with a
+ * plus for the Comment chip. Butt caps, as in the design.
+ */
+function CommentBubble({
+	plus = false,
+	className,
+}: {
+	readonly plus?: boolean;
+	readonly className: string;
+}) {
+	return (
+		<svg
+			aria-hidden="true"
+			className={className}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth={2.2}
+		>
+			<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+			{plus ? <path d="M12 7v6M9 10h6" /> : null}
+		</svg>
 	);
 }
 

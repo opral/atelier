@@ -299,10 +299,10 @@ describe("HistoryView", () => {
 		await lix.close();
 	});
 
-	// The section header's label is a chip with `px-1.5`, so it sits six pixels
-	// inside the panel. Rows read as that same column, and a stray gutter on
-	// any wrapper between them is exactly what breaks it.
-	const HEADER_LABEL_INSET = 6;
+	// Every row sits design 4a's 5px inside the panel, a pixel short of the
+	// section header's `px-1.5` label, so the flag's ink lines up with it.
+	// A stray gutter on any wrapper between them is exactly what breaks it.
+	const ROW_COLUMN_INSET = 5;
 	const leftInset = (node: HTMLElement, root: Element): number => {
 		let total = 0;
 		for (
@@ -313,13 +313,15 @@ describe("HistoryView", () => {
 			for (const token of step.className.split(/\s+/)) {
 				const padding = /^p[xl]-(\d+(?:\.\d+)?)$/.exec(token);
 				if (padding) total += Number(padding[1]) * 4;
+				const pixels = /^p[xl]-\[(\d+(?:\.\d+)?)px\]$/.exec(token);
+				if (pixels) total += Number(pixels[1]);
 				if (token === "border") total += 1;
 			}
 		}
 		return total;
 	};
 
-	test("compact and wide rows share the header column and a single top inset", async () => {
+	test("compact and wide rows share one column and a single top inset", async () => {
 		const resize = mockHistoryWidth();
 		const lix = await openLix();
 		await createCheckpoint(lix);
@@ -367,8 +369,8 @@ describe("HistoryView", () => {
 				}
 			}
 			expect(topInset).toBe(8);
-			expect(leftInset(checkpoint, section)).toBe(HEADER_LABEL_INSET);
-			expect(leftInset(working, section)).toBe(HEADER_LABEL_INSET);
+			expect(leftInset(checkpoint, section)).toBe(ROW_COLUMN_INSET);
+			expect(leftInset(working, section)).toBe(ROW_COLUMN_INSET);
 		}
 		view.unmount();
 		await lix.close();
@@ -859,7 +861,6 @@ describe("checkpoint conversation flows", () => {
 		);
 		const view = render(renderHistory(first.commitId));
 		try {
-			fireEvent.click(await screen.findByRole("button", { name: "Comment" }));
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});
@@ -895,7 +896,7 @@ describe("checkpoint conversation flows", () => {
 		}
 	});
 
-	test("an open checkpoint without comments offers a Comment button, then the field", async () => {
+	test("an open checkpoint without comments rests on a Comment field, unfocused", async () => {
 		const lix = await openLix();
 		const { commitId } = await createCheckpoint(lix);
 		const view = render(
@@ -904,23 +905,19 @@ describe("checkpoint conversation flows", () => {
 			</LixProvider>,
 		);
 		try {
-			const button = await screen.findByRole("button", { name: "Comment" });
-			expect(
-				screen.queryByRole("textbox", { name: "Comment on this checkpoint" }),
-			).toBeNull();
-			fireEvent.click(button);
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});
-			// (Focus is Lexical's, which jsdom can't do; the browser check covers it.)
-			// Esc on an empty field folds it back to the button.
+			expect(field).toHaveAttribute("aria-placeholder", "Comment");
+			// Opening is for reading: no button in front of the field, no focus.
+			expect(screen.queryByRole("button", { name: "Comment" })).toBeNull();
+			expect(field).not.toHaveFocus();
+			// Esc on an empty field leaves the resting field, not a button.
 			fireEvent.keyDown(field, { key: "Escape" });
-			await waitFor(() =>
-				expect(screen.getByRole("button", { name: "Comment" })).toHaveFocus(),
-			);
 			expect(
-				screen.queryByRole("textbox", { name: "Comment on this checkpoint" }),
-			).toBeNull();
+				screen.getByRole("textbox", { name: "Comment on this checkpoint" }),
+			).toBe(field);
+			expect(screen.queryByRole("button", { name: "Comment" })).toBeNull();
 		} finally {
 			view.unmount();
 			await lix.close();
@@ -934,13 +931,14 @@ describe("checkpoint conversation flows", () => {
 		const renderHistory = (commitId?: string) => (
 			<LixProvider lix={lix}>
 				<HistoryView
-					atelier={atelierStub(commitId ? { historicalCommitId: commitId } : {})}
+					atelier={atelierStub(
+						commitId ? { historicalCommitId: commitId } : {},
+					)}
 				/>
 			</LixProvider>
 		);
 		const view = render(renderHistory(first.commitId));
 		try {
-			fireEvent.click(await screen.findByRole("button", { name: "Comment" }));
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});
@@ -978,7 +976,6 @@ describe("checkpoint conversation flows", () => {
 			</LixProvider>,
 		);
 		try {
-			fireEvent.click(await screen.findByRole("button", { name: "Comment" }));
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});

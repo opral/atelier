@@ -10,7 +10,6 @@ import {
 	ChevronRight,
 	Code2,
 	Italic,
-	MessageSquare,
 	RemoveFormatting,
 	Strikethrough,
 } from "lucide-react";
@@ -26,6 +25,7 @@ import {
 } from "../editor/block-commands";
 import { getClipRect, isAnchorClipped } from "./clip-rect";
 import { LinkPopover } from "./link-popover";
+import { CommentBubbleText } from "./comment-icons";
 import {
 	blockCommentShortcutLabel,
 	selectedTopLevelBlock,
@@ -518,7 +518,7 @@ export function SelectionToolbar() {
 							}
 							data-attr="markdown-selection-comment"
 						>
-							<MessageSquare
+							<CommentBubbleText
 								className="markdown-selection-toolbar-trigger-icon"
 								aria-hidden
 							/>

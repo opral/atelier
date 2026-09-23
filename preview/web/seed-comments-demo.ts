@@ -60,9 +60,11 @@ const CHECKPOINTS: readonly DemoCheckpoint[] = [
 	},
 	{
 		title: null,
+		// Edits the intro, not the Releases paragraph the legal checkpoint's
+		// block conversation sits on: 4a shows "README.md 1" only there.
 		files: {
 			"/README.md":
-				"# opral monorepo\n\nHome of Atelier, Lix, and the tools we build on top of them. Each package has its own README.\n\n## Releases\n\nReleases are cut from main every Tuesday. The changelog lives next to each package.\n",
+				"# opral monorepo\n\nHome of Atelier, Lix, and the tools we build on top of them. Each package has its own README and changelog.\n\n## Releases\n\nReleases are cut from main every Tuesday.\n",
 			"/claude-design.md":
 				"# Claude design\n\nThe version legal signed off on, with notes.\n",
 		},
@@ -72,7 +74,7 @@ const CHECKPOINTS: readonly DemoCheckpoint[] = [
 		title: null,
 		files: {
 			"/README.md":
-				"# opral monorepo\n\nHome of Atelier, Lix, and the tools we build on top of them. Each package has its own README.\n\n## Releases\n\nReleases are cut from main every Tuesday. The changelog lives next to each package.\n\nResearch moved to /archive.\n",
+				"# opral monorepo\n\nHome of Atelier, Lix, and the tools we build on top of them. Each package has its own README and changelog.\n\n## Releases\n\nReleases are cut from main every Tuesday.\n\nResearch moved to /archive.\n",
 		},
 		comments: [],
 	},

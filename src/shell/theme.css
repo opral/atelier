@@ -91,6 +91,10 @@
 		rgb(214 211 209),
 		rgb(87 83 78)
 	); /* emphasised edges, control tracks */
+	--atelier-border-lifted: light-dark(
+		rgb(231 226 218),
+		rgb(64 59 55)
+	); /* the edge of a card that lifts when opened: a document's comment card */
 	--atelier-ring: var(--atelier-accent); /* :focus-visible only */
 
 	/* ── Accent: the brand ────────────────────────────────────────────── */
@@ -112,13 +116,13 @@
 		rgb(120 66 30)
 	); /* edge of an accent-subtle surface */
 	--atelier-history-secondary: light-dark(
-		rgb(109 102 96),
+		rgb(111 104 98),
 		rgb(190 183 175)
-	); /* checkpoint and comment metadata: 4.5:1 on the canvas and on a hovered row */
+	); /* checkpoint and comment metadata on the canvas: 4.9:1, the smallest step darker than fg-subtle that passes */
 	--atelier-history-flag: light-dark(
-		rgb(137 131 125),
+		rgb(143 137 131),
 		rgb(150 143 136)
-	); /* a checkpoint's flag at rest: the quietest icon that keeps 3:1 on a hovered row */
+	); /* a checkpoint's flag at rest: the quietest icon that keeps 3:1 on the canvas */
 	--atelier-history-selected-secondary: light-dark(
 		rgb(133 87 58),
 		rgb(220 176 140)
@@ -294,6 +298,7 @@
 	--atelier-shadow-sm: 0 1px 2px rgb(28 25 23 / 0.05); /* a control lifting off its panel */
 	--atelier-shadow-md:
 		0 4px 16px -2px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.08); /* popovers */
+	--atelier-shadow-lift: 0 6px 20px -4px rgb(0 0 0 / 0.12); /* a card lifted out of a margin: an open comment card */
 	--atelier-shadow-lg:
 		0 12px 32px -4px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08); /* dialogs, floating panels */
 
