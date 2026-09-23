@@ -17,10 +17,10 @@ patchedDependencies:
     hash: 53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56
     path: patches/@opral__zettel-ast@1.1.0.patch
   '@opral/zettel-html@1.1.0':
-    hash: f0e34d1a69c639d258397adbd7c24546c93225f6ab2327b146a32859e51c06f1
+    hash: 858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf
     path: patches/@opral__zettel-html@1.1.0.patch
   '@opral/zettel-lexical@1.1.0':
-    hash: ffa4f648d61a6407251cdf0749298845be336acaa040e6d204d921dc5c357eda
+    hash: c5dbc8500d0bb360c4c7a509ebf1b675677bded294baae919538e6e261b334de
     path: patches/@opral__zettel-lexical@1.1.0.patch
   '@pierre/trees':
     hash: 9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6
@@ -95,10 +95,10 @@ importers:
         version: 1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)
       '@opral/zettel-html':
         specifier: 1.1.0
-        version: 1.1.0(patch_hash=f0e34d1a69c639d258397adbd7c24546c93225f6ab2327b146a32859e51c06f1)
+        version: 1.1.0(patch_hash=858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf)
       '@opral/zettel-lexical':
         specifier: 1.1.0
-        version: 1.1.0(patch_hash=ffa4f648d61a6407251cdf0749298845be336acaa040e6d204d921dc5c357eda)(lexical@0.30.0)
+        version: 1.1.0(patch_hash=c5dbc8500d0bb360c4c7a509ebf1b675677bded294baae919538e6e261b334de)(lexical@0.30.0)
       '@pierre/trees':
         specifier: 1.0.0-beta.5
         version: 1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
@@ -6324,17 +6324,17 @@ snapshots:
     dependencies:
       ajv: 8.20.0
 
-  '@opral/zettel-html@1.1.0(patch_hash=f0e34d1a69c639d258397adbd7c24546c93225f6ab2327b146a32859e51c06f1)':
+  '@opral/zettel-html@1.1.0(patch_hash=858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf)':
     dependencies:
       '@opral/zettel-ast': 1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)
       parse5: 7.3.0
 
-  '@opral/zettel-lexical@1.1.0(patch_hash=ffa4f648d61a6407251cdf0749298845be336acaa040e6d204d921dc5c357eda)(lexical@0.30.0)':
+  '@opral/zettel-lexical@1.1.0(patch_hash=c5dbc8500d0bb360c4c7a509ebf1b675677bded294baae919538e6e261b334de)(lexical@0.30.0)':
     dependencies:
       '@lexical/history': 0.30.0
       '@lexical/utils': 0.30.0
       '@opral/zettel-ast': 1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)
-      '@opral/zettel-html': 1.1.0(patch_hash=f0e34d1a69c639d258397adbd7c24546c93225f6ab2327b146a32859e51c06f1)
+      '@opral/zettel-html': 1.1.0(patch_hash=858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf)
       lexical: 0.30.0
 
   '@oxc-project/types@0.139.0': {}
