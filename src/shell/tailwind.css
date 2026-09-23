@@ -39,6 +39,9 @@
 	--color-accent-on: var(--atelier-accent-on);
 	--color-accent-subtle: var(--atelier-accent-subtle);
 	--color-accent-border: var(--atelier-accent-border);
+	--color-history-secondary: var(--atelier-history-secondary);
+	--color-history-selected-secondary: var(--atelier-history-selected-secondary);
+	--color-history-input-border: var(--atelier-history-input-border);
 	--color-link: var(--atelier-link);
 	--color-link-hover: var(--atelier-link-hover);
 	--color-danger: var(--atelier-danger);

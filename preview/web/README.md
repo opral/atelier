@@ -8,11 +8,15 @@ worker.
 pnpm --dir preview/web dev
 ```
 
-The preview is a regular Vite app. It intentionally has no Electron bridge or
-filesystem storage.
+The preview is a regular Vite app. It uses browser OPFS storage and has no
+Electron bridge.
 
-Files under `seed/` are inserted into a fresh in-memory Lix workspace at
-startup. Markdown fixtures and their local assets live together under
+To try commit comments, open **History**, select a checkpoint, and use **Start a
+conversation** beneath it. The title is optional. A thread stays attached to
+the commit across branches, and replies appear in the same thread.
+
+Files under `seed/` are inserted into a fresh Lix workspace at startup.
+Markdown fixtures and their local assets live together under
 `seed/markdown-extension/`, matching the isolated `/markdown-extension/`
 directory in the seeded workspace.
 

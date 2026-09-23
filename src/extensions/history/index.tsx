@@ -8,7 +8,7 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { ArrowLeftRight, History } from "lucide-react";
+import { ArrowLeftRight, History, MessageSquare } from "lucide-react";
 import type {
 	AtelierDiffSession,
 	AtelierExtensionPreferences,
@@ -34,6 +34,11 @@ import { createReactExtensionDefinition } from "@/extension-runtime/react-extens
 import { parseExtensionManifest } from "@/extension-runtime/extension-manifest";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import manifestJson from "./manifest.json";
+import {
+	selectCheckpointConversations,
+	type CommitConversation,
+} from "./commit-conversations";
+import { CommitConversationView } from "./commit-conversation-view";
 
 export type HistoryScope = "file" | "repository";
 
@@ -613,6 +618,15 @@ function CheckpointPage({
 	readonly file: ScopedFile | null;
 }) {
 	const [visible, setVisible] = useState(false);
+	const [conversationRetryKey, setConversationRetryKey] = useState(0);
+	const conversations = useQueryResult(
+		(lix) =>
+			selectCheckpointConversations(
+				lix,
+				checkpoints.map((checkpoint) => checkpoint.commit_id),
+			),
+		{ retryKey: conversationRetryKey },
+	);
 	const result = useQueryResult(
 		(lix) =>
 			selectCheckpointFilePreviewPage(
@@ -647,6 +661,13 @@ function CheckpointPage({
 								(row) => row.commit_id === checkpoint.commit_id,
 							),
 						}}
+						conversations={conversations.rows.filter(
+							(conversation) => conversation.commit_id === checkpoint.commit_id,
+						)}
+						conversationStatus={conversations.status}
+						onRefreshConversations={() =>
+							setConversationRetryKey((key) => key + 1)
+						}
 						activeFileId={file?.id ?? null}
 						onPreviewVisible={() => setVisible(true)}
 					/>
@@ -664,6 +685,9 @@ function CheckpointItem({
 	count,
 	fileChange,
 	preview,
+	conversations,
+	conversationStatus,
+	onRefreshConversations,
 	activeFileId,
 	onPreviewVisible,
 }: {
@@ -678,6 +702,9 @@ function CheckpointItem({
 		readonly path: string | null;
 	} | null;
 	readonly preview: PreviewResult;
+	readonly conversations: readonly CommitConversation[];
+	readonly conversationStatus: "pending" | "success" | "error";
+	readonly onRefreshConversations: () => void;
 	/** File scope: the file the rows are filtered by, marked in the previews. */
 	readonly activeFileId: string | null;
 	readonly onPreviewVisible: () => void;
@@ -696,6 +723,7 @@ function CheckpointItem({
 		session !== null &&
 		"commitId" in session.target &&
 		session.target.commitId === checkpoint.commit_id;
+	const conversationTitle = conversations[0]?.title;
 
 	return (
 		<li
@@ -732,7 +760,9 @@ function CheckpointItem({
 			>
 				<span
 					className={`flex h-5 w-4 shrink-0 items-center justify-center ${
-						isViewing ? "text-link" : "text-fg-faint"
+						isViewing
+							? "text-accent"
+							: "text-history-secondary"
 					}`}
 				>
 					<FilledFlag />
@@ -740,10 +770,12 @@ function CheckpointItem({
 				<span
 					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
 				>
-					<span className="block truncate text-[13px] leading-4 font-semibold text-fg">
-						{label}
+					<span className="block min-w-0 truncate text-[13px] leading-4 font-semibold text-fg">
+						{conversationTitle ? `Comment · ${conversationTitle}` : label}
 					</span>
-					<span className="block text-[11.5px] leading-4 text-fg-subtle">
+					<span
+						className={`block text-[11.5px] leading-4 ${isViewing ? "text-history-selected-secondary" : "text-history-secondary"}`}
+					>
 						<time
 							dateTime={checkpoint.created_at}
 							title={checkpoint.created_at}
@@ -764,16 +796,32 @@ function CheckpointItem({
 						onVisible={onPreviewVisible}
 					/>
 				) : null}
+				{conversations.length > 0 ? (
+					<span
+						className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-[11px] text-history-secondary"
+						aria-label={`${conversations.length} ${conversations.length === 1 ? "conversation" : "conversations"}`}
+					>
+						<MessageSquare aria-hidden="true" className="size-3" />
+						{conversations.length}
+					</span>
+				) : null}
 			</button>
-			{!wide ? (
-				<AnimatedHistoryDisclosure open={isViewing}>
+			<AnimatedHistoryDisclosure open={isViewing}>
+				{!wide ? (
 					<CheckpointFileList
 						atelier={atelier}
 						commitId={checkpoint.commit_id}
 						activeFileId={activeFileId}
 					/>
-				</AnimatedHistoryDisclosure>
-			) : null}
+				) : null}
+				<CommitConversationView
+					commitId={checkpoint.commit_id}
+					conversations={conversations}
+					status={conversationStatus}
+					onRefresh={onRefreshConversations}
+					readOnly={atelier.readOnly}
+				/>
+			</AnimatedHistoryDisclosure>
 		</li>
 	);
 }

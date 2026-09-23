@@ -85,6 +85,18 @@ rgb(58 38 24)
 rgb(243 216 190),
 rgb(120 66 30)
 );
+--atelier-history-secondary: light-dark(
+rgb(111 104 98),
+rgb(190 183 175)
+);
+--atelier-history-selected-secondary: light-dark(
+rgb(133 87 58),
+rgb(220 176 140)
+);
+--atelier-history-input-border: light-dark(
+rgb(184 126 82),
+rgb(190 140 100)
+);
 --atelier-link: light-dark(
 rgb(234 88 12),
 rgb(253 186 116)

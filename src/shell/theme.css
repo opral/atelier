@@ -111,6 +111,18 @@
 		rgb(243 216 190),
 		rgb(120 66 30)
 	); /* edge of an accent-subtle surface */
+	--atelier-history-secondary: light-dark(
+		rgb(111 104 98),
+		rgb(190 183 175)
+	); /* accessible checkpoint and comment metadata */
+	--atelier-history-selected-secondary: light-dark(
+		rgb(133 87 58),
+		rgb(220 176 140)
+	); /* metadata on the selected checkpoint tint */
+	--atelier-history-input-border: light-dark(
+		rgb(184 126 82),
+		rgb(190 140 100)
+	); /* visible reply-field edge on the selected checkpoint */
 	--atelier-link: light-dark(
 		rgb(234 88 12),
 		rgb(253 186 116)
