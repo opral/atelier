@@ -385,4 +385,296 @@ describe("block conversations follow their block through edits", () => {
 			await view.close();
 		}
 	});
+
+	test("an undo walks a conversation back through two merges, one at a time", async () => {
+		const view = await setup(
+			"# Title\n\nAlpha one.\n\nBravo two.\n\nCharlie three.\n",
+			"Charlie three.",
+		);
+		try {
+			const { editor, lix, conversationId } = view;
+			const join = async (text: string) => {
+				await act(async () => {
+					editor
+						.chain()
+						.setTextSelection(startOf(editor, text))
+						.joinBackward()
+						.run();
+				});
+			};
+			await join("Charlie three.");
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe(
+					"Bravo two.Charlie three.",
+				),
+			);
+			await join("Bravo two.Charlie three.");
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe(
+					"Alpha one.Bravo two.Charlie three.",
+				),
+			);
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe(
+					"Bravo two.Charlie three.",
+				),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("select all, type over it, and two undos put the conversation back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			await act(async () => {
+				editor.chain().selectAll().deleteSelection().run();
+			});
+			await waitFor(async () =>
+				expect((await fileText(lix, fileId)).trim()).toBe(""),
+			);
+			await act(async () => {
+				editor.commands.insertContent("New content");
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("New content"),
+			);
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Second para."),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("dragging a block's text into another block takes the conversation along, and undo brings it back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, conversationId } = view;
+			await act(async () => {
+				const from = startOf(editor, "Second para.");
+				const slice = editor.state.doc.slice(
+					from,
+					from + "Second para.".length,
+				);
+				const tr = editor.state.tr.delete(from, from + "Second para.".length);
+				const tail = tr.doc.resolve(tr.mapping.map(startOf(editor, "Tail.")));
+				tr.insert(tail.end(), slice.content);
+				editor.view.dispatch(tr);
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Tail.Second para."),
+			);
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Second para."),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("an outside write is not the writer's to undo", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			await lix.execute(
+				"UPDATE lix_file SET content = $2 WHERE id = $1",
+				[
+					fileId,
+					new TextEncoder().encode(
+						"# Title\n\nFirst para.\n\nSecond para.\n\nTail (agent).\n",
+					),
+				],
+				{ originKey: "an-agent" },
+			);
+			await waitFor(() =>
+				expect(editor.state.doc.textContent).toContain("Tail (agent)."),
+			);
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(editor.state.doc.textContent).toContain("Tail (agent).");
+			expect(await fileText(lix, fileId)).toContain("Tail (agent).");
+			expect(await targetText(lix, conversationId)).toBe("Second para.");
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("a thread removed with its block by someone else's write is announced", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId } = view;
+			await lix.execute(
+				"UPDATE lix_file SET content = $2 WHERE id = $1",
+				[fileId, new TextEncoder().encode("# Title\n\nFirst para.\n\nTail.\n")],
+				{ originKey: "an-agent" },
+			);
+			await waitFor(() =>
+				expect(editor.state.doc.textContent).not.toContain("Second para."),
+			);
+			await waitFor(() =>
+				expect(
+					document.querySelector(".markdown-comment-notice")?.textContent,
+				).toContain("A comment thread was removed with its block."),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("an outside write elsewhere leaves the writer's merge undoable, and the thread goes back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			await act(async () => {
+				editor
+					.chain()
+					.setTextSelection(startOf(editor, "Second para."))
+					.joinBackward()
+					.run();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe(
+					"First para.Second para.",
+				),
+			);
+			await lix.execute(
+				"UPDATE lix_file SET content = $2 WHERE id = $1",
+				[
+					fileId,
+					new TextEncoder().encode(
+						"# Title\n\nFirst para.Second para.\n\nTail (agent).\n",
+					),
+				],
+				{ originKey: "an-agent" },
+			);
+			await waitFor(() =>
+				expect(editor.state.doc.textContent).toContain("Tail (agent)."),
+			);
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Second para."),
+			);
+			// The agent's change is not the writer's to undo.
+			expect(await fileText(lix, fileId)).toContain("Tail (agent).");
+			expect(await fileText(lix, fileId)).toContain(
+				"First para.\n\nSecond para.",
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("an outside write that edits the commented block keeps the thread on it", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			const idBefore = editor.state.doc.child(2).attrs.data?.id;
+			await lix.execute(
+				"UPDATE lix_file SET content = $2 WHERE id = $1",
+				[
+					fileId,
+					new TextEncoder().encode(
+						"# Title\n\nFirst para.\n\nSecond para, revised.\n\nTail.\n",
+					),
+				],
+				{ originKey: "an-agent" },
+			);
+			await waitFor(() =>
+				expect(editor.state.doc.textContent).toContain("Second para, revised."),
+			);
+			// Replaced inside the block: the block, and what hangs on it, stay.
+			expect(editor.state.doc.child(2).attrs.data?.id).toBe(idBefore);
+			await waitFor(() =>
+				expect(
+					document.querySelector(".ProseMirror > [data-block-comment]")
+						?.textContent,
+				).toBe("Second para, revised."),
+			);
+			expect(await targetText(lix, conversationId)).toBe(
+				"Second para, revised.",
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("a save that leaves a conversation on its row writes nothing to it", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId } = view;
+			const conversationChanges = async () =>
+				(
+					await lix.execute(
+						"SELECT count(*) AS n FROM lix_change WHERE schema_key = 'lix_conversation'",
+					)
+				).rows[0]!.n;
+			const before = await conversationChanges();
+			// Typing in a block, then a new block elsewhere: both saves keep
+			// the conversation's row.
+			await act(async () => {
+				editor
+					.chain()
+					.setTextSelection(startOf(editor, "First para.") + 5)
+					.insertContent("x")
+					.run();
+			});
+			await waitFor(async () =>
+				expect(await fileText(lix, fileId)).toContain("Firstx para."),
+			);
+			await act(async () => {
+				editor
+					.chain()
+					.setTextSelection(startOf(editor, "Tail.") + 5)
+					.splitBlock()
+					.insertContent("More.")
+					.run();
+			});
+			await waitFor(async () =>
+				expect(await fileText(lix, fileId)).toContain("More."),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(await conversationChanges()).toBe(before);
+		} finally {
+			await view.close();
+		}
+	});
 });

@@ -54,12 +54,19 @@ export async function upsertMarkdownFile(
  */
 export type MarkdownFileWriteParticipant = {
 	/**
-	 * Statements that make the write safe for the participant's rows. They
-	 * also go out with the write when the transaction cannot commit, so the
-	 * write never deletes what they protect.
+	 * Runs in a rehearsal: a transaction in which the write has been made and
+	 * that is then rolled back. It learns what the write would delete, so
+	 * the real transaction only touches the participant's rows that need it.
 	 */
-	readonly before: readonly LixBatchStatement[];
+	readonly rehearse: (transaction: LixTransaction) => Promise<void>;
+	/** Statements that make the write safe, as learned by the rehearsal. */
+	readonly before: () => readonly LixBatchStatement[];
 	readonly after: (transaction: LixTransaction) => Promise<void>;
+	/**
+	 * What goes out with the write when no transaction can commit (no
+	 * rehearsal to go by): enough that the write deletes nothing of theirs.
+	 */
+	readonly lastResort: readonly LixBatchStatement[];
 	/** The transaction committed: `after`'s work is published. */
 	readonly committed: () => void;
 	/**
@@ -86,7 +93,7 @@ function isTransactionConflict(error: unknown): boolean {
  * An explicit transaction fails at commit when anything else wrote in the
  * meantime (a reply, an agent, another tab) and is not retried by Lix, so
  * the whole transaction is run again. If it keeps losing, the text is saved
- * with only the participant's `before` statements, in one automatically
+ * with only the participant's last-resort statements, in one automatically
  * retried batch; the participant is told. A transaction is pinned to the
  * branch it began on: when the handle has switched branches since, nothing
  * is written and the draft stays in the editor.
@@ -110,9 +117,25 @@ export async function upsertMarkdownFileWith(
 	for (let attempt = 0; attempt < PARTICIPANT_ATTEMPTS; attempt++) {
 		if (attempt > 0 && (await lix.activeBranchId()) !== branchId)
 			throw branchChanged;
+		// The rehearsal: the write, what it would do, and nothing kept.
+		const rehearsal = await lix.beginTransaction();
+		try {
+			const rehearsed = await rehearsal.execute(write.sql, [...write.params!]);
+			if (rehearsed.rowsAffected === 0) {
+				await rehearsal.rollback();
+				return { written: false, commit: null };
+			}
+			await participant.rehearse(rehearsal);
+			await rehearsal.rollback();
+		} catch (error) {
+			await rehearsal.rollback().catch(() => {});
+			cause = error;
+			if (!isTransactionConflict(error)) break;
+			continue;
+		}
 		const transaction = await lix.beginTransaction();
 		try {
-			for (const statement of participant.before)
+			for (const statement of participant.before())
 				await transaction.execute(statement.sql, [...(statement.params ?? [])]);
 			const result = await transaction.execute(
 				write.sql,
@@ -136,7 +159,10 @@ export async function upsertMarkdownFileWith(
 	// The last resort: the text, and the participant's rows let go of so the
 	// write cannot delete them.
 	if ((await lix.activeBranchId()) !== branchId) throw branchChanged;
-	const batch = await lix.executeBatch([...participant.before, write], options);
+	const batch = await lix.executeBatch(
+		[...participant.lastResort, write],
+		options,
+	);
 	participant.degraded(cause);
 	return {
 		written: (batch.results.at(-1)?.rowsAffected ?? 0) > 0,

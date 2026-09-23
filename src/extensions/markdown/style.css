@@ -3014,9 +3014,28 @@
 		}
 		/* Only the thread makes room for it; the reply field keeps the card's
 		   full width. */
-		.markdown-comment-card[data-state="active"] > ol.comment-surface,
-		.markdown-comment-popover > ol.comment-surface {
+		.markdown-comment-card[data-state="active"]
+			> ol.comment-surface:first-of-type,
+		.markdown-comment-popover > ol.comment-surface:first-of-type {
 			padding-right: 24px;
+		}
+
+		.markdown-comment-notice-action {
+			margin-left: 6px;
+			color: var(--atelier-accent-hover);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.markdown-comment-notice-action:hover {
+			text-decoration: underline;
+		}
+
+		/* Two conversations on one block (their blocks were merged): each its
+		   own thread, one under the other. */
+		.markdown-comment-thread-next {
+			padding-top: 10px;
+			border-top: 1px solid var(--atelier-border-subtle);
 		}
 
 		/* Said when a save could not keep the comments on their blocks. */

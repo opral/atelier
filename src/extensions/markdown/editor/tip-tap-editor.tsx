@@ -31,6 +31,7 @@ import {
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
+import { outsideWriteTransaction } from "./outside-write";
 import { decodeMarkdownData } from "./decode-markdown-data";
 import {
 	buildNormalizedMarkdownFromEditor,
@@ -958,8 +959,29 @@ function setEditorMarkdown(
 	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
 ): void {
 	const ast = parseMarkdown(markdown) as any;
-	editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
-		emitUpdate: false,
-	});
+	const content = astToTiptapDoc(ast, { defaultBlock });
+	// What the file holds is not the writer's edit. It is applied as the
+	// smallest change to the document on screen and kept out of their undo
+	// history, so ⌘Z keeps undoing their own edits (mapped through it) and
+	// never takes back someone else's write.
+	let transaction: ReturnType<typeof outsideWriteTransaction> | undefined;
+	try {
+		const next = editor.schema.nodeFromJSON(content);
+		next.check();
+		transaction = outsideWriteTransaction(editor.state, next);
+	} catch {
+		transaction = undefined;
+	}
+	if (transaction) {
+		editor.view.dispatch(transaction);
+	} else if (transaction === undefined) {
+		// Not expressible as a change to this document: replaced whole, and
+		// the writer's undo history cannot reach past it.
+		editor
+			.chain()
+			.setMeta("addToHistory", false)
+			.setContent(content, { emitUpdate: false })
+			.run();
+	}
 	acknowledgeMarkdownEditorPersistence(editor, markdown);
 }

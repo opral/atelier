@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
 	OpenConversationButton,
+	openConversation,
 	useConversationViews,
 } from "../../conversation/open-conversation";
 import type { Editor } from "@tiptap/core";
@@ -54,7 +55,6 @@ import {
 	blockAlignment,
 	blockCommentLayout,
 	createBlockConversation,
-	groupBlockThreads,
 	replyToBlockConversation,
 	selectBlockComments,
 	selectCommentAuthors,
@@ -63,6 +63,7 @@ import {
 	withAuthors,
 	type BlockAlignment,
 	type BlockCommentLayout,
+	type BlockComment,
 	type BlockThread,
 	type MarkdownBlockRow,
 } from "../block-conversations";
@@ -75,7 +76,18 @@ import {
 
 /** A commented block the editor can place: its thread and where it is. */
 type PlacedThread = {
+	/**
+	 * The card's identity: its first conversation's id. (Not the row: two
+	 * cards can briefly share a row while a save moves their conversations.)
+	 */
+	readonly key: string;
+	/** The block's first conversation. */
 	readonly thread: BlockThread;
+	/**
+	 * Every conversation on the block, each its own thread (two meet on one
+	 * block when a merge joins their blocks), oldest first.
+	 */
+	readonly conversations: readonly BlockThread[];
 	/** Top-level index in the editor document. */
 	readonly index: number;
 };
@@ -111,10 +123,20 @@ type BlockConversationsState = {
 	readonly setHovered: (nodeId: string | null) => void;
 	readonly replyDraft: (nodeId: string) => Document;
 	readonly setReplyDraft: (nodeId: string, draft: Document) => void;
-	readonly submitReply: (nodeId: string, body: Document) => Promise<void>;
+	readonly submitReply: (
+		nodeId: string,
+		conversationId: string,
+		body: Document,
+	) => Promise<void>;
 	readonly authorName: string;
 	/** Said when comments could not be kept on their blocks by a save. */
 	readonly notice: string | null;
+	/**
+	 * Conversations deleted with their block by someone else's write while
+	 * the document was open (Lix deletes the conversations on a deleted row).
+	 */
+	readonly removed: readonly string[];
+	readonly dismissRemoved: () => void;
 };
 
 const BlockConversationsStateContext =
@@ -200,15 +222,50 @@ function useEditorViewReady(editor: Editor): boolean {
 
 /**
  * Where a conversation is in the editor: its block's editor id, and while
- * that block is gone, the block standing in for it.
+ * that block is gone (or emptied, its text moved), the blocks that took it
+ * in, in the order they did. Undo brings the earlier ones back, and the
+ * earliest one present carries the conversation, so an undo puts it back
+ * exactly where it came from.
  */
 type Carrier = {
 	readonly blockId: string;
-	readonly standIn: string | null;
+	readonly trail: readonly string[];
+	/** Where to look when none of those blocks is left. */
 	readonly standInIndex: number;
 	/** What the gone block held, to know it again when it is pasted back. */
 	readonly lost?: string;
 };
+
+type BlockPositions = ReadonlyMap<
+	string,
+	{ readonly index: number; readonly empty: boolean }
+>;
+
+/** The id of the block carrying a conversation in a document, if any. */
+function carrierBlock(blocks: BlockPositions, carrier: Carrier): string | null {
+	const own = blocks.get(carrier.blockId);
+	// Its own block, unless it was emptied and its text went on elsewhere.
+	if (own && (!own.empty || carrier.trail.length === 0)) return carrier.blockId;
+	for (const id of carrier.trail) if (blocks.has(id)) return id;
+	return own ? carrier.blockId : null;
+}
+
+function carrierPosition(
+	blocks: BlockPositions,
+	carrier: Carrier,
+): number | null {
+	const id = carrierBlock(blocks, carrier);
+	return id === null ? null : blocks.get(id)!.index;
+}
+
+function blocksById(doc: ProseMirrorNode): BlockPositions {
+	const blocks = new Map<string, { index: number; empty: boolean }>();
+	doc.forEach((node, _offset, index) => {
+		const id = blockNodeId(node);
+		if (id) blocks.set(id, { index, empty: node.content.size === 0 });
+	});
+	return blocks;
+}
 
 /** A block's kind and text, the only way to know a pasted block again. */
 function blockSignature(node: ProseMirrorNode): string | null {
@@ -216,35 +273,36 @@ function blockSignature(node: ProseMirrorNode): string | null {
 	return text ? `${node.type.name}:${text}` : null;
 }
 
-function indexOfBlock(doc: ProseMirrorNode, blockId: string): number {
-	let found = -1;
-	doc.forEach((node, _offset, index) => {
-		if (found < 0 && blockNodeId(node) === blockId) found = index;
-	});
-	return found;
-}
-
 function carrierIndex(doc: ProseMirrorNode, carrier: Carrier): number {
-	const own = indexOfBlock(doc, carrier.blockId);
-	if (own >= 0) return own;
-	const standIn = carrier.standIn ? indexOfBlock(doc, carrier.standIn) : -1;
-	if (standIn >= 0) return standIn;
-	return Math.min(carrier.standInIndex, doc.childCount - 1);
-}
-
-function conversationIdsOf(thread: BlockThread): string[] {
-	return [
-		...new Set(thread.comments.map((comment) => comment.conversation_id)),
-	];
-}
-
-function mergeThreads(first: BlockThread, second: BlockThread): BlockThread {
-	const comments = [...first.comments, ...second.comments].sort(
-		(a, b) =>
-			(a.lixcol_created_at ?? "").localeCompare(b.lixcol_created_at ?? "") ||
-			a.id.localeCompare(b.id),
+	return (
+		carrierPosition(blocksById(doc), carrier) ??
+		Math.min(carrier.standInIndex, doc.childCount - 1)
 	);
-	return { ...first, comments };
+}
+
+/** One thread per conversation, oldest conversation first. */
+function groupConversationThreads(
+	comments: readonly BlockComment[],
+): ReadonlyMap<string, BlockThread> {
+	const threads = new Map<string, BlockThread>();
+	for (const comment of comments) {
+		const thread = threads.get(comment.conversation_id);
+		if (thread) (thread.comments as BlockComment[]).push(comment);
+		else
+			threads.set(comment.conversation_id, {
+				nodeId: comment.node_id,
+				conversationId: comment.conversation_id,
+				comments: [comment],
+			});
+	}
+	return threads;
+}
+
+function commentCount(entry: PlacedThread): number {
+	return entry.conversations.reduce(
+		(count, conversation) => count + conversation.comments.length,
+		0,
+	);
 }
 
 /** The row of the block at `index`, or of the nearest block that has one. */
@@ -362,7 +420,10 @@ const BlockConversationsController = memo(
 			() => withAuthors(commentRows, authors),
 			[authors, commentRows],
 		);
-		const threads = useMemo(() => groupBlockThreads(comments), [comments]);
+		const threads = useMemo(
+			() => groupConversationThreads(comments),
+			[comments],
+		);
 
 		// The pairing of editor blocks with rows changes only when blocks move.
 		const [structure, setStructure] = useState(() => structureOf(editor));
@@ -391,53 +452,54 @@ const BlockConversationsController = memo(
 		// back on their blocks by the next save that changes the blocks.
 		const detachedIds = useRef(new Set<string>());
 		const [carrierVersion, setCarrierVersion] = useState(0);
-		const commentsLoaded = commentsResult.status === "success";
 		const placed = useMemo<PlacedThread[]>(() => {
 			const { doc } = editor.state;
-			const live = new Set<string>();
+			// A conversation first seen is found by its row, which is only
+			// right once the document on screen is saved: until then rows lag.
+			let rowsCurrent: boolean | null = null;
 			for (const thread of threads.values()) {
-				for (const conversationId of conversationIdsOf(thread)) {
-					live.add(conversationId);
-					if (carriers.current.has(conversationId)) continue;
-					// A conversation first seen: its row tells which block it is on.
-					const index = alignment.blockOfRow.get(thread.nodeId);
-					const blockId =
-						index !== undefined && index < doc.childCount
-							? blockNodeId(doc.child(index))
-							: null;
-					if (blockId)
-						carriers.current.set(conversationId, {
-							blockId,
-							standIn: null,
-							standInIndex: index!,
-						});
-				}
+				if (carriers.current.has(thread.conversationId)) continue;
+				rowsCurrent ??=
+					markdownEditorLastAcknowledgedMarkdown(editor) ===
+					buildNormalizedMarkdownIncrementally(doc);
+				if (!rowsCurrent) continue;
+				const index = alignment.blockOfRow.get(thread.nodeId);
+				const blockId =
+					index !== undefined && index < doc.childCount
+						? blockNodeId(doc.child(index))
+						: null;
+				if (blockId)
+					carriers.current.set(thread.conversationId, {
+						blockId,
+						trail: [],
+						standInIndex: index!,
+					});
 			}
-			if (commentsLoaded)
-				for (const conversationId of carriers.current.keys())
-					if (
-						!live.has(conversationId) &&
-						!detachedIds.current.has(conversationId)
-					)
-						carriers.current.delete(conversationId);
-			// Two threads whose blocks became one (a merge) read as one thread.
-			const byIndex = new Map<number, BlockThread>();
+			const blocks = blocksById(doc);
+			const byIndex = new Map<number, BlockThread[]>();
 			for (const thread of threads.values()) {
 				const carrier = carriers.current.get(thread.conversationId);
 				const index = carrier
-					? carrierIndex(doc, carrier)
+					? (carrierPosition(blocks, carrier) ??
+						Math.min(carrier.standInIndex, doc.childCount - 1))
 					: alignment.blockOfRow.get(thread.nodeId);
 				if (index === undefined || index < 0) continue;
-				const other = byIndex.get(index);
-				byIndex.set(index, other ? mergeThreads(other, thread) : thread);
+				const onBlock = byIndex.get(index);
+				if (onBlock) onBlock.push(thread);
+				else byIndex.set(index, [thread]);
 			}
 			return [...byIndex]
-				.map(([index, thread]) => ({ thread, index }))
+				.map(([index, conversations]) => ({
+					key: conversations[0]!.conversationId,
+					thread: conversations[0]!,
+					conversations,
+					index,
+				}))
 				.sort((a, b) => a.index - b.index);
 			// `structure` and `carrierVersion` stand for the document's blocks
 			// and where the conversations are among them.
 			// eslint-disable-next-line react-hooks/exhaustive-deps
-		}, [alignment, threads, structure, carrierVersion, commentsLoaded]);
+		}, [alignment, threads, structure, carrierVersion]);
 
 		const [layout, setLayout] = useState<BlockCommentLayout>("narrow");
 		const [pending, setPending] = useState<PendingComment | null>(null);
@@ -454,10 +516,7 @@ const BlockConversationsController = memo(
 
 		// A conversation whose block went away closes with it.
 		useEffect(() => {
-			if (
-				active &&
-				!placed.some((entry) => entry.thread.nodeId === active.nodeId)
-			)
+			if (active && !placed.some((entry) => entry.key === active.nodeId))
 				setActive(null);
 		}, [active, placed]);
 
@@ -483,7 +542,7 @@ const BlockConversationsController = memo(
 			blocksResult.status === "success" && blocksResult.rows.length > 0;
 		// The thread each editor block shows, by its index.
 		const threadAtBlock = useMemo(
-			() => new Map(placed.map((entry) => [entry.index, entry.thread.nodeId])),
+			() => new Map(placed.map((entry) => [entry.index, entry.key])),
 			[placed],
 		);
 		const latest = useRef({ threads, layout, available, threadAtBlock });
@@ -571,7 +630,7 @@ const BlockConversationsController = memo(
 				if (blockId)
 					carriers.current.set(conversationId, {
 						blockId,
-						standIn: null,
+						trail: [],
 						standInIndex: blockIndex,
 					});
 				setPending(null);
@@ -587,10 +646,8 @@ const BlockConversationsController = memo(
 		);
 
 		const submitReply = useCallback(
-			async (nodeId: string, body: Document) => {
-				const thread = latest.current.threads.get(nodeId);
-				if (!thread) throw new Error("This conversation no longer exists.");
-				await replyToBlockConversation(lix, thread.conversationId, body);
+			async (nodeId: string, conversationId: string, body: Document) => {
+				await replyToBlockConversation(lix, conversationId, body);
 				setReplyDrafts((drafts) => {
 					const next = new Map(drafts);
 					next.delete(nodeId);
@@ -621,15 +678,15 @@ const BlockConversationsController = memo(
 			if (!viewReady) return;
 			const marks = new Map<string, BlockCommentState>();
 			const { doc } = editor.state;
-			for (const { thread, index } of placed) {
+			for (const { key, index } of placed) {
 				if (index >= doc.childCount) continue;
 				const id = blockNodeId(doc.child(index));
 				if (!id) continue;
 				marks.set(
 					id,
-					active?.nodeId === thread.nodeId
+					active?.nodeId === key
 						? "active"
-						: hovered === thread.nodeId
+						: hovered === key
 							? "hover"
 							: "rest",
 				);
@@ -650,26 +707,111 @@ const BlockConversationsController = memo(
 		// deleted one's place, undo gives it back), and every save that changes
 		// the blocks moves the conversations in its own transaction: let go of
 		// their rows before the write, put on their blocks' new rows after it.
-		const lastSavedStructure = useRef(structureOf(editor));
+		// What the last save left: the blocks and the conversations' places.
+		// Empty until a save has placed them.
+		const lastSavedStructure = useRef("");
 		const [notice, setNotice] = useState<string | null>(null);
+
+		// A conversation that leaves the comments without this editor letting
+		// it go of its row: deleted. When its block's row went too, it went
+		// with the block (someone else's write removed the block), and the
+		// writer is told, with the way to the conversation's removed page.
+		const [removed, setRemoved] = useState<readonly string[]>([]);
+		const dismissRemoved = useCallback(() => setRemoved([]), []);
+		const seenThreads = useRef(new Map<string, BlockThread>());
+		useEffect(() => {
+			if (commentsResult.status !== "success") return;
+			const left = [...seenThreads.current.values()].filter(
+				(thread) =>
+					!threads.has(thread.conversationId) &&
+					!detachedIds.current.has(thread.conversationId),
+			);
+			seenThreads.current = new Map(threads);
+			if (left.length === 0) return;
+			let cancelled = false;
+			void (async () => {
+				const ids = left.map((thread) => thread.conversationId);
+				const list = (values: readonly string[]) =>
+					values.map((_, index) => `$${index + 1}`).join(", ");
+				const existing = await lix.execute(
+					`SELECT id FROM lix_conversation WHERE id IN (${list(ids)})`,
+					ids,
+				);
+				const exists = new Set(
+					existing.rows.map((row) => String((row as { id: unknown }).id)),
+				);
+				const deleted = left.filter(
+					(thread) => !exists.has(thread.conversationId),
+				);
+				if (deleted.length === 0) return;
+				const nodeIds = deleted.map((thread) => thread.nodeId);
+				const blockRows = await lix.execute(
+					`SELECT id FROM markdown_node WHERE lixcol_file_id = $${nodeIds.length + 1} AND id IN (${list(nodeIds)})`,
+					[...nodeIds, fileId],
+				);
+				const stillThere = new Set(
+					blockRows.rows.map((row) => String((row as { id: unknown }).id)),
+				);
+				for (const thread of deleted)
+					carriers.current.delete(thread.conversationId);
+				const withBlock = deleted
+					.filter((thread) => !stillThere.has(thread.nodeId))
+					.map((thread) => thread.conversationId);
+				if (!cancelled && withBlock.length > 0)
+					setRemoved((current) => [...current, ...withBlock]);
+			})().catch((error: unknown) => console.error(error));
+			return () => {
+				cancelled = true;
+			};
+		}, [commentsResult.status, fileId, lix, threads]);
 		useEffect(() => {
 			const onTransaction = ({ transaction }: { transaction: Transaction }) => {
 				if (!transaction.docChanged || carriers.current.size === 0) return;
 				const after = editor.state.doc;
-				// A document loaded from the file (an external write) has new
-				// block ids; its conversations are found again from the rows.
+				// A document loaded from the file (an external write) has new block
+				// ids. The rows are the truth after it: a conversation on a row is
+				// found again from its row once they are read; one let go of its
+				// row is known again by its text, or waits where it was.
 				if (transaction.getMeta("preventUpdate")) {
-					carriers.current.clear();
-					detachedIds.current.clear();
-					lastSavedStructure.current = structureOf(editor);
+					// A block the outside write left alone keeps its conversation,
+					// with the way back an undo of the writer's own edits takes.
+					const survivors = blocksById(after);
+					const beforeBlocks = blocksById(transaction.before);
+					const bySignature = new Map<string, string>();
+					after.forEach((node) => {
+						const id = blockNodeId(node);
+						const signature = blockSignature(node);
+						if (id && signature && !bySignature.has(signature))
+							bySignature.set(signature, id);
+					});
+					const texts = new Map<string, string | null>();
+					transaction.before.forEach((node) => {
+						const id = blockNodeId(node);
+						if (id) texts.set(id, blockSignature(node));
+					});
+					for (const [conversationId, carrier] of carriers.current) {
+						const carrying = carrierBlock(beforeBlocks, carrier);
+						if (carrying !== null && survivors.has(carrying)) continue;
+						// Its block was rewritten by the outside write: the rows say
+						// where the conversation is now, and it is found from them.
+						if (!detachedIds.current.has(conversationId)) {
+							carriers.current.delete(conversationId);
+							continue;
+						}
+						const signature =
+							carrier.lost ?? texts.get(carrier.blockId) ?? null;
+						const found = signature ? bySignature.get(signature) : undefined;
+						if (found)
+							carriers.current.set(conversationId, {
+								blockId: found,
+								trail: [],
+								standInIndex: carrier.standInIndex,
+							});
+					}
 					setCarrierVersion((version) => version + 1);
 					return;
 				}
-				const present = new Map<string, number>();
-				after.forEach((node, _offset, index) => {
-					const id = blockNodeId(node);
-					if (id) present.set(id, index);
-				});
+				const present = blocksById(after);
 				const before = new Map<
 					string,
 					{ readonly offset: number; readonly node: ProseMirrorNode }
@@ -693,34 +835,57 @@ const BlockConversationsController = memo(
 					arrivedCache = found;
 					return found;
 				};
+				// The block that took in a block's text when the block was emptied
+				// in this step: a new one (Enter at its start), or one that gained
+				// the text (a drag).
+				const tookText = (text: string, from: string): string | undefined => {
+					let found: string | undefined;
+					after.forEach((node) => {
+						if (found) return;
+						const id = blockNodeId(node);
+						if (!id || id === from) return;
+						if (!node.textContent.includes(text)) return;
+						const was = before.get(id)?.node.textContent;
+						if (was === undefined || !was.includes(text)) found = id;
+					});
+					return found;
+				};
 				let changed = false;
 				const move = (conversationId: string, next: Carrier) => {
 					carriers.current.set(conversationId, next);
 					changed = true;
 				};
 				for (const [conversationId, carrier] of carriers.current) {
-					const ownIndex = present.get(carrier.blockId);
-					if (ownIndex !== undefined) {
-						// Enter at the start of the block leaves its id on the new
-						// empty line above and its text on a new block below: the
-						// conversation goes with the text.
+					const own = present.get(carrier.blockId);
+					if (own) {
 						const previous = before.get(carrier.blockId)?.node;
-						const signature = previous ? blockSignature(previous) : null;
-						const pushedDown =
-							signature && after.child(ownIndex).content.size === 0
-								? arrived().get(signature)
-								: undefined;
-						if (pushedDown) {
-							move(conversationId, {
-								blockId: pushedDown,
-								standIn: null,
-								standInIndex: present.get(pushedDown) ?? ownIndex,
-							});
-							continue;
+						const text = previous?.textContent.trim() ?? "";
+						if (own.empty && text) {
+							// Emptied, its text gone on: a new block holding all of it
+							// (Enter at the start) becomes its block; a block that took
+							// it in (a drag) carries it until an undo refills its own.
+							const pushedDown = arrived().get(blockSignature(previous!)!);
+							if (pushedDown) {
+								move(conversationId, {
+									blockId: pushedDown,
+									trail: [],
+									standInIndex: present.get(pushedDown)!.index,
+								});
+								continue;
+							}
+							const moved = tookText(text, carrier.blockId);
+							if (moved) {
+								move(conversationId, {
+									...carrier,
+									trail: [...carrier.trail, moved],
+									standInIndex: present.get(moved)!.index,
+								});
+								continue;
+							}
 						}
-						// Its own block is back (undo, a paste of the cut block).
-						if (carrier.standIn !== null)
-							move(conversationId, { ...carrier, standIn: null });
+						// Its own block, back and whole (an undo): the trail is spent.
+						if (!own.empty && carrier.trail.length > 0)
+							move(conversationId, { ...carrier, trail: [] });
 						continue;
 					}
 					// The block pasted back after a cut: the conversation goes with it.
@@ -728,29 +893,32 @@ const BlockConversationsController = memo(
 					if (pasted) {
 						move(conversationId, {
 							blockId: pasted,
-							standIn: null,
-							standInIndex: present.get(pasted) ?? 0,
+							trail: [],
+							standInIndex: present.get(pasted)!.index,
 						});
 						continue;
 					}
-					if (carrier.standIn !== null && present.has(carrier.standIn))
-						continue;
-					const gone =
-						before.get(carrier.standIn ?? carrier.blockId) ??
-						before.get(carrier.blockId);
+					if (carrier.trail.some((id) => present.has(id))) continue;
+					// The block that carried it went in this step: it goes where
+					// that block's first character went, into the block before on
+					// a merge, onto the block after when it was deleted. The move
+					// is added to the trail, so an undo walks it back.
+					const from = carrierBlock(blocksById(transaction.before), carrier);
+					const gone = from ? before.get(from) : undefined;
 					if (!gone) continue;
-					// Where the block's first character went: into the block before
-					// it on a merge, onto the block after it when it was deleted.
 					const mapped = transaction.mapping.map(gone.offset + 1, -1);
 					const at = after.resolve(Math.min(mapped, after.content.size));
 					const index = Math.min(at.index(0), after.childCount - 1);
-					const own = before.get(carrier.blockId)?.node;
+					const standIn = index >= 0 ? blockNodeId(after.child(index)) : null;
+					const ownNode = before.get(carrier.blockId)?.node;
 					move(conversationId, {
 						...carrier,
-						standIn: index >= 0 ? blockNodeId(after.child(index)) : null,
+						trail: standIn ? [...carrier.trail, standIn] : carrier.trail,
 						standInIndex: Math.max(0, index),
 						lost:
-							carrier.lost ?? (own ? blockSignature(own) : null) ?? undefined,
+							carrier.lost ??
+							(ownNode ? blockSignature(ownNode) : null) ??
+							undefined,
 					});
 				}
 				if (changed) setCarrierVersion((version) => version + 1);
@@ -765,17 +933,46 @@ const BlockConversationsController = memo(
 			const plan = (doc: ProseMirrorNode) => {
 				const conversationIds = [...carriers.current.keys()];
 				if (conversationIds.length === 0) return null;
-				const savedStructure = structureOfDoc(doc);
 				const targets = conversationIds.map(
 					(id) => [id, carrierIndex(doc, carriers.current.get(id)!)] as const,
 				);
-				let placedIds: string[] = [];
+				// The blocks, and which block each conversation is on: a move that
+				// keeps every block (a drag emptying one) is a move all the same.
+				const savedStructure = `${structureOfDoc(doc)}|${targets
+					.map(([id, index]) => `${id}:${index}`)
+					.join(",")}`;
 				let unplacedIds: string[] = [];
-				const release: LixBatchStatement = {
-					sql: `UPDATE lix_conversation SET target = NULL WHERE lixcol_global = false AND id IN (${conversationIds
-						.map((_, index) => `$${index + 1}`)
-						.join(", ")})`,
-					params: conversationIds,
+				let goneIds: string[] = [];
+				// Let go of their rows before this save (by an earlier one).
+				const wereDetached = new Set(detachedIds.current);
+				const list = (ids: readonly string[]) =>
+					ids.map((_, index) => `$${index + 1}`).join(", ");
+				const releaseOf = (ids: readonly string[]): LixBatchStatement => ({
+					sql: `UPDATE lix_conversation SET target = NULL WHERE lixcol_global = false AND id IN (${list(ids)})`,
+					params: [...ids],
+				});
+				const existingIn = async (transaction: LixTransaction) => {
+					const existing = await transaction.execute(
+						`SELECT id FROM lix_conversation WHERE id IN (${list(conversationIds)})`,
+						conversationIds,
+					);
+					return new Set(
+						existing.rows.map((row) => String((row as { id: unknown }).id)),
+					);
+				};
+				// Learned by the save's rehearsal: the conversations whose rows the
+				// write deletes. Only these are let go of before it; every other
+				// conversation is left alone unless its block's row changes.
+				let atRisk: string[] = [];
+				const rehearse = async (transaction: LixTransaction) => {
+					const survived = await existingIn(transaction);
+					const before = await lix.execute(
+						`SELECT id FROM lix_conversation WHERE id IN (${list(conversationIds)})`,
+						conversationIds,
+					);
+					atRisk = before.rows
+						.map((row) => String((row as { id: unknown }).id))
+						.filter((id) => !survived.has(id));
 				};
 				const attach = async (transaction: LixTransaction) => {
 					const query = selectMarkdownBlocks(lix, fileId).compile();
@@ -787,33 +984,63 @@ const BlockConversationsController = memo(
 						doc,
 						saved.rows as unknown as MarkdownBlockRow[],
 					);
-					const placements: [string, string][] = [];
+					// Conversations deleted meanwhile (by hand, or with their block
+					// by someone else's write) are let go of for good.
+					const exists = await existingIn(transaction);
+					goneIds = conversationIds.filter((id) => !exists.has(id));
 					unplacedIds = [];
 					for (const [conversationId, index] of targets) {
+						if (!exists.has(conversationId)) continue;
 						const nodeId = nearestRow(rowOfBlock, index);
-						if (nodeId) placements.push([conversationId, nodeId]);
-						else unplacedIds.push(conversationId);
-					}
-					placedIds = placements.map(([id]) => id);
-					if (placements.length === 0) return;
-					// One statement per conversation: Lix SQL has no CASE in an
-					// UPDATE's SET (opral/lix#1901), so no single statement can
-					// give each its own row.
-					for (const [conversationId, nodeId] of placements)
+						if (!nodeId) {
+							unplacedIds.push(conversationId);
+							continue;
+						}
+						// A conversation already on its block's row is not written:
+						// a re-hook that changes nothing leaves no change behind.
+						// (One statement each: Lix SQL has no CASE in an UPDATE's
+						// SET, opral/lix#1901.)
+						const current = await transaction.execute(
+							"SELECT target = lix_row_ref('markdown_node', $2, $3) AS same FROM lix_conversation WHERE id = $1",
+							[conversationId, fileId, nodeId],
+						);
+						if (
+							(current.rows[0] as { same?: unknown } | undefined)?.same === true
+						)
+							continue;
 						await transaction.execute(
 							"UPDATE lix_conversation SET target = lix_row_ref('markdown_node', $2, $3) WHERE id = $1",
 							[conversationId, fileId, nodeId],
 						);
+					}
 				};
 				const committed = () => {
 					lastSavedStructure.current = savedStructure;
-					for (const id of placedIds) detachedIds.current.delete(id);
-					// No row to put them on (the document was emptied): they stay
-					// let go of, and kept, until a save gives their blocks rows.
-					for (const id of unplacedIds) detachedIds.current.add(id);
+					for (const id of goneIds) {
+						carriers.current.delete(id);
+						detachedIds.current.delete(id);
+					}
+					// Without a row to be put on (the document was emptied), the ones
+					// let go of stay let go of, and kept, until a save gives their
+					// blocks rows; every other one is on its row.
+					for (const id of conversationIds) {
+						const letGo =
+							unplacedIds.includes(id) &&
+							(atRisk.includes(id) || wereDetached.has(id));
+						if (letGo) detachedIds.current.add(id);
+						else detachedIds.current.delete(id);
+					}
 					setNotice(null);
 				};
-				return { structure: savedStructure, release, attach, committed };
+				return {
+					structure: savedStructure,
+					rehearse,
+					before: (): readonly LixBatchStatement[] =>
+						atRisk.length > 0 ? [releaseOf(atRisk)] : [],
+					lastResort: releaseOf(conversationIds),
+					attach,
+					committed,
+				};
 			};
 
 			// Puts conversations back on their rows outside a save, after a save
@@ -863,7 +1090,9 @@ const BlockConversationsController = memo(
 					// arrives, and must not be forgotten in between.
 					for (const id of carriers.current.keys()) detachedIds.current.add(id);
 					return {
-						before: [work.release],
+						rehearse: work.rehearse,
+						before: work.before,
+						lastResort: [work.lastResort],
 						after: work.attach,
 						committed: work.committed,
 						degraded: (cause) => {
@@ -972,6 +1201,8 @@ const BlockConversationsController = memo(
 				submitReply,
 				authorName: name,
 				notice,
+				removed,
+				dismissRemoved,
 			}),
 			[
 				active,
@@ -983,6 +1214,8 @@ const BlockConversationsController = memo(
 				name,
 				notice,
 				pending,
+				removed,
+				dismissRemoved,
 				pendingDraft,
 				pendingIndex,
 				placed,
@@ -1135,6 +1368,8 @@ function BlockConversationsSurface({
 				<p className="markdown-comment-notice" role="status">
 					{state.notice}
 				</p>
+			) : state.removed.length > 0 ? (
+				<RemovedNotice state={state} />
 			) : null}
 			{geometry && layout === "margin" && hasThreads ? (
 				<MarginCards state={state} geometry={geometry} />
@@ -1145,7 +1380,7 @@ function BlockConversationsSurface({
 						if (!box) return null;
 						return (
 							<CountBadge
-								key={entry.thread.nodeId}
+								key={entry.key}
 								state={state}
 								entry={entry}
 								box={box}
@@ -1157,13 +1392,13 @@ function BlockConversationsSurface({
 			{geometry && layout === "narrow" && active
 				? (() => {
 						const entry = placed.find(
-							(candidate) => candidate.thread.nodeId === active.nodeId,
+							(candidate) => candidate.key === active.nodeId,
 						);
 						const box = entry && geometry.boxes.get(entry.index);
 						if (!entry || !box) return null;
 						return (
 							<ConversationPopover
-								key={entry.thread.nodeId}
+								key={entry.key}
 								state={state}
 								entry={entry}
 								box={box}
@@ -1180,6 +1415,37 @@ function BlockConversationsSurface({
 				/>
 			) : null}
 		</div>
+	);
+}
+
+/** Threads deleted with their block by someone else's write. */
+function RemovedNotice({ state }: { readonly state: BlockConversationsState }) {
+	const views = useConversationViews();
+	const count = state.removed.length;
+	const last = state.removed.at(-1)!;
+	return (
+		<p className="markdown-comment-notice" role="status">
+			{count === 1
+				? "A comment thread was removed with its block."
+				: `${count} comment threads were removed with their blocks.`}{" "}
+			{views ? (
+				<button
+					type="button"
+					className="markdown-comment-notice-action"
+					onClick={() => void openConversation({ views }, last)}
+				>
+					View
+				</button>
+			) : null}
+			<button
+				type="button"
+				className="markdown-comment-notice-action"
+				aria-label="Dismiss"
+				onClick={state.dismissRemoved}
+			>
+				Dismiss
+			</button>
+		</p>
 	);
 }
 
@@ -1295,7 +1561,7 @@ function ConversationPopover({
 	useOutsidePress(ref, (target) => {
 		if (
 			target instanceof Element &&
-			target.closest(`[data-comment-badge="${entry.thread.nodeId}"]`)
+			target.closest(`[data-comment-badge="${entry.key}"]`)
 		)
 			return;
 		state.activate(null);
@@ -1322,29 +1588,39 @@ function ConversationBody({
 	readonly state: BlockConversationsState;
 	readonly entry: PlacedThread;
 }) {
-	const { nodeId, conversationId } = entry.thread;
+	const nodeId = entry.key;
 	const views = useConversationViews();
+	// The reply field sits under the last thread, so a reply goes to it.
+	const replyTo = entry.conversations.at(-1)!.conversationId;
 	return (
 		<>
 			{views ? (
 				<OpenConversationButton
 					atelier={{ views }}
-					conversationId={conversationId}
+					conversationId={replyTo}
 					className="markdown-comment-open"
 				/>
 			) : null}
-			<CommentThread
-				comments={entry.thread.comments}
-				label="Comments on this block"
-				tone="neutral"
-				size="document"
-			/>
+			{entry.conversations.map((conversation, index) => (
+				<CommentThread
+					key={conversation.conversationId}
+					comments={conversation.comments}
+					label={
+						entry.conversations.length > 1
+							? `Comments on this block, thread ${index + 1}`
+							: "Comments on this block"
+					}
+					tone="neutral"
+					size="document"
+					className={index > 0 ? "markdown-comment-thread-next" : ""}
+				/>
+			))}
 			<Composer
 				label="Reply"
 				placeholder="Reply"
 				value={state.replyDraft(nodeId)}
 				onChange={(draft) => state.setReplyDraft(nodeId, draft)}
-				onSubmit={(body) => state.submitReply(nodeId, body)}
+				onSubmit={(body) => state.submitReply(nodeId, replyTo, body)}
 				onCancel={() => {
 					state.activate(null);
 					if (!state.editor.isDestroyed)
@@ -1372,9 +1648,9 @@ function CountBadge({
 	readonly box: BlockBox;
 	readonly columnRight: number;
 }) {
-	const { nodeId, comments } = entry.thread;
+	const nodeId = entry.key;
 	const open = state.active?.nodeId === nodeId;
-	const count = comments.length;
+	const count = commentCount(entry);
 	const [element, setElement] = useState<HTMLButtonElement | null>(null);
 	usePointerHover(element, nodeId, state.setHovered);
 	return (
@@ -1436,17 +1712,17 @@ function MarginCards({
 	const left = geometry.columnRight + MARGIN_GAP;
 	const entries = placed.filter((entry) => geometry.boxes.has(entry.index));
 	const activeIndex = entries.findIndex(
-		(entry) => entry.thread.nodeId === active?.nodeId,
+		(entry) => entry.key === active?.nodeId,
 	);
 
 	const stack = useCallback(() => {
 		const cards = entries.map((entry) => ({
 			top: geometry.boxes.get(entry.index)!.top - CARD_RISE,
-			height: cardRefs.current.get(entry.thread.nodeId)?.offsetHeight ?? 0,
+			height: cardRefs.current.get(entry.key)?.offsetHeight ?? 0,
 		}));
 		const tops = stackMarginCards(cards, activeIndex);
 		entries.forEach((entry, index) => {
-			const card = cardRefs.current.get(entry.thread.nodeId);
+			const card = cardRefs.current.get(entry.key);
 			if (card) card.style.top = `${tops[index]}px`;
 		});
 	}, [activeIndex, entries, geometry]);
@@ -1491,10 +1767,12 @@ function MarginCards({
 	return (
 		<>
 			{entries.map((entry) => {
-				const { nodeId, comments } = entry.thread;
+				const nodeId = entry.key;
+				const { comments } = entry.thread;
 				const isActive = active?.nodeId === nodeId;
 				const first = comments[0]!;
 				const replies = comments.length - 1;
+				const otherThreads = entry.conversations.length - 1;
 				const shared = {
 					ref: (element: HTMLDivElement | null) => {
 						if (element) cardRefs.current.set(nodeId, element);
@@ -1532,8 +1810,8 @@ function MarginCards({
 						{...shared}
 						role="button"
 						tabIndex={0}
-						aria-label={`Show ${comments.length} ${
-							comments.length === 1 ? "comment" : "comments"
+						aria-label={`Show ${commentCount(entry)} ${
+							commentCount(entry) === 1 ? "comment" : "comments"
 						}`}
 						// The label names the action; the preview stays readable.
 						aria-describedby={`markdown-comment-preview-${nodeId}`}
@@ -1568,9 +1846,18 @@ function MarginCards({
 								</p>
 							</div>
 						</div>
-						{replies > 0 ? (
+						{replies > 0 || otherThreads > 0 ? (
 							<div className="pl-7 text-[12px] font-semibold text-history-secondary">
-								{replies} {replies === 1 ? "reply" : "replies"}
+								{[
+									replies > 0
+										? `${replies} ${replies === 1 ? "reply" : "replies"}`
+										: null,
+									otherThreads > 0
+										? `${otherThreads} more ${otherThreads === 1 ? "thread" : "threads"}`
+										: null,
+								]
+									.filter(Boolean)
+									.join(" · ")}
 							</div>
 						) : null}
 					</div>
