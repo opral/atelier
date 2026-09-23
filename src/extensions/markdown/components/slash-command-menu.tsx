@@ -14,6 +14,7 @@ import {
 	getClipRect,
 	isAnchorClipped,
 } from "./clip-rect";
+import { mountedView } from "../editor/mounted-view";
 
 /** Tallest the palette gets before its list starts scrolling. */
 const MENU_HEIGHT = 420;
@@ -104,7 +105,11 @@ export function SlashCommandMenu() {
 			filterCommands(
 				BLOCK_COMMANDS.filter(
 					(command) =>
-						!command.isAvailable || !editor || command.isAvailable(editor),
+						!command.isAvailable ||
+						// A destroyed editor (a rebuilt one, held for a render)
+						// cannot be asked; its menu is closed anyway.
+						!editor?.schema ||
+						command.isAvailable(editor),
 				),
 				slashState.query,
 			),
@@ -143,7 +148,8 @@ export function SlashCommandMenu() {
 		const range = slashState.range;
 
 		const updatePosition = () => {
-			const { view } = editor;
+			const view = mountedView(editor);
+			if (!view) return;
 			const coords = view.coordsAtPos(range.from);
 			const editorRect = view.dom.getBoundingClientRect();
 			// The palette belongs to the editor's scroll viewport, not to the
@@ -249,7 +255,8 @@ export function SlashCommandMenu() {
 			}
 		};
 
-		const editorElement = editor.view.dom;
+		const editorElement = mountedView(editor)?.dom;
+		if (!editorElement) return;
 		editorElement.addEventListener("keydown", handleKeyDown, true);
 		return () =>
 			editorElement.removeEventListener("keydown", handleKeyDown, true);
@@ -301,7 +308,7 @@ export function SlashCommandMenu() {
 		? `markdown-slash-option-${selectedCommand.id}`
 		: undefined;
 	const portalTarget =
-		editor?.view.dom.closest(".atelier-root") ?? document.body;
+		mountedView(editor)?.dom.closest(".atelier-root") ?? document.body;
 
 	return createPortal(
 		<div

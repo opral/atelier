@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { Editor, type JSONContent } from "@tiptap/core";
@@ -314,6 +314,35 @@ describe("SelectionToolbar", () => {
 			await select(editor, "paragraph here");
 			await screen.findByRole("toolbar");
 			expect(commentRow()).toBeNull();
+		});
+
+		const codeDoc = astToTiptapDoc(
+			parseMarkdown("Before.\n\n```ts\nconst answer = 42;\n```\n"),
+		);
+
+		test("in a code block, is the whole panel: code takes no formatting", async () => {
+			const startComment = vi.fn();
+			const { editor } = createEditor(codeDoc, {
+				startComment,
+				openConversation: vi.fn(),
+			});
+			await select(editor, "answer");
+			const toolbar = await screen.findByRole("toolbar", {
+				name: "Selection formatting",
+			});
+			expect(within(toolbar).getAllByRole("button")).toEqual([commentRow()]);
+			expect(within(toolbar).queryByRole("combobox")).toBeNull();
+			await act(async () => {
+				fireEvent.click(commentRow()!);
+			});
+			expect(startComment).toHaveBeenCalledTimes(1);
+		});
+
+		test("in a code block where the document takes no comments, there is no panel", async () => {
+			const { editor } = createEditor(codeDoc);
+			await select(editor, "answer");
+			await act(async () => {});
+			expect(queryToolbar()).toBeNull();
 		});
 	});
 });

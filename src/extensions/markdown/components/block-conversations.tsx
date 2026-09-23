@@ -16,7 +16,11 @@ import {
 	useConversationViews,
 } from "../../conversation/open-conversation";
 import type { Editor } from "@tiptap/core";
-import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import {
+	TextSelection,
+	type EditorState,
+	type Transaction,
+} from "@tiptap/pm/state";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { CommentBubble } from "./comment-icons";
 import { toPlainText } from "@opral/zettel-lexical";
@@ -36,6 +40,7 @@ import {
 } from "@/components/comments/comment-thread";
 import { CommentAvatar } from "@/components/comments/comment-avatar";
 import { useEditorCtx } from "../editor/editor-context";
+import { mountedView, useEditorViewMounted } from "../editor/mounted-view";
 import {
 	joinMarkdownEditorSaves,
 	markdownEditorLastAcknowledgedMarkdown,
@@ -53,6 +58,7 @@ import {
 	MARGIN_CARD_WIDTH,
 	MARGIN_GAP,
 	blockAlignment,
+	popoverSide,
 	blockCommentLayout,
 	createBlockConversation,
 	replyToBlockConversation,
@@ -66,7 +72,9 @@ import {
 	type BlockComment,
 	type BlockThread,
 	type MarkdownBlockRow,
+	type PopoverSide,
 } from "../block-conversations";
+import { useBlockCommentDrafts } from "./block-comment-drafts";
 import {
 	BlockCommentsContext,
 	isBlockCommentShortcut,
@@ -211,37 +219,16 @@ function topLevelOffset(editor: Editor, index: number): number | null {
 }
 
 function blockElement(editor: Editor, index: number): HTMLElement | null {
+	const view = mountedView(editor);
 	const offset = topLevelOffset(editor, index);
-	if (offset === null) return null;
-	const dom = editor.view.nodeDOM(offset);
+	if (!view || offset === null) return null;
+	const dom = view.nodeDOM(offset);
 	return dom instanceof HTMLElement ? dom : null;
 }
 
-/** Whether the editor's view is mounted: reading `view.dom` throws before. */
+/** Whether the editor's view is mounted: reading it throws before and after. */
 function hasView(editor: Editor): boolean {
-	if (editor.isDestroyed) return false;
-	try {
-		return Boolean(editor.view.dom);
-	} catch {
-		return false;
-	}
-}
-
-function useEditorViewReady(editor: Editor): boolean {
-	const [ready, setReady] = useState(() => hasView(editor));
-	useEffect(() => {
-		const update = () => setReady(hasView(editor));
-		update();
-		editor.on("mount", update);
-		editor.on("unmount", update);
-		editor.on("destroy", update);
-		return () => {
-			editor.off("mount", update);
-			editor.off("unmount", update);
-			editor.off("destroy", update);
-		};
-	}, [editor]);
-	return ready;
+	return mountedView(editor) !== null;
 }
 
 /**
@@ -258,6 +245,12 @@ type Carrier = {
 	readonly standInIndex: number;
 	/** What the gone block held, to know it again when it is pasted back. */
 	readonly lost?: string;
+	/**
+	 * The text its block held when an edit emptied it and nothing took the
+	 * text in (a cut): the block the text is pasted into takes the
+	 * conversation, as a block that took it in by a drag does.
+	 */
+	readonly cut?: string;
 };
 
 type BlockPositions = ReadonlyMap<
@@ -343,11 +336,30 @@ function nearestRow(
 	return null;
 }
 
-function draftKey(pending: {
-	readonly blockId: string | null;
-	readonly index: number;
-}): string {
-	return pending.blockId ?? `#${pending.index}`;
+/**
+ * The names a new comment's draft is kept under (`BlockCommentDrafts`): its
+ * block's row once it has one, which outlives this editor, then the block's
+ * editor id (its index when it has none).
+ */
+function pendingDraftKeys(
+	pending: { readonly blockId: string | null; readonly index: number },
+	row: string | null,
+): readonly string[] {
+	const own = pending.blockId
+		? `block:${pending.blockId}`
+		: `#${pending.index}`;
+	return row ? [`row:${row}`, own] : [own];
+}
+
+function samePending(
+	a: { readonly blockId: string | null; readonly index: number } | null,
+	b: { readonly blockId: string | null; readonly index: number },
+): boolean {
+	return (
+		a !== null &&
+		a.blockId === b.blockId &&
+		(a.blockId !== null || a.index === b.index)
+	);
 }
 
 const wait = (ms: number) =>
@@ -409,7 +421,7 @@ const BlockConversationsController = memo(
 		) => void;
 	}) {
 		const lix = useLix();
-		const viewReady = useEditorViewReady(editor);
+		const viewReady = useEditorViewMounted(editor);
 		const blocksResult = useQueryResult<MarkdownBlockRow>((session) =>
 			selectMarkdownBlocks(session, fileId),
 		);
@@ -527,20 +539,18 @@ const BlockConversationsController = memo(
 
 		const [layout, setLayout] = useState<BlockCommentLayout>("narrow");
 		const [pending, setPending] = useState<PendingComment | null>(null);
-		// Drafts are kept per block, like History's per checkpoint: Esc or
-		// commenting on another block puts a draft away, it does not drop it.
-		const [pendingDrafts, setPendingDrafts] = useState<
-			ReadonlyMap<string, Document>
-		>(() => new Map());
+		const pendingRef = useRef(pending);
+		pendingRef.current = pending;
+		// Drafts are kept per block and per conversation, like History's per
+		// checkpoint: Esc, clicking away, commenting on another block or
+		// opening another file puts a draft away, it does not drop it.
+		const [drafts, draftsVersion] = useBlockCommentDrafts(lix);
 		const [active, setActive] = useState<ActiveConversation | null>(null);
 		const [hovered, setHoveredState] = useState<Hover | null>(null);
 		// The same hover again is no change (every pointer event reports it).
 		const setHovered = useCallback((next: Hover | null) => {
 			setHoveredState((current) => (sameHover(current, next) ? current : next));
 		}, []);
-		const [replyDrafts, setReplyDrafts] = useState<
-			ReadonlyMap<string, Document>
-		>(() => new Map());
 
 		// A conversation whose block went away closes with it.
 		useEffect(() => {
@@ -553,15 +563,27 @@ const BlockConversationsController = memo(
 				? topLevelIndexOfId(editor, pending.blockId)
 				: pending.index
 			: -1;
-		const pendingKey = pending ? draftKey(pending) : null;
+		const pendingRow =
+			pendingIndex >= 0 ? (alignment.rowOfBlock[pendingIndex] ?? null) : null;
+		const pendingBlockId = pending?.blockId ?? null;
+		const pendingAt = pending?.index ?? -1;
+		const pendingKeys = useMemo(
+			() =>
+				pendingAt >= 0 || pendingBlockId
+					? pendingDraftKeys(
+							{ blockId: pendingBlockId, index: pendingAt },
+							pendingRow,
+						)
+					: null,
+			[pendingAt, pendingBlockId, pendingRow],
+		);
 		const pendingDraft =
-			(pendingKey && pendingDrafts.get(pendingKey)) || EMPTY_DRAFT;
+			(pendingKeys && drafts.comment(fileId, pendingKeys)) || EMPTY_DRAFT;
 		const setPendingDraft = useCallback(
 			(draft: Document) => {
-				if (!pendingKey) return;
-				setPendingDrafts((drafts) => new Map(drafts).set(pendingKey, draft));
+				if (pendingKeys) drafts.setComment(fileId, pendingKeys, draft);
 			},
-			[pendingKey],
+			[drafts, fileId, pendingKeys],
 		);
 
 		// A file the plugin does not project (it matches `*.md` by case, so
@@ -676,6 +698,13 @@ const BlockConversationsController = memo(
 			[editor],
 		);
 
+		// A new comment's text typed while it was being written, on its way to
+		// the reply field of the conversation it started.
+		const [handoff, setHandoff] = useState<{
+			readonly conversationId: string;
+			readonly pending: PendingComment;
+			readonly keys: readonly string[];
+		} | null>(null);
 		const submitPending = useCallback(
 			async (body: Document) => {
 				if (!pending) return;
@@ -720,45 +749,86 @@ const BlockConversationsController = memo(
 						trail: [],
 						standInIndex: blockIndex,
 					});
-				setPending(null);
-				setPendingDrafts((drafts) => {
-					const next = new Map(drafts);
-					next.delete(draftKey(pending));
-					return next;
-				});
+				// The field emptied itself when the comment went out, and stays
+				// open until it is written (a block typed just now waits for its
+				// save). What was typed in it meanwhile is not a comment on the
+				// block any more (it has a conversation now, and Comment opens
+				// that): it is the start of a reply, handed to the conversation's
+				// reply field once its thread is on screen.
+				const keys = pendingDraftKeys(pending, nodeId);
+				const typed = drafts.comment(fileId, keys);
+				if (!samePending(pendingRef.current, pending)) {
+					// Put away meanwhile (Esc, a click elsewhere): kept as the reply.
+					drafts.deleteComment(fileId, keys);
+					if (typed && hasCommentText(typed))
+						drafts.setReply(conversationId, typed);
+					return;
+				}
+				if (typed && hasCommentText(typed)) {
+					setHandoff({ conversationId, pending, keys });
+					return;
+				}
+				drafts.deleteComment(fileId, keys);
+				setPending((current) =>
+					current && samePending(current, pending) ? null : current,
+				);
 				if (!editor.isDestroyed)
 					editor.chain().focus(null, { scrollIntoView: false }).run();
 			},
-			[editor, fileId, lix, pending],
+			[drafts, editor, fileId, lix, pending],
 		);
 
+		// Moved in a layout effect: the popover and its field go, and the card
+		// and its reply field come, in one commit, with no keystroke between.
+		useLayoutEffect(() => {
+			if (!handoff) return;
+			const entry = placed.find((candidate) =>
+				candidate.conversations.some(
+					(conversation) =>
+						conversation.conversationId === handoff.conversationId,
+				),
+			);
+			if (!entry) return;
+			setHandoff(null);
+			const typed = drafts.comment(fileId, handoff.keys);
+			drafts.deleteComment(fileId, handoff.keys);
+			const text = typed && hasCommentText(typed) ? typed : null;
+			if (text) drafts.setReply(handoff.conversationId, text);
+			if (!samePending(pendingRef.current, handoff.pending)) return;
+			if (text) {
+				activate(entry.key, true, handoff.conversationId);
+				return;
+			}
+			setPending(null);
+			if (!editor.isDestroyed)
+				editor.chain().focus(null, { scrollIntoView: false }).run();
+		}, [activate, drafts, editor, fileId, handoff, placed]);
+
+		// The field emptied itself before calling this, so text typed while
+		// the reply is being written is the next reply: the draft is not
+		// cleared when the write returns.
 		const submitReply = useCallback(
-			async (conversationId: string, body: Document) => {
-				await replyToBlockConversation(lix, conversationId, body);
-				setReplyDrafts((drafts) => {
-					const next = new Map(drafts);
-					next.delete(conversationId);
-					return next;
-				});
-			},
+			(conversationId: string, body: Document) =>
+				replyToBlockConversation(lix, conversationId, body),
 			[lix],
 		);
 
 		const replyDraft = useCallback(
-			(conversationId: string) =>
-				replyDrafts.get(conversationId) ?? EMPTY_DRAFT,
-			[replyDrafts],
+			(conversationId: string) => drafts.reply(conversationId) ?? EMPTY_DRAFT,
+			// `draftsVersion` stands for the drafts: one is read again whenever
+			// one changes.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+			[drafts, draftsVersion],
 		);
 		const setReplyDraft = useCallback(
-			(conversationId: string, draft: Document) => {
-				setReplyDrafts((drafts) => new Map(drafts).set(conversationId, draft));
-			},
-			[],
+			(conversationId: string, draft: Document) =>
+				drafts.setReply(conversationId, draft),
+			[drafts],
 		);
 
 		// The marks: which blocks carry a wash, and how deep.
 		useEffect(() => {
-			if (!viewReady) return;
+			if (!viewReady || !hasView(editor)) return;
 			if (!blockCommentPluginKey.getState(editor.state))
 				editor.registerPlugin(createBlockCommentPlugin());
 			return () => {
@@ -766,7 +836,7 @@ const BlockConversationsController = memo(
 			};
 		}, [editor, viewReady]);
 		useEffect(() => {
-			if (!viewReady) return;
+			if (!viewReady || !hasView(editor)) return;
 			const marks = new Map<string, BlockCommentState>();
 			const { doc } = editor.state;
 			for (const { key, index } of placed) {
@@ -794,8 +864,9 @@ const BlockConversationsController = memo(
 		// deleted takes its row with it, and Lix deletes the conversations on a
 		// deleted row. So the editor follows each conversation's block through
 		// edits (a merge hands it to the block merged into, a split keeps it on
-		// the first half, a deletion hands it to the block that takes the
-		// deleted one's place, undo gives it back), and every save that changes
+		// the first half, text cut or dragged out of it takes it along to
+		// where it is pasted or dropped, a deletion hands it to the block that
+		// takes the deleted one's place, undo gives it back), and every save that changes
 		// the blocks moves the conversations in its own transaction: let go of
 		// their rows before the write, put on their blocks' new rows after it.
 		// What the last save left: the blocks and the conversations' places.
@@ -1001,6 +1072,21 @@ const BlockConversationsController = memo(
 					if (own) {
 						const previous = before.get(carrier.blockId)?.node;
 						const text = previous?.textContent.trim() ?? "";
+						// Its text, cut earlier, pasted in this step: the block it
+						// went into carries the conversation until an undo, or
+						// the writer, refills its own.
+						if (own.empty && carrier.cut && carrier.trail.length === 0) {
+							const pasted = tookText(carrier.cut, carrier.blockId);
+							if (pasted) {
+								move(conversationId, {
+									...carrier,
+									cut: undefined,
+									trail: [pasted],
+									standInIndex: present.get(pasted)!.index,
+								});
+								continue;
+							}
+						}
 						if (own.empty && text) {
 							// Emptied, its text gone on: a new block holding all of it
 							// (Enter at the start) becomes its block; a block that took
@@ -1023,10 +1109,14 @@ const BlockConversationsController = memo(
 								});
 								continue;
 							}
+							// Nowhere yet (cut): wait for the paste.
+							move(conversationId, { ...carrier, cut: text });
+							continue;
 						}
-						// Its own block, back and whole (an undo): the trail is spent.
-						if (!own.empty && carrier.trail.length > 0)
-							move(conversationId, { ...carrier, trail: [] });
+						// Its own block, back and whole (an undo): the trail is spent,
+						// and a cut is forgotten once its block holds text again.
+						if (!own.empty && (carrier.trail.length > 0 || carrier.cut))
+							move(conversationId, { ...carrier, trail: [], cut: undefined });
 						continue;
 					}
 					// The block pasted back after a cut: the conversation goes with it.
@@ -1040,14 +1130,26 @@ const BlockConversationsController = memo(
 						continue;
 					}
 					if (carrier.trail.some((id) => present.has(id))) continue;
-					// The block that carried it went in this step: it goes where
-					// that block's first character went, into the block before on
-					// a merge, onto the block after when it was deleted. The move
-					// is added to the trail, so an undo walks it back.
+					// The block that carried it went in this step. Where its text
+					// went on (a merge: Backspace at its start, Delete at the end of
+					// the block before, a selection across the two), the block that
+					// holds that text takes it. A block that went with nothing left
+					// of it (deleted whole, or emptied first and then removed, by
+					// Backspace or by Delete alike) hands it to the block after it,
+					// the one that takes its place; the last block's goes to the
+					// block before. The move is added to the trail, so an undo walks
+					// it back.
 					const from = carrierBlock(blocksById(transaction.before), carrier);
 					const gone = from ? before.get(from) : undefined;
 					if (!gone) continue;
-					const mapped = transaction.mapping.map(gone.offset + 1, -1);
+					const size = gone.node.content.size;
+					// Its last character (the end of a merge's text), if it stayed.
+					const lastKept =
+						size > 0 &&
+						!transaction.mapping.mapResult(gone.offset + size, 1).deleted;
+					const mapped = lastKept
+						? transaction.mapping.map(gone.offset + size, 1)
+						: transaction.mapping.map(gone.offset + gone.node.nodeSize, 1);
 					const at = after.resolve(Math.min(mapped, after.content.size));
 					const index = Math.min(at.index(0), after.childCount - 1);
 					const standIn = index >= 0 ? blockNodeId(after.child(index)) : null;
@@ -1257,8 +1359,9 @@ const BlockConversationsController = memo(
 
 		// ⌘⌥M, and clicking into a commented block.
 		useEffect(() => {
-			if (!viewReady) return;
-			const dom = editor.view.dom;
+			const view = viewReady ? mountedView(editor) : null;
+			if (!view) return;
+			const dom = view.dom;
 			const nodeIdAt = (target: EventTarget | null): string | null => {
 				if (!(target instanceof Node) || !dom.contains(target)) return null;
 				let element: Node | null = target;
@@ -1267,7 +1370,7 @@ const BlockConversationsController = memo(
 				if (!element) return null;
 				let position: number;
 				try {
-					position = editor.view.posAtDOM(element, 0);
+					position = view.posAtDOM(element, 0);
 				} catch {
 					return null;
 				}
@@ -1290,7 +1393,8 @@ const BlockConversationsController = memo(
 				else setActive(null);
 			};
 			const nodeIdAtPoint = (left: number, top: number): string | null => {
-				const hit = editor.view.posAtCoords({ left, top });
+				if (view.isDestroyed) return null;
+				const hit = view.posAtCoords({ left, top });
 				if (!hit) return null;
 				const index = editor.state.doc.resolve(hit.pos).index(0);
 				return latest.current.threadAtBlock.get(index) ?? null;
@@ -1314,20 +1418,34 @@ const BlockConversationsController = memo(
 			};
 		}, [activate, editor, setHovered, startComment, viewReady]);
 
-		// Esc closes the open conversation wherever the focus is in this
+		// Esc closes the open conversation, or the new comment being written
+		// (its text kept as its draft), wherever the focus is in this
 		// document: the editor, the card or popover, the page (a click on a
 		// card leaves it there), or a reply field that has let go of its text
 		// (the composer takes the first Esc). Esc another handler took, or
-		// pressed elsewhere in the workspace, is not ours. (ProseMirror
-		// prevents every Esc in the editor, so there that says nothing.)
-		const isOpen = active !== null;
+		// pressed elsewhere in the workspace, is not ours; nor is an Esc the
+		// editor acted on, closing its slash or mention menu: the first Esc
+		// closes the menu, the next one the conversation. (ProseMirror
+		// prevents every Esc in the editor, so there `defaultPrevented` says
+		// nothing; whether the Esc changed the editor's state does.)
+		const isOpen = active !== null || pending !== null;
 		useEffect(() => {
 			if (!isOpen || !viewReady) return;
+			let stateBefore: EditorState | null = null;
+			const onKeyDownCapture = (event: KeyboardEvent) => {
+				if (event.key !== "Escape") return;
+				stateBefore = hasView(editor) ? editor.state : null;
+			};
 			const onKeyDown = (event: KeyboardEvent) => {
+				const before = stateBefore;
+				stateBefore = null;
 				if (event.key !== "Escape" || event.isComposing) return;
+				const view = mountedView(editor);
+				if (!view) return;
 				const target = event.target;
-				const root = editor.view.dom;
+				const root = view.dom;
 				const inEditor = target instanceof Node && root.contains(target);
+				if (inEditor && before !== null && view.state !== before) return;
 				if (event.defaultPrevented && !inEditor) return;
 				const surface = root.closest(".tiptap-container") ?? root;
 				const ours =
@@ -1337,11 +1455,16 @@ const BlockConversationsController = memo(
 					(target instanceof Node && surface.contains(target));
 				if (!ours) return;
 				event.preventDefault();
-				returnToEditor();
+				if (activeRef.current) returnToEditor();
+				else cancelPending(!inEditor);
 			};
+			document.addEventListener("keydown", onKeyDownCapture, true);
 			document.addEventListener("keydown", onKeyDown);
-			return () => document.removeEventListener("keydown", onKeyDown);
-		}, [editor, isOpen, returnToEditor, viewReady]);
+			return () => {
+				document.removeEventListener("keydown", onKeyDownCapture, true);
+				document.removeEventListener("keydown", onKeyDown);
+			};
+		}, [cancelPending, editor, isOpen, returnToEditor, viewReady]);
 
 		const api = useMemo<BlockCommentsApi>(
 			() => ({ startComment, openConversation: requestConversation }),
@@ -1463,7 +1586,7 @@ function BlockConversationsSurface({
 }) {
 	const { editor, layout, setLayout, placed, pendingIndex, active } = state;
 	// A branch switch unmounts the view under a surface that is still up.
-	const viewReady = useEditorViewReady(editor);
+	const viewReady = useEditorViewMounted(editor);
 	const layerRef = useRef<HTMLDivElement>(null);
 	const [geometry, setGeometry] = useState<Geometry | null>(null);
 	const [tick, setTick] = useState(0);
@@ -1624,13 +1747,69 @@ const POPOVER_WIDTH = 360;
 /**
  * How far under its block's last line each popover opens, as the design
  * draws them: the composer (N2) clears the block by more than the
- * conversation opened from a count (N5).
+ * conversation opened from a count (N5). Opened above the block, the same
+ * distance is kept from its first line.
  */
 const COMPOSER_DROP = 29.75;
 const CONVERSATION_DROP = 19;
+/** Room kept between a popover and the edge of what is showing: its shadow. */
+const POPOVER_EDGE = 12;
 
 function popoverLeft(box: BlockBox, surfaceWidth: number): number {
 	return Math.max(0, Math.min(box.left, surfaceWidth - POPOVER_WIDTH - 8));
+}
+
+/**
+ * Where a popover opens (`popoverSide`), decided when it opens and again
+ * when it changes size, not while the document scrolls. Above its block it
+ * is placed by its bottom edge, so it grows upward.
+ */
+function usePopoverPlacement(
+	ref: React.RefObject<HTMLElement | null>,
+	box: BlockBox,
+	drop: number,
+): { readonly side: PopoverSide; readonly style: React.CSSProperties } {
+	const [side, setSide] = useState<PopoverSide>("below");
+	useLayoutEffect(() => {
+		const element = ref.current;
+		// The popover sits in the layer, which sits in the scrolling surface.
+		const surface = element?.parentElement?.parentElement;
+		if (!element || !surface) return;
+		const decide = () => {
+			const height = element.offsetHeight;
+			const rect = surface.getBoundingClientRect();
+			// What is showing of the surface, in its own coordinates: the
+			// window can cut it off too.
+			const showingTop =
+				surface.scrollTop + Math.max(0, -rect.top) + POPOVER_EDGE;
+			const showingBottom =
+				surface.scrollTop +
+				Math.min(surface.clientHeight, window.innerHeight - rect.top) -
+				POPOVER_EDGE;
+			const next = popoverSide({
+				blockTop: box.top,
+				blockBottom: box.bottom,
+				drop,
+				height,
+				showingTop,
+				showingBottom,
+			});
+			setSide((current) => (current === next ? current : next));
+		};
+		decide();
+		const observer = new ResizeObserver(decide);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [box.bottom, box.top, drop, ref]);
+	return {
+		side,
+		// The layer is 0px tall at the surface's top, so `bottom` counts up
+		// from there.
+		style:
+			side === "above"
+				? { bottom: drop - box.top }
+				: { top: box.bottom + drop },
+	};
 }
 
 /**
@@ -1688,23 +1867,24 @@ function PendingComposer({
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const { pending, pendingDraft, cancelPending } = state;
-	useOutsidePress(ref, () => {
-		// Clicking away keeps what was written; an empty box goes.
-		if (!hasCommentText(pendingDraft)) cancelPending(false);
-	});
+	// Clicking away closes it; what was written is kept as the block's
+	// draft (Comment on the block brings it back), an empty box goes.
+	useOutsidePress(ref, () => cancelPending(false));
+	const placement = usePopoverPlacement(ref, box, COMPOSER_DROP);
 	return (
 		<div
 			ref={ref}
 			className="markdown-comment-popover"
 			data-attr="markdown-comment-composer"
-			style={{
-				top: box.bottom + COMPOSER_DROP,
-				left: popoverLeft(box, surfaceWidth),
-			}}
+			data-side={placement.side}
+			style={{ ...placement.style, left: popoverLeft(box, surfaceWidth) }}
 		>
 			<div className="flex items-start gap-2">
 				<CommentAvatar name={state.authorName} size="xl" />
 				<Composer
+					// The field reads its draft when it mounts: another block's
+					// comment is another field.
+					key={pending ? (pending.blockId ?? `#${pending.index}`) : ""}
 					label="Comment on this block"
 					placeholder="Comment"
 					value={pendingDraft}
@@ -1743,15 +1923,14 @@ function ConversationPopover({
 			return;
 		state.activate(null);
 	});
+	const placement = usePopoverPlacement(ref, box, CONVERSATION_DROP);
 	return (
 		<div
 			ref={ref}
 			className="markdown-comment-popover"
 			data-attr="markdown-comment-popover"
-			style={{
-				top: box.bottom + CONVERSATION_DROP,
-				left: popoverLeft(box, surfaceWidth),
-			}}
+			data-side={placement.side}
+			style={{ ...placement.style, left: popoverLeft(box, surfaceWidth) }}
 		>
 			<ConversationBody state={state} entry={entry} />
 		</div>

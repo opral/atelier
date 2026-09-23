@@ -61,6 +61,7 @@ import {
 	getClipRect,
 	isAnchorClipped,
 } from "./clip-rect";
+import { mountedView, useEditorViewMounted } from "../editor/mounted-view";
 import { useMenuDismissal } from "./menu-dismissal";
 import { ariaKeyShortcuts, formatKeyBinding } from "./shortcut-label";
 
@@ -355,33 +356,6 @@ function nearTable(editor: Editor, target: TableTarget, x: number, y: number) {
 	);
 }
 
-/** The editor's DOM once it is mounted, or null before. */
-function mountedDom(editor: Editor | null): HTMLElement | null {
-	if (!editor || editor.isDestroyed) return null;
-	try {
-		return editor.view.dom;
-	} catch {
-		return null;
-	}
-}
-
-/** Whether the editor's view is in the page, updated when it gets there. */
-function useMounted(editor: Editor | null): boolean {
-	const [mounted, setMounted] = useState(() => mountedDom(editor) !== null);
-	useEffect(() => {
-		if (!editor) return;
-		const update = () => setMounted(mountedDom(editor) !== null);
-		update();
-		editor.on("mount", update);
-		editor.on("create", update);
-		return () => {
-			editor.off("mount", update);
-			editor.off("create", update);
-		};
-	}, [editor]);
-	return mounted && mountedDom(editor) !== null;
-}
-
 function useCoarsePointer(): boolean {
 	const query = "(hover: none)";
 	const [coarse, setCoarse] = useState(
@@ -650,7 +624,7 @@ export function TableControls() {
 					sameTarget(a.target, b.target)),
 		}) ?? null;
 	const coarse = useCoarsePointer();
-	const mounted = useMounted(editor);
+	const mounted = useEditorViewMounted(editor);
 	const caretCell =
 		useEditorState<TableTarget | null>({
 			editor,
@@ -741,7 +715,7 @@ export function TableControls() {
 	// The pointer's cell, kept while the pointer crosses the band around the
 	// table to reach a grip or a bar.
 	useEffect(() => {
-		if (!editor || !mounted || coarse) return;
+		if (!editor || !mounted || coarse || !mountedView(editor)) return;
 		let frame = 0;
 		let last: PointerEvent | null = null;
 		const evaluate = () => {
@@ -864,7 +838,7 @@ export function TableControls() {
 	// keyboard's menu key (sent to the focused editor, not to a cell), and
 	// opens the menu at the caret's cell.
 	useEffect(() => {
-		if (!editor || !mounted) return;
+		if (!editor || !mounted || !mountedView(editor)) return;
 		let pressed = false;
 		let hadSelection = false;
 		const onPress = () => {
@@ -877,6 +851,7 @@ export function TableControls() {
 			pressed = false;
 			hadSelection = false;
 			if (!editor.isEditable || event.shiftKey) return;
+			if (editor.isDestroyed) return;
 			if (!fromPointer && event.target === editor.view.dom) {
 				if (editor.commands.openTableMenuAtCaret()) event.preventDefault();
 				return;
@@ -967,8 +942,8 @@ export function TableControls() {
 		}
 	});
 
-	if (!editor || !mounted || editor.isDestroyed || !editor.isEditable)
-		return null;
+	const view = mountedView(editor);
+	if (!editor || !mounted || !view || !editor.isEditable) return null;
 
 	// While a menu is open, only the grip it came from stays: the others and
 	// the "+" bars would be clicked through it, or beside it, by mistake.
@@ -984,8 +959,7 @@ export function TableControls() {
 		? measureDropIndicator(editor, dragPreview)
 		: null;
 	const portalTarget =
-		(editor.view.dom.closest(".atelier-root") as HTMLElement | null) ??
-		document.body;
+		(view.dom.closest(".atelier-root") as HTMLElement | null) ?? document.body;
 
 	const table = active ? editor.state.doc.nodeAt(active.tablePos) : null;
 	const lastRow = table ? table.childCount - 1 : 0;

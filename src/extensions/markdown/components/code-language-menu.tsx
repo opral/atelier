@@ -21,6 +21,7 @@ import {
 } from "../editor/tiptap-markdown-bridge/code-language-label";
 import { clampLeft, clampToClipRect, getClipRect } from "./clip-rect";
 import { useMenuDismissal } from "./menu-dismissal";
+import { mountedView } from "../editor/mounted-view";
 
 const MENU_WIDTH = 240;
 const MENU_HEIGHT = 320;
@@ -110,7 +111,9 @@ export function CodeLanguageMenu() {
 			return;
 		}
 		const updatePosition = () => {
-			const block = editor.view.nodeDOM(pos);
+			const view = mountedView(editor);
+			if (!view) return;
+			const block = view.nodeDOM(pos);
 			const label =
 				block instanceof HTMLElement
 					? block.querySelector(".markdown-code-language")
@@ -118,7 +121,7 @@ export function CodeLanguageMenu() {
 			const anchor = (label ?? block) as Element | null;
 			if (!anchor) return;
 			const rect = anchor.getBoundingClientRect();
-			const clip = getClipRect(editor.view.dom);
+			const clip = getClipRect(view.dom);
 			const placed = clampToClipRect({
 				coords: rect,
 				clip,
@@ -158,7 +161,7 @@ export function CodeLanguageMenu() {
 		| string
 		| null;
 	const portalTarget =
-		editor.view.dom.closest(".atelier-root") ?? document.body;
+		mountedView(editor)?.dom.closest(".atelier-root") ?? document.body;
 	return createPortal(
 		<div
 			ref={menuRef}

@@ -28,6 +28,7 @@ import {
 	isAnchorClipped,
 } from "./clip-rect";
 import { useMenuDismissal } from "./menu-dismissal";
+import { mountedView } from "../editor/mounted-view";
 
 const INACTIVE_MENTION_STATE: MentionCommandState = {
 	active: false,
@@ -177,7 +178,8 @@ export function MentionMenu({
 		}
 		const range = mentionState.range;
 		const updatePosition = () => {
-			const { view } = editor;
+			const view = mountedView(editor);
+			if (!view) return;
 			const coords = view.coordsAtPos(
 				Math.min(range.from, editor.state.doc.content.size),
 			);
@@ -231,7 +233,7 @@ export function MentionMenu({
 	}
 
 	const portalTarget =
-		editor.view.dom.closest(".atelier-root") ?? document.body;
+		mountedView(editor)?.dom.closest(".atelier-root") ?? document.body;
 
 	return createPortal(
 		<div
@@ -387,7 +389,8 @@ function MentionMenuContent({
 				activate(selectedIndex);
 			}
 		};
-		const element = editor.view.dom;
+		const element = mountedView(editor)?.dom;
+		if (!element) return;
 		element.addEventListener("keydown", handleKeyDown, true);
 		return () => element.removeEventListener("keydown", handleKeyDown, true);
 	}, [activate, editor, newFileIndex, optionCount, query, selectedIndex]);

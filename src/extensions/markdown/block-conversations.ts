@@ -498,3 +498,37 @@ export function stackMarginCards(
 	place(activeIndex + 1);
 	return tops;
 }
+
+export type PopoverSide = "below" | "above";
+
+/**
+ * Which side of its block a popover opens on (design N2, N5): under it, `drop`
+ * below its last line; above it, the same distance above its first line,
+ * when there is not room for it under the block in what is showing of the
+ * document and there is more above. Never above the document's top, where
+ * it could not be scrolled to. All in the scrolling surface's coordinates;
+ * `showingTop` and `showingBottom` are what is on screen of it, less the
+ * room its shadow needs.
+ */
+export function popoverSide({
+	blockTop,
+	blockBottom,
+	drop,
+	height,
+	showingTop,
+	showingBottom,
+}: {
+	readonly blockTop: number;
+	readonly blockBottom: number;
+	readonly drop: number;
+	readonly height: number;
+	readonly showingTop: number;
+	readonly showingBottom: number;
+}): PopoverSide {
+	const roomBelow = showingBottom - (blockBottom + drop);
+	const roomAbove = blockTop - drop - showingTop;
+	const fitsInDocumentAbove = blockTop - drop - height >= 0;
+	return roomBelow < height && roomAbove > roomBelow && fitsInDocumentAbove
+		? "above"
+		: "below";
+}

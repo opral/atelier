@@ -15,6 +15,7 @@ import {
 	blockCommentLayout,
 	createBlockConversation,
 	groupBlockThreads,
+	popoverSide,
 	replyToBlockConversation,
 	selectBlockComments,
 	selectChangedBlockConversationCounts,
@@ -297,5 +298,54 @@ describe("block conversations in Lix", () => {
 			editor.destroy();
 			await lix.close();
 		}
+	});
+});
+
+describe("popoverSide", () => {
+	// A 900px surface scrolled to the top; a popover 100px tall, 20px off
+	// its block.
+	const showing = { showingTop: 12, showingBottom: 888 };
+	const place = (blockTop: number, blockBottom: number, height = 100) =>
+		popoverSide({ blockTop, blockBottom, drop: 20, height, ...showing });
+
+	test("opens under its block when there is room", () => {
+		expect(place(200, 224)).toBe("below");
+	});
+
+	test("opens above its block near the bottom of what is showing", () => {
+		expect(place(780, 804)).toBe("above");
+	});
+
+	test("the last block, with the document ending under it, opens above", () => {
+		// The surface's end is what is showing's end.
+		expect(
+			popoverSide({
+				blockTop: 840,
+				blockBottom: 864,
+				drop: 29.75,
+				height: 84,
+				showingTop: 12,
+				showingBottom: 888,
+			}),
+		).toBe("above");
+	});
+
+	test("stays under when there is even less room above", () => {
+		expect(place(60, 800, 300)).toBe("below");
+	});
+
+	test("never opens past the top of the document", () => {
+		// Scrolled so the block is near the bottom, but the document above
+		// it is shorter than the popover.
+		expect(
+			popoverSide({
+				blockTop: 60,
+				blockBottom: 84,
+				drop: 20,
+				height: 100,
+				showingTop: 0,
+				showingBottom: 90,
+			}),
+		).toBe("below");
 	});
 });

@@ -17,6 +17,7 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditorState } from "@tiptap/react";
 import { useEditorCtx } from "../editor/editor-context";
+import { mountedView, useEditorViewMounted } from "../editor/mounted-view";
 import {
 	SELECTION_BLOCK_OPTIONS,
 	type SelectionBlockType,
@@ -50,6 +51,12 @@ type SelectionToolbarState = {
 	isLink: boolean;
 	/** The selection sits inside one top-level block, so it can be commented on. */
 	singleBlock: boolean;
+	/**
+	 * A selection inside a code block: its text takes no formatting, so the
+	 * panel is its Comment row alone (design N1: the row is there whenever
+	 * the selection sits inside one block).
+	 */
+	commentOnly: boolean;
 };
 
 const INACTIVE_STATE: SelectionToolbarState = {
@@ -64,6 +71,7 @@ const INACTIVE_STATE: SelectionToolbarState = {
 	isCode: false,
 	isLink: false,
 	singleBlock: false,
+	commentOnly: false,
 };
 
 /** Panel footprint used to decide whether it fits above the selection. */
@@ -71,6 +79,8 @@ const PANEL_WIDTH = 208;
 const PANEL_HEIGHT = 80;
 /** With the Comment row: a divider (9px) and the 32px row under the rest. */
 const PANEL_HEIGHT_WITH_COMMENT = 118;
+/** The Comment row alone: the row, the panel's padding and edge. */
+const PANEL_HEIGHT_COMMENT_ONLY = 42;
 const GAP = 8;
 
 type PanelPosition = {
@@ -85,14 +95,26 @@ type PanelPosition = {
 function readSelectionState(editor: Editor): SelectionToolbarState {
 	const { selection } = editor.state;
 	const isTextRange = selection instanceof TextSelection && !selection.empty;
+	const inCode =
+		selection.$from.parent.type.spec.code ||
+		selection.$to.parent.type.spec.code ||
+		editor.isActive("codeBlock");
 	const eligible =
-		isTextRange &&
-		!selection.$from.parent.type.spec.code &&
-		!selection.$to.parent.type.spec.code &&
-		!editor.isActive("codeBlock") &&
-		!editor.isActive("markdownFrontmatter");
+		isTextRange && !inCode && !editor.isActive("markdownFrontmatter");
 	if (!eligible) {
-		return { ...INACTIVE_STATE, focused: editor.isFocused };
+		const singleBlock =
+			isTextRange && inCode && selectedTopLevelBlock(editor.state) !== null;
+		return singleBlock
+			? {
+					...INACTIVE_STATE,
+					eligible: true,
+					from: selection.from,
+					to: selection.to,
+					focused: editor.isFocused,
+					singleBlock,
+					commentOnly: true,
+				}
+			: { ...INACTIVE_STATE, focused: editor.isFocused };
 	}
 	return {
 		eligible: true,
@@ -106,6 +128,7 @@ function readSelectionState(editor: Editor): SelectionToolbarState {
 		isCode: editor.isActive("code"),
 		isLink: editor.isActive("link"),
 		singleBlock: selectedTopLevelBlock(editor.state) !== null,
+		commentOnly: false,
 	};
 }
 
@@ -115,7 +138,8 @@ function computePanelPosition(
 	to: number,
 	panelHeight: number = PANEL_HEIGHT,
 ): PanelPosition | null {
-	const { view } = editor;
+	const view = mountedView(editor);
+	if (!view) return null;
 	let start: { top: number; bottom: number; left: number };
 	let end: { top: number; bottom: number; left: number };
 	try {
@@ -193,13 +217,17 @@ export function SelectionToolbar() {
 	const [closing, setClosing] = useState(false);
 	const lastPositionRef = useRef<PanelPosition | null>(null);
 	const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const viewMounted = useEditorViewMounted(editor);
 
 	const rangeKey = `${state.from}:${state.to}`;
 	const editable = Boolean(editor && editor.isEditable);
 	const popupOpen = blockMenuOpen || linkOpen;
+	const showsComment = Boolean(blockComments && state.singleBlock);
 	const shouldShow =
 		editable &&
 		state.eligible &&
+		// In code the panel is its Comment row, or nothing.
+		(!state.commentOnly || showsComment) &&
 		!dragging &&
 		dismissedRange !== rangeKey &&
 		(state.focused || popupOpen);
@@ -207,8 +235,8 @@ export function SelectionToolbar() {
 	// A mouse drag extends the selection continuously; the panel waits for
 	// the release rather than chasing the pointer.
 	useEffect(() => {
-		if (!editor) return;
-		const dom = editor.view.dom;
+		const dom = mountedView(editor)?.dom;
+		if (!dom) return;
 		const handleMouseDown = (event: MouseEvent) => {
 			if (event.button !== 0) return;
 			setDragging(true);
@@ -222,19 +250,19 @@ export function SelectionToolbar() {
 			window.removeEventListener("mouseup", handleMouseUp, true);
 			window.removeEventListener("dragend", handleMouseUp, true);
 		};
-	}, [editor]);
+	}, [editor, viewMounted]);
 
 	// Escape hides the panel for this selection; a new selection brings it back.
 	useEffect(() => {
-		if (!editor || !shouldShow) return;
-		const dom = editor.view.dom;
+		const dom = mountedView(editor)?.dom;
+		if (!dom || !shouldShow) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
 			setDismissedRange(rangeKey);
 		};
 		dom.addEventListener("keydown", handleKeyDown);
 		return () => dom.removeEventListener("keydown", handleKeyDown);
-	}, [editor, shouldShow, rangeKey]);
+	}, [editor, viewMounted, shouldShow, rangeKey]);
 
 	// Popups close along with the panel so they cannot outlive their trigger.
 	useEffect(() => {
@@ -243,14 +271,18 @@ export function SelectionToolbar() {
 		setLinkOpen(false);
 	}, [shouldShow]);
 
-	const showsComment = Boolean(blockComments && state.singleBlock);
+	const { commentOnly } = state;
 	useEffect(() => {
 		if (!editor || !shouldShow) {
 			setPosition(null);
 			return;
 		}
 		const { from, to } = state;
-		const panelHeight = showsComment ? PANEL_HEIGHT_WITH_COMMENT : PANEL_HEIGHT;
+		const panelHeight = commentOnly
+			? PANEL_HEIGHT_COMMENT_ONLY
+			: showsComment
+				? PANEL_HEIGHT_WITH_COMMENT
+				: PANEL_HEIGHT;
 		const update = () =>
 			setPosition(computePanelPosition(editor, from, to, panelHeight));
 		update();
@@ -260,7 +292,7 @@ export function SelectionToolbar() {
 			window.removeEventListener("scroll", update, true);
 			window.removeEventListener("resize", update);
 		};
-	}, [editor, shouldShow, state.from, state.to, showsComment]);
+	}, [editor, shouldShow, state.from, state.to, showsComment, commentOnly]);
 
 	const visible = Boolean(shouldShow && position && !position.hidden);
 	useEffect(() => {
@@ -339,13 +371,13 @@ export function SelectionToolbar() {
 		event.preventDefault();
 	}, []);
 
-	if (!editor || (!visible && !closing)) return null;
+	const view = mountedView(editor);
+	if (!editor || !view || (!visible && !closing)) return null;
 	const panelPosition = visible ? position : lastPositionRef.current;
 	if (!panelPosition) return null;
 
 	const portalTarget =
-		(editor.view.dom.closest(".atelier-root") as HTMLElement | null) ??
-		document.body;
+		(view.dom.closest(".atelier-root") as HTMLElement | null) ?? document.body;
 	const portalContainer =
 		portalTarget === document.body ? undefined : portalTarget;
 
@@ -366,148 +398,160 @@ export function SelectionToolbar() {
 				data-state={visible ? "open" : "closing"}
 				onMouseDown={suppressMouseDown}
 			>
-				<Select.Root
-					value={state.block}
-					onValueChange={(value) => {
-						if (value !== null) handleBlockChange(value);
-					}}
-					open={blockMenuOpen}
-					onOpenChange={(open) => {
-						setBlockMenuOpen(open);
-						// Closing without a choice hands the caret back.
-						if (!open) editor.chain().focus().run();
-					}}
-				>
-					<Toolbar.Button
-						render={<Select.Trigger />}
-						className={clsx(
-							"markdown-selection-toolbar-trigger",
-							blockMenuOpen && "markdown-selection-toolbar-trigger-open",
-						)}
-						aria-label={`Turn into. Current block: ${activeBlock.label}`}
-						data-attr="markdown-selection-block-selector"
-						onMouseEnter={openBlockMenuFromHover}
-						onMouseLeave={closeBlockMenuFromHover}
-					>
-						<activeBlock.icon
-							className="markdown-selection-toolbar-trigger-icon"
-							aria-hidden
-						/>
-						<Select.Value className="markdown-selection-toolbar-trigger-label">
-							{activeBlock.label}
-						</Select.Value>
-						<Select.Icon className="markdown-selection-toolbar-trigger-chevron">
-							<ChevronRight className="size-[13px] stroke-[2]" aria-hidden />
-						</Select.Icon>
-					</Toolbar.Button>
-					<Select.Portal container={portalContainer}>
-						<Select.Positioner
-							className="z-50 outline-none"
-							side="right"
-							align="start"
-							sideOffset={6}
-							alignOffset={-4}
-							alignItemWithTrigger={false}
+				{commentOnly ? null : (
+					<>
+						<Select.Root
+							value={state.block}
+							onValueChange={(value) => {
+								if (value !== null) handleBlockChange(value);
+							}}
+							open={blockMenuOpen}
+							onOpenChange={(open) => {
+								setBlockMenuOpen(open);
+								// Closing without a choice hands the caret back.
+								if (!open) editor.chain().focus().run();
+							}}
 						>
-							<Select.Popup
-								className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100"
-								data-attr="markdown-selection-block-menu"
-								onMouseEnter={cancelHoverClose}
+							<Toolbar.Button
+								render={<Select.Trigger />}
+								className={clsx(
+									"markdown-selection-toolbar-trigger",
+									blockMenuOpen && "markdown-selection-toolbar-trigger-open",
+								)}
+								aria-label={`Turn into. Current block: ${activeBlock.label}`}
+								data-attr="markdown-selection-block-selector"
+								onMouseEnter={openBlockMenuFromHover}
 								onMouseLeave={closeBlockMenuFromHover}
 							>
-								<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-fg-subtle">
-									Turn into
-								</div>
-								{SELECTION_BLOCK_OPTIONS.map((option) => (
-									<Select.Item
-										key={option.value}
-										value={option.value}
-										className="group flex h-8 cursor-default items-center gap-2 rounded-[7px] px-2 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-bg-hover data-[highlighted]:text-fg"
+								<activeBlock.icon
+									className="markdown-selection-toolbar-trigger-icon"
+									aria-hidden
+								/>
+								<Select.Value className="markdown-selection-toolbar-trigger-label">
+									{activeBlock.label}
+								</Select.Value>
+								<Select.Icon className="markdown-selection-toolbar-trigger-chevron">
+									<ChevronRight
+										className="size-[13px] stroke-[2]"
+										aria-hidden
+									/>
+								</Select.Icon>
+							</Toolbar.Button>
+							<Select.Portal container={portalContainer}>
+								<Select.Positioner
+									className="z-50 outline-none"
+									side="right"
+									align="start"
+									sideOffset={6}
+									alignOffset={-4}
+									alignItemWithTrigger={false}
+								>
+									<Select.Popup
+										className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100"
+										data-attr="markdown-selection-block-menu"
+										onMouseEnter={cancelHoverClose}
+										onMouseLeave={closeBlockMenuFromHover}
 									>
-										<span className="flex size-4.5 items-center justify-center text-fg-subtle group-data-[highlighted]:text-fg-muted [&_svg]:stroke-[1.8]">
-											<option.icon className="h-3.5 w-3.5" aria-hidden />
-										</span>
-										<span className="flex-1 font-medium leading-4 text-fg">
-											{option.label}
-										</span>
-										<Select.ItemIndicator className="text-link-hover">
-											<Check className="h-3.5 w-3.5 stroke-[2]" aria-hidden />
-										</Select.ItemIndicator>
-									</Select.Item>
-								))}
-							</Select.Popup>
-						</Select.Positioner>
-					</Select.Portal>
-				</Select.Root>
+										<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-fg-subtle">
+											Turn into
+										</div>
+										{SELECTION_BLOCK_OPTIONS.map((option) => (
+											<Select.Item
+												key={option.value}
+												value={option.value}
+												className="group flex h-8 cursor-default items-center gap-2 rounded-[7px] px-2 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-bg-hover data-[highlighted]:text-fg"
+											>
+												<span className="flex size-4.5 items-center justify-center text-fg-subtle group-data-[highlighted]:text-fg-muted [&_svg]:stroke-[1.8]">
+													<option.icon className="h-3.5 w-3.5" aria-hidden />
+												</span>
+												<span className="flex-1 font-medium leading-4 text-fg">
+													{option.label}
+												</span>
+												<Select.ItemIndicator className="text-link-hover">
+													<Check
+														className="h-3.5 w-3.5 stroke-[2]"
+														aria-hidden
+													/>
+												</Select.ItemIndicator>
+											</Select.Item>
+										))}
+									</Select.Popup>
+								</Select.Positioner>
+							</Select.Portal>
+						</Select.Root>
 
-				<Toolbar.Separator className="markdown-selection-toolbar-divider" />
+						<Toolbar.Separator className="markdown-selection-toolbar-divider" />
 
-				<Toolbar.Group
-					className="markdown-selection-toolbar-row"
-					aria-label="Inline formatting"
-				>
-					<ToolbarIconButton
-						label="Bold"
-						shortcut="bold"
-						active={state.isBold}
-						onClick={handleToggleBold}
-						portalContainer={portalContainer}
-						data-attr="markdown-selection-bold"
-					>
-						<Bold className="size-3.5" aria-hidden />
-					</ToolbarIconButton>
-					<ToolbarIconButton
-						label="Italic"
-						shortcut="italic"
-						active={state.isItalic}
-						onClick={handleToggleItalic}
-						portalContainer={portalContainer}
-						data-attr="markdown-selection-italic"
-					>
-						<Italic className="size-3.5" aria-hidden />
-					</ToolbarIconButton>
-					<ToolbarIconButton
-						label="Strikethrough"
-						shortcut="strike"
-						active={state.isStrike}
-						onClick={handleToggleStrike}
-						portalContainer={portalContainer}
-						data-attr="markdown-selection-strike"
-					>
-						<Strikethrough className="size-3.5" aria-hidden />
-					</ToolbarIconButton>
-					<ToolbarIconButton
-						label="Inline code"
-						shortcut="code"
-						active={state.isCode}
-						onClick={handleToggleCode}
-						portalContainer={portalContainer}
-						data-attr="markdown-selection-code"
-					>
-						<Code2 className="size-3.5" aria-hidden />
-					</ToolbarIconButton>
-					<LinkPopover
-						editor={editor}
-						open={linkOpen}
-						onOpenChange={setLinkOpen}
-						linkActive={state.isLink}
-						portalContainer={portalContainer}
-						triggerDataAttr="markdown-selection-link"
-					/>
-					<ToolbarIconButton
-						label="Clear formatting"
-						pressable={false}
-						onClick={handleClearFormatting}
-						portalContainer={portalContainer}
-						data-attr="markdown-selection-clear"
-					>
-						<RemoveFormatting className="size-3.5" aria-hidden />
-					</ToolbarIconButton>
-				</Toolbar.Group>
+						<Toolbar.Group
+							className="markdown-selection-toolbar-row"
+							aria-label="Inline formatting"
+						>
+							<ToolbarIconButton
+								label="Bold"
+								shortcut="bold"
+								active={state.isBold}
+								onClick={handleToggleBold}
+								portalContainer={portalContainer}
+								data-attr="markdown-selection-bold"
+							>
+								<Bold className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+							<ToolbarIconButton
+								label="Italic"
+								shortcut="italic"
+								active={state.isItalic}
+								onClick={handleToggleItalic}
+								portalContainer={portalContainer}
+								data-attr="markdown-selection-italic"
+							>
+								<Italic className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+							<ToolbarIconButton
+								label="Strikethrough"
+								shortcut="strike"
+								active={state.isStrike}
+								onClick={handleToggleStrike}
+								portalContainer={portalContainer}
+								data-attr="markdown-selection-strike"
+							>
+								<Strikethrough className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+							<ToolbarIconButton
+								label="Inline code"
+								shortcut="code"
+								active={state.isCode}
+								onClick={handleToggleCode}
+								portalContainer={portalContainer}
+								data-attr="markdown-selection-code"
+							>
+								<Code2 className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+							<LinkPopover
+								editor={editor}
+								open={linkOpen}
+								onOpenChange={setLinkOpen}
+								linkActive={state.isLink}
+								portalContainer={portalContainer}
+								triggerDataAttr="markdown-selection-link"
+							/>
+							<ToolbarIconButton
+								label="Clear formatting"
+								pressable={false}
+								onClick={handleClearFormatting}
+								portalContainer={portalContainer}
+								data-attr="markdown-selection-clear"
+							>
+								<RemoveFormatting className="size-3.5" aria-hidden />
+							</ToolbarIconButton>
+						</Toolbar.Group>
+					</>
+				)}
 
 				{showsComment && blockComments ? (
 					<>
-						<Toolbar.Separator className="markdown-selection-toolbar-divider" />
+						{commentOnly ? null : (
+							<Toolbar.Separator className="markdown-selection-toolbar-divider" />
+						)}
 						<Toolbar.Button
 							className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment"
 							onClick={() => blockComments.startComment()}

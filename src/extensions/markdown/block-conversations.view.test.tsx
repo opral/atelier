@@ -20,6 +20,7 @@ import { bundledPluginArchives } from "@lix-js/sdk";
 import type { Editor } from "@tiptap/core";
 import type { Document } from "@opral/zettel-ast";
 import { LixProvider } from "@/lib/lix-react";
+import { isMacPlatform } from "@/lib/platform";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { MarkdownView } from "./index";
 import type { AtelierViewsApi } from "@/extension-api";
@@ -139,6 +140,20 @@ async function setup(
 									filePath="/doc.md"
 									reveal={request}
 								/>
+							</Suspense>
+						</ConversationViewsContext.Provider>
+					</LixProvider>,
+				);
+			});
+		},
+		/** Shows another file in the view (the Markdown view rebuilds its editor). */
+		async show(otherFileId: string, otherPath: string) {
+			await act(async () => {
+				utils?.rerender(
+					<LixProvider lix={lix}>
+						<ConversationViewsContext.Provider value={views}>
+							<Suspense fallback={null}>
+								<MarkdownView fileId={otherFileId} filePath={otherPath} />
 							</Suspense>
 						</ConversationViewsContext.Provider>
 					</LixProvider>,
@@ -1175,4 +1190,367 @@ describe("Esc returns to the editor from an open conversation", () => {
 			await view.close();
 		}
 	});
+});
+
+/** Appends text at the end of a comment field, the way Lexical takes input. */
+async function typeAtEnd(field: HTMLElement, text: string) {
+	const lexical = getNearestEditorFromDOMNode(field);
+	if (!lexical) throw new Error("the field has no Lexical editor");
+	await act(async () => {
+		lexical.update(() => $getRoot().selectEnd().insertText(text), {
+			discrete: true,
+		});
+	});
+}
+
+/** ⌘⌥M (Ctrl+Alt+M off Apple platforms) with the caret in `text`'s block. */
+async function commentOn(editor: Editor, text: string) {
+	await act(async () => {
+		editor.chain().focus().setTextSelection(startOf(editor, text)).run();
+	});
+	const mac = isMacPlatform();
+	fireEvent.keyDown(editor.view.dom, {
+		key: "µ",
+		code: "KeyM",
+		altKey: true,
+		metaKey: mac,
+		ctrlKey: !mac,
+	});
+	return waitFor(() => {
+		const field = document.querySelector<HTMLElement>(
+			'[data-attr="markdown-comment-composer"] [role="textbox"]',
+		);
+		if (!field) throw new Error("no comment field yet");
+		return field;
+	});
+}
+
+const composerPopover = () =>
+	document.querySelector('[data-attr="markdown-comment-composer"]');
+
+async function openConversationFromCount() {
+	const badge = await waitFor(() => {
+		const found = document.querySelector<HTMLButtonElement>(
+			".markdown-comment-badge",
+		);
+		if (!found) throw new Error("no count yet");
+		return found;
+	});
+	act(() => badge.click());
+	return waitFor(() => {
+		const field = document.querySelector<HTMLElement>(
+			'.markdown-comment-popover [role="textbox"][aria-label="Reply"]',
+		);
+		if (!field) throw new Error("no conversation yet");
+		return field;
+	});
+}
+
+function sendWithKeys(field: HTMLElement) {
+	fireEvent.keyDown(field, { key: "Enter", metaKey: true });
+}
+
+const fieldText = (field: Element | null) =>
+	(field?.textContent ?? "").replace(/\s+/g, " ").trim();
+
+describe("nothing typed into a comment field is lost", () => {
+	test("a reply typed while the last one is being written stays in the field", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { lix, conversationId } = view;
+			const field = await openConversationFromCount();
+			await typeAtEnd(field, "First reply");
+			sendWithKeys(field);
+			// The write is in flight: the field has emptied, and the writer
+			// goes on typing.
+			await typeAtEnd(field, "in flight text");
+			await waitFor(async () => {
+				const replies = await lix.execute(
+					"SELECT count(*) AS n FROM lix_comment WHERE conversation_id = $1",
+					[conversationId],
+				);
+				expect(Number(replies.rows[0]!.n)).toBe(2);
+			});
+			await act(async () => {});
+			expect(
+				fieldText(
+					document.querySelector(
+						'.markdown-comment-popover [role="textbox"][aria-label="Reply"]',
+					),
+				),
+			).toBe("in flight text");
+			// Kept as the draft, not only on screen: closed and opened again,
+			// the field has it.
+			fireEvent.keyDown(field, { key: "Escape" });
+			fireEvent.keyDown(document.activeElement ?? document.body, {
+				key: "Escape",
+			});
+			await waitFor(() =>
+				expect(document.querySelector(".markdown-comment-popover")).toBeNull(),
+			);
+			expect(fieldText(await openConversationFromCount())).toBe(
+				"in flight text",
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("text typed while a new comment is being written becomes its reply", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix } = view;
+			const field = await commentOn(editor, "First para.");
+			await typeAtEnd(field, "A new thread");
+			sendWithKeys(field);
+			await typeAtEnd(field, "and more");
+			// The popover goes once the thread is on screen; its card (here
+			// the conversation under the count) opens with the text in reply.
+			const reply = await waitFor(() => {
+				expect(composerPopover()).toBeNull();
+				const found = document.querySelector<HTMLElement>(
+					'.markdown-comment-popover [role="textbox"][aria-label="Reply"]',
+				);
+				expect(fieldText(found)).toBe("and more");
+				return found!;
+			});
+			expect(reply.closest(".markdown-comment-popover")).toHaveTextContent(
+				"A new thread",
+			);
+			const threads = await lix.execute(
+				"SELECT count(*) AS n FROM lix_conversation",
+			);
+			expect(Number(threads.rows[0]!.n)).toBe(2);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("clicking away closes a new comment and keeps it; Comment brings it back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			const field = await commentOn(editor, "First para.");
+			await typeAtEnd(field, "Unsent thought");
+			fireEvent.pointerDown(editor.view.dom);
+			await waitFor(() => expect(composerPopover()).toBeNull());
+			const again = await commentOn(editor, "First para.");
+			expect(fieldText(again)).toBe("Unsent thought");
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("commenting on another block shows that block's draft, not the last one's", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			const first = await commentOn(editor, "First para.");
+			await typeAtEnd(first, "About the first");
+			// The popover moves to the other block without closing.
+			const other = await commentOn(editor, "Tail.");
+			await waitFor(() => expect(fieldText(other)).toBe(""));
+			await typeAtEnd(other, "About the tail");
+			const back = await commentOn(editor, "First para.");
+			await waitFor(() => expect(fieldText(back)).toBe("About the first"));
+			const tail = await commentOn(editor, "Tail.");
+			await waitFor(() => expect(fieldText(tail)).toBe("About the tail"));
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("Esc in the editor closes a new comment and keeps it", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			const field = await commentOn(editor, "First para.");
+			await typeAtEnd(field, "Unsent thought");
+			await act(async () => {
+				editor.commands.focus();
+			});
+			fireEvent.keyDown(editor.view.dom, { key: "Escape" });
+			await waitFor(() => expect(composerPopover()).toBeNull());
+			expect(editor.view.hasFocus()).toBe(true);
+			const again = await commentOn(editor, "First para.");
+			expect(fieldText(again)).toBe("Unsent thought");
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("unsent comments and replies survive opening another file and coming back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { lix, fileId, editor } = view;
+			const other = await lix.execute(
+				"INSERT INTO lix_file (path, content) VALUES ($1, $2) RETURNING id",
+				["/other.md", new TextEncoder().encode("# Other\n\nElsewhere.\n")],
+			);
+			const reply = await openConversationFromCount();
+			await typeAtEnd(reply, "Unsent reply");
+			fireEvent.keyDown(reply, { key: "Escape" });
+			const field = await commentOn(editor, "First para.");
+			await typeAtEnd(field, "Unsent comment");
+
+			await view.show(other.rows[0]!.id as string, "/other.md");
+			await waitFor(() =>
+				expect(document.querySelector(".ProseMirror")).toHaveTextContent(
+					"Elsewhere.",
+				),
+			);
+			await view.show(fileId, "/doc.md");
+			const back = await waitFor(() => {
+				const dom = document.querySelector(".ProseMirror") as
+					| (HTMLElement & { editor?: Editor })
+					| null;
+				if (!dom?.editor || !dom.textContent?.includes("First para."))
+					throw new Error("not back yet");
+				return dom.editor;
+			});
+			// Its conversation is placed again.
+			await waitFor(() =>
+				expect(
+					document.querySelector(".markdown-comment-badge"),
+				).not.toBeNull(),
+			);
+			const restored = await commentOn(back, "First para.");
+			expect(fieldText(restored)).toBe("Unsent comment");
+			fireEvent.keyDown(restored, { key: "Escape" });
+			await waitFor(() => expect(composerPopover()).toBeNull());
+			const again = await openConversationFromCount();
+			expect(fieldText(again)).toBe("Unsent reply");
+		} finally {
+			await view.close();
+		}
+	});
+});
+
+describe("Esc in the editor with a menu open", () => {
+	test("the first Esc closes the slash menu, the next one the conversation", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { editor } = view;
+			await openConversationFromCount();
+			const popover = () => document.querySelector(".markdown-comment-popover");
+			await act(async () => {
+				editor.commands.focus("end");
+				editor.commands.insertContent(" /");
+			});
+			await waitFor(() =>
+				expect(document.querySelector(".markdown-slash-menu")).not.toBeNull(),
+			);
+			fireEvent.keyDown(editor.view.dom, { key: "Escape" });
+			await waitFor(() =>
+				expect(document.querySelector(".markdown-slash-menu")).toBeNull(),
+			);
+			expect(popover()).not.toBeNull();
+			fireEvent.keyDown(editor.view.dom, { key: "Escape" });
+			await waitFor(() => expect(popover()).toBeNull());
+			await waitFor(async () =>
+				expect(await fileText(view.lix, view.fileId)).toContain(
+					"Second para. /",
+				),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+});
+
+describe("a thread follows its text out of an emptied block", () => {
+	test("text cut out of a commented block and pasted elsewhere takes the thread along; undo brings it back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			// The cut: the block's text goes, the block stays, empty.
+			await act(async () => {
+				const from = startOf(editor, "Second para.");
+				editor.view.dispatch(
+					editor.state.tr.delete(from, from + "Second para.".length),
+				);
+			});
+			// The paste, a step later, at the end of "Tail.".
+			await act(async () => {
+				const tail = editor.state.doc.resolve(startOf(editor, "Tail."));
+				editor.view.dispatch(
+					editor.state.tr.insertText("Second para.", tail.end()),
+				);
+			});
+			await waitFor(async () =>
+				expect(await fileText(lix, fileId)).toContain("Tail.Second para."),
+			);
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Tail.Second para."),
+			);
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Second para."),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	for (const key of ["Backspace", "Delete"] as const) {
+		test(`${key} on an emptied commented paragraph hands its thread to the block after it`, async () => {
+			const view = await setup(
+				"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+				"Second para.",
+			);
+			try {
+				const { editor, lix, fileId, conversationId } = view;
+				await act(async () => {
+					const from = startOf(editor, "Second para.");
+					editor
+						.chain()
+						.setTextSelection({ from, to: from + "Second para.".length })
+						.deleteSelection()
+						.run();
+				});
+				await act(async () => {
+					editor.commands.keyboardShortcut(key);
+				});
+				await waitFor(async () =>
+					expect(await fileText(lix, fileId)).toBe(
+						"# Title\n\nFirst para.\n\nTail.\n",
+					),
+				);
+				await waitFor(async () =>
+					expect(await targetText(lix, conversationId)).toBe("Tail."),
+				);
+			} finally {
+				await view.close();
+			}
+		});
+	}
 });

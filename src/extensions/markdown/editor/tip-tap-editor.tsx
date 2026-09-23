@@ -428,7 +428,7 @@ function TipTapEditorLoadedContent({
 
 	const handleSurfacePointerDown = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
-			if (!editor || readOnly) return;
+			if (!editor || editor.isDestroyed || readOnly) return;
 			// The surface owns presses on its own background only: the scroll
 			// area and the wrappers around the document, which contain it.
 			// ProseMirror owns presses in the document, and whatever is laid
