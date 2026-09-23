@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { describe, expect, test, vi } from "vitest";
 import {
 	act,
@@ -22,6 +22,11 @@ import type {
 	AtelierEvent,
 	AtelierExtensionRegistration,
 } from "../extension-api";
+import {
+	clearDocumentReveal,
+	documentReveal,
+	documentRevealState,
+} from "../lib/document-reveal";
 
 const HOME_EXTENSION_ID = "test_home";
 const DIR_EXTENSION_ID = "test_dir";
@@ -67,7 +72,38 @@ const sideToolExtension: AtelierExtensionRegistration = {
 	),
 };
 
-const extensions = [homeRegistration, dirRegistration, sideToolExtension];
+/** Consumes a reveal request in its state the way a document view does. */
+const REVEAL_PROBE_ID = "test_reveal_probe";
+const revealProbeExtension: AtelierExtensionRegistration = {
+	id: REVEAL_PROBE_ID,
+	name: "Reveal Probe",
+	placement: ["left", "right", "main"],
+	hidden: true,
+	icon: TabIcon,
+	Component: function RevealProbe({ atelier, view }) {
+		const reveal = documentReveal(
+			view.state,
+			clearDocumentReveal(atelier.views, REVEAL_PROBE_ID, view),
+		);
+		useEffect(() => {
+			reveal?.consume();
+			// Once per request, as the document views do.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+		}, [reveal?.key]);
+		return (
+			<div data-testid="test-reveal-probe">
+				{view.state.reveal ? "requested" : "cleared"}
+			</div>
+		);
+	},
+};
+
+const extensions = [
+	homeRegistration,
+	dirRegistration,
+	sideToolExtension,
+	revealProbeExtension,
+];
 
 async function renderTabbedShell(
 	options: {
@@ -730,6 +766,25 @@ describe("main tabs with a pinned home", () => {
 				});
 			});
 			expect(screen.queryByTestId("test-side-tool")).toBeNull();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
+	test("a view in a side area clears the reveal it consumed", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.views.open(REVEAL_PROBE_ID, {
+					area: "right",
+					state: { reveal: documentRevealState({ rowId: "row-1" }) },
+				});
+			});
+			await waitFor(() =>
+				expect(screen.getByTestId("test-reveal-probe")).toHaveTextContent(
+					"cleared",
+				),
+			);
 		} finally {
 			await shell.cleanup();
 		}

@@ -3492,11 +3492,7 @@ export const extension = createReactExtensionDefinition({
 					isPanelFocused={view.isFocused}
 					reveal={documentReveal(
 						view.state,
-						clearDocumentReveal(
-							atelier.views,
-							manifestJson.id,
-							view.instanceId,
-						),
+						clearDocumentReveal(atelier.views, manifestJson.id, view),
 					)}
 				/>
 			</PreparedFileSurface>
