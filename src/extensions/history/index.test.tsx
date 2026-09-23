@@ -14,6 +14,11 @@ import { createCheckpoint } from "@/lib/lix-diff-commands";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { HistoryScopeSwitch, HistoryView, resolveHistoryScope } from ".";
+import {
+	createCommitConversation,
+	replyToConversation,
+	selectCommitConversations,
+} from "./commit-conversations";
 import type { AtelierExtensionPreferences } from "@/extension-api";
 
 function atelierStub(overrides?: {
@@ -563,7 +568,7 @@ describe("HistoryView", () => {
 		});
 		const fileButtons = within(fileList).getAllByRole("button");
 		expect(fileButtons.map((button) => button.textContent)).toEqual([
-			"docs/one.md",
+			"one.md",
 			"two.md",
 		]);
 		fireEvent.click(fileButtons[1]!);
@@ -703,7 +708,7 @@ describe("HistoryView", () => {
 		});
 		const fileButtons = within(fileList).getAllByRole("button");
 		expect(fileButtons.map((button) => button.textContent)).toEqual([
-			"docs/one.txt",
+			"one.txt",
 			"two.txt",
 		]);
 		fireEvent.click(fileButtons[1]!);
@@ -807,6 +812,103 @@ describe("HistoryView", () => {
 	});
 });
 
+describe("checkpoint conversation flows", () => {
+	test("keeps comments near the top of a checkpoint with many changed files", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		const files = Array.from({ length: 6 }, (_, index) => ({
+			id: fakeUuid(`file-${index}`),
+			path: `/folder/file-${index}.md`,
+		}));
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({
+						historicalCommitId: commitId,
+						historicalFiles: files,
+					})}
+				/>
+			</LixProvider>,
+		);
+		try {
+			const list = await screen.findByRole("list", {
+				name: "Files at this checkpoint",
+			});
+			expect(within(list).getAllByRole("button")).toHaveLength(4);
+			fireEvent.click(
+				within(list).getByRole("button", { name: "Show 3 more files" }),
+			);
+			expect(within(list).getAllByRole("button")).toHaveLength(6);
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("keeps a draft when the reader switches checkpoints", async () => {
+		const lix = await openLix();
+		const first = await createCheckpoint(lix);
+		const second = await createCheckpoint(lix);
+		const renderHistory = (commitId: string) => (
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>
+		);
+		const view = render(renderHistory(first.commitId));
+		try {
+			fireEvent.click(
+				await screen.findByRole("button", {
+					name: "Comment on this checkpoint…",
+				}),
+			);
+			const field = screen.getByRole("textbox", { name: "New comment" });
+			expect(field).toHaveFocus();
+			fireEvent.change(field, { target: { value: "Remember this thought" } });
+			view.rerender(renderHistory(second.commitId));
+			expect(screen.getByText("Draft", { exact: true })).toBeVisible();
+			view.rerender(renderHistory(first.commitId));
+			expect(screen.getByRole("textbox", { name: "New comment" })).toHaveValue(
+				"Remember this thought",
+			);
+			expect(
+				screen.getByRole("textbox", { name: "New comment" }),
+			).not.toHaveFocus();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("keeps the first and latest comments visible, then unfolds the whole middle", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await createCommitConversation(lix, commitId, "Review", "First");
+		const conversation = (
+			await selectCommitConversations(lix, commitId).execute()
+		)[0]!;
+		for (let index = 2; index <= 6; index++)
+			await replyToConversation(lix, conversation.id, `Comment ${index}`);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			const unfold = await screen.findByRole("button", {
+				name: /Show 3 more comments/,
+			});
+			expect(screen.getByText("First", { exact: true })).toBeVisible();
+			expect(screen.getByText("Comment 6", { exact: true })).toBeVisible();
+			expect(screen.queryByText("Comment 3", { exact: true })).toBeNull();
+			fireEvent.click(unfold);
+			expect(screen.getByText("Comment 3", { exact: true })).toBeVisible();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+});
+
 function memoryPreferences(
 	initial: Record<string, unknown> = {},
 ): AtelierExtensionPreferences & { readonly store: Map<string, unknown> } {
@@ -822,7 +924,7 @@ function memoryPreferences(
 describe("history file paths", () => {
 	afterEach(() => vi.unstubAllGlobals());
 
-	test("rows show one muted parent, and drop it in a narrow panel", async () => {
+	test("rows show only file names at every panel width, with full paths in titles", async () => {
 		const resize = mockHistoryWidth();
 		const lix = await openLix();
 		await createCheckpoint(lix);
@@ -846,10 +948,8 @@ describe("history file paths", () => {
 		});
 		resize(320);
 		const button = within(list).getByRole("button");
-		expect(button).toHaveTextContent("…/guides/setup.md");
-		expect(button.querySelector("[data-attr='path-parent']")).toHaveTextContent(
-			"…/guides/",
-		);
+		expect(button).toHaveTextContent(/^setup\.md$/);
+		expect(button.querySelector("[data-attr='path-parent']")).toBeNull();
 		expect(button).toHaveAttribute("title", "/docs/guides/setup.md");
 		resize(200);
 		await waitFor(() =>

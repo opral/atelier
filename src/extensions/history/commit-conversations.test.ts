@@ -7,6 +7,7 @@ import {
 	replyToConversation,
 	selectCheckpointConversations,
 	selectCommitConversations,
+	selectConversationCounts,
 	selectConversationComments,
 } from "./commit-conversations";
 
@@ -48,6 +49,10 @@ describe("commit conversations", () => {
 			).execute();
 			expect(comments).toHaveLength(2);
 			expect(commentParagraphs(comments[1]?.body)).toEqual(["A reply"]);
+			expect(
+				(await selectConversationCounts(lix, [conversationId]).execute())[0]
+					?.comment_count,
+			).toBe(2);
 			const scopes = await lix.execute<{ lixcol_global: boolean }>(
 				"SELECT lixcol_global FROM lix_conversation WHERE id=$1",
 				[conversationId],

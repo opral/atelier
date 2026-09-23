@@ -1,6 +1,4 @@
 import {
-	createContext,
-	useContext,
 	useEffect,
 	useId,
 	useMemo,
@@ -15,7 +13,7 @@ import type {
 	AtelierJsonValue,
 } from "../../extension-api";
 import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
-import { PathLabel, splitPathLabel } from "@/components/path-label";
+import { splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
 import { useQueryResult } from "@/lib/lix-react";
@@ -38,7 +36,12 @@ import {
 	selectCheckpointConversations,
 	type CommitConversation,
 } from "./commit-conversations";
-import { CommitConversationView } from "./commit-conversation-view";
+import {
+	CommitConversationView,
+	hasConversationDraft,
+	type ConversationDrafts,
+} from "./commit-conversation-view";
+import { selectConversationCounts } from "./commit-conversations";
 
 export type HistoryScope = "file" | "repository";
 
@@ -176,14 +179,6 @@ export function HistoryScopeSwitch({
  * and names what happened to it at each one.
  */
 /**
- * A parent folder before a file name needs room; under this width even a
- * truncated parent is noise, so rows fall back to the bare name (the full
- * path stays in each row's title).
- */
-const PARENT_HINT_MIN_WIDTH = 240;
-const ShowPathParentsContext = createContext(true);
-
-/**
  * Every row is the chip the section header is: the header's label sits 6px
  * inside the panel (`px-1.5` on the picker in panel-v2), so a row's glyph
  * column starts there too, and its hover background starts on the panel's
@@ -193,12 +188,7 @@ const ShowPathParentsContext = createContext(true);
 const ROW_INSET = "px-1.25";
 
 function HistoryFilePath({ path }: { readonly path: string }) {
-	const showParents = useContext(ShowPathParentsContext);
-	return showParents ? (
-		<PathLabel path={path} layout="row" className="min-w-0" />
-	) : (
-		<span className="min-w-0 truncate">{splitPathLabel(path).name}</span>
-	);
+	return <span className="min-w-0 truncate">{splitPathLabel(path).name}</span>;
 }
 
 export function HistoryView({
@@ -210,7 +200,6 @@ export function HistoryView({
 }) {
 	const containerRef = useRef<HTMLElement>(null);
 	const [wide, setWide] = useState(false);
-	const [showParents, setShowParents] = useState(true);
 	const { scope, activeFileId, activeFilePath } = useHistoryScope(
 		atelier,
 		preferences,
@@ -226,7 +215,6 @@ export function HistoryView({
 		const observer = new ResizeObserver(([entry]) => {
 			if (!entry) return;
 			setWide(entry.contentRect.width >= 640);
-			setShowParents(entry.contentRect.width >= PARENT_HINT_MIN_WIDTH);
 		});
 		observer.observe(container);
 		return () => observer.disconnect();
@@ -239,17 +227,15 @@ export function HistoryView({
 			data-layout={wide ? "wide" : "compact"}
 			className="min-h-0 flex-1 overflow-y-auto py-2 pr-1"
 		>
-			<ShowPathParentsContext.Provider value={showParents}>
-				<div className={wide ? "w-full max-w-[60rem] pr-5" : "w-full"}>
-					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
-					<CheckpointList
-						key={file?.id ?? "repository"}
-						atelier={atelier}
-						wide={wide}
-						file={file}
-					/>
-				</div>
-			</ShowPathParentsContext.Provider>
+			<div className={wide ? "w-full max-w-[60rem] pr-5" : "w-full"}>
+				<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
+				<CheckpointList
+					key={file?.id ?? "repository"}
+					atelier={atelier}
+					wide={wide}
+					file={file}
+				/>
+			</div>
 		</section>
 	);
 }
@@ -414,18 +400,27 @@ function ReviewFileList({
 	attr,
 	files,
 	activeFileId,
+	maxInitiallyVisible,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly label: string;
 	readonly attr: string;
 	readonly files: AtelierDiffSession["files"];
 	readonly activeFileId: string | null;
+	readonly maxInitiallyVisible?: number;
 }) {
 	const openReviewFile = atelier.diff.openFile;
+	const [showAll, setShowAll] = useState(false);
 	if (files.length === 0) return null;
+	const orderedFiles = activeFileFirst(files, activeFileId);
+	const visibleFiles =
+		showAll || maxInitiallyVisible === undefined
+			? orderedFiles
+			: orderedFiles.slice(0, maxInitiallyVisible);
+	const hiddenCount = files.length - visibleFiles.length;
 	return (
 		<ul aria-label={label} className="px-2 pb-2 pl-7">
-			{activeFileFirst(files, activeFileId).map((file) => {
+			{visibleFiles.map((file) => {
 				const isActive = file.id === activeFileId;
 				return (
 					<li key={file.id}>
@@ -463,6 +458,17 @@ function ReviewFileList({
 					</li>
 				);
 			})}
+			{hiddenCount > 0 ? (
+				<li>
+					<button
+						type="button"
+						onClick={() => setShowAll(true)}
+						className="rounded-control px-1.5 py-1 text-[11.5px] font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						Show {hiddenCount} more files
+					</button>
+				</li>
+			) : null}
 		</ul>
 	);
 }
@@ -627,6 +633,21 @@ function CheckpointPage({
 			),
 		{ retryKey: conversationRetryKey },
 	);
+	const commentCounts = useQueryResult(
+		(lix) =>
+			selectConversationCounts(
+				lix,
+				conversations.rows.map((conversation) => conversation.id),
+			),
+		{
+			enabled:
+				conversations.status === "success" && conversations.rows.length > 0,
+			retryKey: conversationRetryKey,
+		},
+	);
+	const countsByConversation = new Map(
+		commentCounts.rows.map((row) => [row.conversation_id, row.comment_count]),
+	);
 	const result = useQueryResult(
 		(lix) =>
 			selectCheckpointFilePreviewPage(
@@ -665,6 +686,16 @@ function CheckpointPage({
 							(conversation) => conversation.commit_id === checkpoint.commit_id,
 						)}
 						conversationStatus={conversations.status}
+						commentCount={conversations.rows
+							.filter(
+								(conversation) =>
+									conversation.commit_id === checkpoint.commit_id,
+							)
+							.reduce(
+								(total, conversation) =>
+									total + (countsByConversation.get(conversation.id) ?? 0),
+								0,
+							)}
 						onRefreshConversations={() =>
 							setConversationRetryKey((key) => key + 1)
 						}
@@ -687,6 +718,7 @@ function CheckpointItem({
 	preview,
 	conversations,
 	conversationStatus,
+	commentCount,
 	onRefreshConversations,
 	activeFileId,
 	onPreviewVisible,
@@ -704,6 +736,7 @@ function CheckpointItem({
 	readonly preview: PreviewResult;
 	readonly conversations: readonly CommitConversation[];
 	readonly conversationStatus: "pending" | "success" | "error";
+	readonly commentCount: number;
 	readonly onRefreshConversations: () => void;
 	/** File scope: the file the rows are filtered by, marked in the previews. */
 	readonly activeFileId: string | null;
@@ -724,11 +757,33 @@ function CheckpointItem({
 		"commitId" in session.target &&
 		session.target.commitId === checkpoint.commit_id;
 	const conversationTitle = conversations[0]?.title;
+	const [drafts, setDrafts] = useState<ConversationDrafts>({
+		title: "",
+		text: "",
+		replies: {},
+	});
+	const [showNew, setShowNew] = useState(false);
+	const [focusNewRequest, setFocusNewRequest] = useState(0);
+	const hasDraft = hasConversationDraft(drafts);
+	useEffect(() => {
+		if (!isViewing && !drafts.title.trim() && !drafts.text.trim())
+			setShowNew(false);
+	}, [isViewing, drafts.title, drafts.text]);
+	function openCheckpoint() {
+		void atelier.diff
+			.open({
+				base: previousCommitId ? { commitId: previousCommitId } : null,
+				target: { commitId: checkpoint.commit_id },
+			})
+			.then(() => {
+				if (fileChange?.path) atelier.diff.openFile(fileChange.path);
+			});
+	}
 
 	return (
 		<li
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
+			className={`group relative rounded-panel border transition-colors duration-200 motion-reduce:transition-none ${
 				isViewing
 					? "border-accent-border bg-accent-subtle"
 					: "border-transparent"
@@ -742,27 +797,18 @@ function CheckpointItem({
 						atelier.diff.exit();
 						return;
 					}
-					void atelier.diff
-						.open({
-							base: previousCommitId ? { commitId: previousCommitId } : null,
-							target: { commitId: checkpoint.commit_id },
-						})
-						.then(() => {
-							if (fileChange?.path) atelier.diff.openFile(fileChange.path);
-						});
+					openCheckpoint();
 				}}
 				onMouseDown={(event) => event.preventDefault()}
 				aria-describedby={wide ? filesDescriptionId : undefined}
 				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
+				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 pr-18 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
 					isViewing ? "" : "hover:bg-bg-hover-strong"
 				}`}
 			>
 				<span
 					className={`flex h-5 w-4 shrink-0 items-center justify-center ${
-						isViewing
-							? "text-accent"
-							: "text-history-secondary"
+						isViewing ? "text-accent" : "text-history-secondary"
 					}`}
 				>
 					<FilledFlag />
@@ -771,7 +817,7 @@ function CheckpointItem({
 					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
 				>
 					<span className="block min-w-0 truncate text-[13px] leading-4 font-semibold text-fg">
-						{conversationTitle ? `Comment · ${conversationTitle}` : label}
+						{conversationTitle || label}
 					</span>
 					<span
 						className={`block text-[11.5px] leading-4 ${isViewing ? "text-history-selected-secondary" : "text-history-secondary"}`}
@@ -796,16 +842,35 @@ function CheckpointItem({
 						onVisible={onPreviewVisible}
 					/>
 				) : null}
+				{hasDraft ? (
+					<span className="ml-auto shrink-0 pl-2 text-[11px] font-medium text-accent">
+						Draft
+					</span>
+				) : null}
 				{conversations.length > 0 ? (
 					<span
 						className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-[11px] text-history-secondary"
-						aria-label={`${conversations.length} ${conversations.length === 1 ? "conversation" : "conversations"}`}
+						aria-label={`${commentCount || conversations.length} ${(commentCount || conversations.length) === 1 ? "comment" : "comments"}`}
 					>
 						<MessageSquare aria-hidden="true" className="size-3" />
-						{conversations.length}
+						{commentCount || conversations.length}
 					</span>
 				) : null}
 			</button>
+			{!isViewing && !atelier.readOnly ? (
+				<button
+					type="button"
+					aria-label="Comment on checkpoint"
+					onClick={() => {
+						setShowNew(true);
+						setFocusNewRequest((value) => value + 1);
+						openCheckpoint();
+					}}
+					className="absolute right-2 top-2 rounded-control px-1.5 py-0.5 text-[11px] font-medium text-accent opacity-0 pointer-events-none hover:bg-accent-subtle group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					Comment
+				</button>
+			) : null}
 			<AnimatedHistoryDisclosure open={isViewing}>
 				{!wide ? (
 					<CheckpointFileList
@@ -820,6 +885,17 @@ function CheckpointItem({
 					status={conversationStatus}
 					onRefresh={onRefreshConversations}
 					readOnly={atelier.readOnly}
+					drafts={drafts}
+					setDrafts={setDrafts}
+					showNew={showNew}
+					setShowNew={setShowNew}
+					focusNewRequest={focusNewRequest}
+					onNewComposerFocused={() => setFocusNewRequest(0)}
+					requestFocusNew={() => {
+						setShowNew(true);
+						setFocusNewRequest((value) => value + 1);
+					}}
+					open={isViewing}
 				/>
 			</AnimatedHistoryDisclosure>
 		</li>
@@ -1026,6 +1102,7 @@ function CheckpointFileList({
 			attr="history-open-checkpoint-file"
 			files={files}
 			activeFileId={activeFileId}
+			maxInitiallyVisible={3}
 		/>
 	);
 }

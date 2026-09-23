@@ -16,6 +16,25 @@ export type ConversationComment = {
 	author_name: string | null;
 };
 
+export type ConversationCount = {
+	conversation_id: string;
+	comment_count: number;
+};
+
+export function selectConversationCounts(
+	lix: Lix,
+	conversationIds: readonly string[],
+) {
+	return qb(lix)
+		.selectFrom("lix_comment")
+		.select("conversation_id")
+		.select(sql<number>`COUNT(*)`.as("comment_count"))
+		.where("conversation_id", "in", conversationIds)
+		.where("lixcol_global", "=", true)
+		.groupBy("conversation_id")
+		.$castTo<ConversationCount>();
+}
+
 export function selectCommitConversations(lix: Lix, commitId: string) {
 	return qb(lix)
 		.selectFrom("lix_conversation")
