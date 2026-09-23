@@ -9,6 +9,7 @@ import {
 	selectCommitConversations,
 	selectConversationCounts,
 	selectConversationComments,
+	setCommitConversationTitle,
 } from "./commit-conversations";
 
 describe("commit conversations", () => {
@@ -19,7 +20,6 @@ describe("commit conversations", () => {
 			await createCommitConversation(
 				lix,
 				commitId,
-				"Launch plan",
 				"First note\n\nSecond paragraph",
 			);
 			const conversations = await selectCommitConversations(
@@ -27,7 +27,7 @@ describe("commit conversations", () => {
 				commitId,
 			).execute();
 			expect(conversations).toHaveLength(1);
-			expect(conversations[0]?.title).toBe("Launch plan");
+			expect(conversations[0]?.title).toBe("First note");
 			expect(
 				(await selectCheckpointConversations(lix, [commitId]).execute())[0]
 					?.commit_id,
@@ -63,11 +63,23 @@ describe("commit conversations", () => {
 		}
 	});
 
-	test("allows a conversation without a title", async () => {
+	test("creates and clears a checkpoint title without posting a comment", async () => {
 		const lix = await openLix();
 		try {
 			const { commitId } = await createCheckpoint(lix);
-			await createCommitConversation(lix, commitId, "", "Untitled discussion");
+			await setCommitConversationTitle(lix, commitId, null, "Legal sign-off");
+			const conversation = (
+				await selectCommitConversations(lix, commitId).execute()
+			)[0]!;
+			expect(conversation.title).toBe("Legal sign-off");
+			expect(
+				await selectConversationComments(lix, conversation.id).execute(),
+			).toHaveLength(0);
+			await setCommitConversationTitle(lix, commitId, conversation.id, "");
+			expect(
+				(await selectCommitConversations(lix, commitId).execute())[0]?.title,
+			).toBeNull();
+			await replyToConversation(lix, conversation.id, "First comment");
 			expect(
 				(await selectCommitConversations(lix, commitId).execute())[0]?.title,
 			).toBeNull();

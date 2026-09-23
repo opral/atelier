@@ -6,7 +6,13 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { ArrowLeftRight, History, MessageSquare } from "lucide-react";
+import {
+	ArrowLeftRight,
+	History,
+	MessageSquare,
+	MessageSquarePlus,
+	Pencil,
+} from "lucide-react";
 import type {
 	AtelierDiffSession,
 	AtelierExtensionPreferences,
@@ -16,7 +22,7 @@ import { DiffGlyph, movedFromHint, WorkingDot } from "@/components/diff-glyph";
 import { splitPathLabel } from "@/components/path-label";
 import type { AtelierHistoryProps } from "../../history";
 type HistoryRuntime = AtelierHistoryProps["atelier"];
-import { useQueryResult } from "@/lib/lix-react";
+import { useLix, useQueryResult } from "@/lib/lix-react";
 import {
 	selectCheckpoints,
 	selectCheckpointFilePreviewPage,
@@ -41,7 +47,10 @@ import {
 	hasConversationDraft,
 	type ConversationDrafts,
 } from "./commit-conversation-view";
-import { selectConversationCounts } from "./commit-conversations";
+import {
+	selectConversationCounts,
+	setCommitConversationTitle,
+} from "./commit-conversations";
 
 export type HistoryScope = "file" | "repository";
 
@@ -742,6 +751,7 @@ function CheckpointItem({
 	readonly activeFileId: string | null;
 	readonly onPreviewVisible: () => void;
 }) {
+	const lix = useLix();
 	const previousCommitId = checkpoint.parent_commit_id;
 	const filesDescriptionId = useId();
 	const isInitial = index === count - 1;
@@ -758,17 +768,48 @@ function CheckpointItem({
 		session.target.commitId === checkpoint.commit_id;
 	const conversationTitle = conversations[0]?.title;
 	const [drafts, setDrafts] = useState<ConversationDrafts>({
-		title: "",
 		text: "",
 		replies: {},
 	});
-	const [showNew, setShowNew] = useState(false);
 	const [focusNewRequest, setFocusNewRequest] = useState(0);
 	const hasDraft = hasConversationDraft(drafts);
+	const [editingTitle, setEditingTitle] = useState(false);
+	const [titleDraft, setTitleDraft] = useState("");
+	const [titleSaving, setTitleSaving] = useState(false);
+	const [titleError, setTitleError] = useState<string | null>(null);
+	const titleInputRef = useRef<HTMLInputElement>(null);
 	useEffect(() => {
-		if (!isViewing && !drafts.title.trim() && !drafts.text.trim())
-			setShowNew(false);
-	}, [isViewing, drafts.title, drafts.text]);
+		if (editingTitle) titleInputRef.current?.focus();
+	}, [editingTitle]);
+	function beginTitleEdit() {
+		if (atelier.readOnly) return;
+		setTitleDraft(conversationTitle ?? "");
+		setTitleError(null);
+		setEditingTitle(true);
+	}
+	function cancelTitleEdit() {
+		setEditingTitle(false);
+		setTitleError(null);
+	}
+	async function saveTitle() {
+		if (titleSaving) return;
+		setTitleSaving(true);
+		setTitleError(null);
+		try {
+			await setCommitConversationTitle(
+				lix,
+				checkpoint.commit_id,
+				conversations[0]?.id ?? null,
+				titleDraft,
+			);
+			onRefreshConversations();
+			setEditingTitle(false);
+		} catch (error) {
+			setTitleError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setTitleSaving(false);
+		}
+	}
 	function openCheckpoint() {
 		void atelier.diff
 			.open({
@@ -789,86 +830,164 @@ function CheckpointItem({
 					: "border-transparent"
 			}`}
 		>
-			<button
-				type="button"
-				onClick={() => {
-					// Pressing the viewed checkpoint again leaves review mode.
-					if (isViewing) {
-						atelier.diff.exit();
-						return;
-					}
-					openCheckpoint();
-				}}
-				onMouseDown={(event) => event.preventDefault()}
-				aria-describedby={wide ? filesDescriptionId : undefined}
-				data-attr="history-view-checkpoint"
-				className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 pr-18 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
-					isViewing ? "" : "hover:bg-bg-hover-strong"
-				}`}
-			>
-				<span
-					className={`flex h-5 w-4 shrink-0 items-center justify-center ${
-						isViewing ? "text-accent" : "text-history-secondary"
-					}`}
+			{editingTitle ? (
+				<div
+					className={`flex min-h-10 items-start gap-0.5 py-1.5 pr-3 ${ROW_INSET}`}
 				>
-					<FilledFlag />
-				</span>
-				<span
-					className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
-				>
-					<span className="block min-w-0 truncate text-[13px] leading-4 font-semibold text-fg">
-						{conversationTitle || label}
+					<span className="flex h-5 w-4 shrink-0 items-center justify-center text-accent">
+						<FilledFlag />
 					</span>
-					<span
-						className={`block text-[11.5px] leading-4 ${isViewing ? "text-history-selected-secondary" : "text-history-secondary"}`}
-					>
+					<div className="min-w-0 flex-1">
+						<input
+							ref={titleInputRef}
+							type="text"
+							aria-label="Checkpoint title"
+							placeholder="Add a title"
+							value={titleDraft}
+							readOnly={titleSaving}
+							onChange={(event) => setTitleDraft(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault();
+									void saveTitle();
+								}
+								if (event.key === "Escape") {
+									event.preventDefault();
+									cancelTitleEdit();
+								}
+							}}
+							className="w-full rounded-control border border-accent-border bg-bg px-1.5 py-0.5 text-[13px] font-semibold text-fg outline-none focus:ring-2 focus:ring-ring"
+						/>
 						<time
 							dateTime={checkpoint.created_at}
 							title={checkpoint.created_at}
+							className="block text-[11.5px] leading-4 text-history-secondary"
 						>
 							{formatCheckpointRelativeTime(checkpoint.created_at)}
 						</time>
-						{fileChange
-							? ` · ${FILE_CHANGE_LABEL[fileChange.changeKind]}`
-							: null}
-					</span>
-				</span>
-				{wide ? (
-					<CheckpointFilePreview
-						descriptionId={filesDescriptionId}
-						atelier={atelier}
-						result={preview}
-						activeFileId={activeFileId}
-						onVisible={onPreviewVisible}
-					/>
-				) : null}
-				{hasDraft ? (
-					<span className="ml-auto shrink-0 pl-2 text-[11px] font-medium text-accent">
-						Draft
-					</span>
-				) : null}
-				{conversations.length > 0 ? (
+						<p className="mt-0.5 text-[10px] text-history-secondary">
+							↵ save · Esc cancel · Empty clears the title
+						</p>
+						{titleError ? (
+							<p role="alert" className="text-[11px] text-danger">
+								{titleError}
+							</p>
+						) : null}
+					</div>
+					{wide ? (
+						<CheckpointFilePreview
+							descriptionId={filesDescriptionId}
+							atelier={atelier}
+							result={preview}
+							activeFileId={activeFileId}
+							onVisible={onPreviewVisible}
+						/>
+					) : null}
+				</div>
+			) : (
+				<button
+					type="button"
+					onClick={(event) => {
+						if (
+							!atelier.readOnly &&
+							(event.target as HTMLElement).closest("[data-checkpoint-title]")
+						) {
+							beginTitleEdit();
+							return;
+						}
+						// Pressing the viewed checkpoint again leaves review mode.
+						if (isViewing) {
+							atelier.diff.exit();
+							return;
+						}
+						openCheckpoint();
+					}}
+					onMouseDown={(event) => event.preventDefault()}
+					onKeyDown={(event) => {
+						if (event.key === "F2" && !atelier.readOnly) {
+							event.preventDefault();
+							beginTitleEdit();
+						}
+					}}
+					aria-keyshortcuts={!atelier.readOnly ? "F2" : undefined}
+					aria-describedby={wide ? filesDescriptionId : undefined}
+					data-attr="history-view-checkpoint"
+					className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 pr-18 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
+						isViewing ? "" : "hover:bg-bg-hover-strong"
+					}`}
+				>
 					<span
-						className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-[11px] text-history-secondary"
-						aria-label={`${commentCount || conversations.length} ${(commentCount || conversations.length) === 1 ? "comment" : "comments"}`}
+						className={`flex h-5 w-4 shrink-0 items-center justify-center ${
+							isViewing ? "text-accent" : "text-history-secondary"
+						}`}
 					>
-						<MessageSquare aria-hidden="true" className="size-3" />
-						{commentCount || conversations.length}
+						<FilledFlag />
 					</span>
-				) : null}
-			</button>
-			{!isViewing && !atelier.readOnly ? (
+					<span
+						className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
+					>
+						<span
+							data-checkpoint-title=""
+							className={`group/title inline-flex min-w-0 items-center gap-1 truncate text-[13px] leading-4 font-semibold text-fg ${atelier.readOnly ? "" : "cursor-text"}`}
+						>
+							{conversationTitle || label}
+							{!atelier.readOnly ? (
+								<Pencil
+									aria-hidden="true"
+									className="size-3 shrink-0 text-history-secondary opacity-0 group-hover/title:opacity-100"
+								/>
+							) : null}
+						</span>
+						<span
+							className={`block text-[11.5px] leading-4 ${isViewing ? "text-history-selected-secondary" : "text-history-secondary"}`}
+						>
+							<time
+								dateTime={checkpoint.created_at}
+								title={checkpoint.created_at}
+							>
+								{formatCheckpointRelativeTime(checkpoint.created_at)}
+							</time>
+							{fileChange
+								? ` · ${FILE_CHANGE_LABEL[fileChange.changeKind]}`
+								: null}
+						</span>
+					</span>
+					{wide ? (
+						<CheckpointFilePreview
+							descriptionId={filesDescriptionId}
+							atelier={atelier}
+							result={preview}
+							activeFileId={activeFileId}
+							onVisible={onPreviewVisible}
+						/>
+					) : null}
+					{hasDraft ? (
+						<span className="ml-auto shrink-0 pl-2 text-[11px] font-medium text-accent">
+							Draft
+						</span>
+					) : null}
+					{commentCount > 0 ? (
+						<span
+							className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-[11px] text-history-secondary"
+							aria-label={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`}
+						>
+							<MessageSquare aria-hidden="true" className="size-3" />
+							{commentCount}
+						</span>
+					) : null}
+				</button>
+			)}
+			{!isViewing && !editingTitle && !atelier.readOnly ? (
 				<button
 					type="button"
 					aria-label="Comment on checkpoint"
 					onClick={() => {
-						setShowNew(true);
 						setFocusNewRequest((value) => value + 1);
 						openCheckpoint();
 					}}
-					className="absolute right-2 top-2 rounded-control px-1.5 py-0.5 text-[11px] font-medium text-accent opacity-0 pointer-events-none hover:bg-accent-subtle group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-control border border-history-input-border bg-bg px-2 py-1 text-[11px] font-semibold text-fg shadow-sm opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
-					Comment
+					<MessageSquarePlus aria-hidden="true" className="size-3.5" /> Comment
 				</button>
 			) : null}
 			<AnimatedHistoryDisclosure open={isViewing}>
@@ -887,14 +1006,8 @@ function CheckpointItem({
 					readOnly={atelier.readOnly}
 					drafts={drafts}
 					setDrafts={setDrafts}
-					showNew={showNew}
-					setShowNew={setShowNew}
 					focusNewRequest={focusNewRequest}
 					onNewComposerFocused={() => setFocusNewRequest(0)}
-					requestFocusNew={() => {
-						setShowNew(true);
-						setFocusNewRequest((value) => value + 1);
-					}}
 					open={isViewing}
 				/>
 			</AnimatedHistoryDisclosure>

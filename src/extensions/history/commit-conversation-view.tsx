@@ -6,7 +6,7 @@ import {
 	type KeyboardEvent,
 	type SetStateAction,
 } from "react";
-import { MessageSquare, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { useLix, useQueryResult } from "@/lib/lix-react";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import {
@@ -19,14 +19,12 @@ import {
 } from "./commit-conversations";
 
 export type ConversationDrafts = {
-	title: string;
 	text: string;
 	replies: Record<string, string>;
 };
 
 export function hasConversationDraft(drafts: ConversationDrafts): boolean {
 	return Boolean(
-		drafts.title.trim() ||
 		drafts.text.trim() ||
 		Object.values(drafts.replies).some((text) => text.trim()),
 	);
@@ -162,11 +160,15 @@ function Thread({
 	readOnly,
 	draft,
 	onDraftChange,
+	focusRequest,
+	onFocusHandled,
 }: {
 	conversation: CommitConversation;
 	readOnly: boolean;
 	draft: string;
 	onDraftChange: (text: string) => void;
+	focusRequest: number;
+	onFocusHandled: () => void;
 }) {
 	const lix = useLix();
 	const [expanded, setExpanded] = useState(false);
@@ -185,17 +187,9 @@ function Thread({
 		...new Set(hidden.map((comment) => comment.author_name || "Contributor")),
 	];
 	return (
-		<article className="border-t border-accent-border pt-3 first:border-t-0 first:pt-0">
-			<div className="flex items-center justify-between gap-2">
-				<h4 className="min-w-0 truncate text-[12px] font-semibold text-fg">
-					{conversation.title || "Conversation"}
-				</h4>
-				{result.status === "success" ? (
-					<span className="shrink-0 text-[11px] text-history-selected-secondary">
-						{comments.length} {comments.length === 1 ? "comment" : "comments"}
-					</span>
-				) : null}
-			</div>
+		<article
+			className={comments.length ? "border-t border-accent-border pt-3" : ""}
+		>
 			{result.status === "pending" ? (
 				<p
 					role="status"
@@ -216,7 +210,7 @@ function Thread({
 					</button>
 				</p>
 			) : null}
-			<div className="mt-3 space-y-3.5">
+			<div className={comments.length ? "space-y-3.5" : ""}>
 				{visible.map((index) => {
 					const comment = comments[index];
 					if (!comment) return null;
@@ -292,10 +286,16 @@ function Thread({
 			</div>
 			{!readOnly && result.status === "success" ? (
 				<Composer
-					label={`Reply to ${conversation.title || "conversation"}`}
-					placeholder="Reply…"
+					label={
+						comments.length
+							? `Reply to ${conversation.title || "checkpoint"}`
+							: "New comment"
+					}
+					placeholder={comments.length ? "Reply…" : "Comment"}
 					value={draft}
 					onChange={onDraftChange}
+					focusRequest={focusRequest}
+					onFocusHandled={onFocusHandled}
 					onSubmit={async (text) => {
 						await replyToConversation(lix, conversation.id, text);
 						setRetryKey((key) => key + 1);
@@ -314,11 +314,8 @@ export function CommitConversationView({
 	readOnly,
 	drafts,
 	setDrafts,
-	showNew,
-	setShowNew,
 	focusNewRequest,
 	onNewComposerFocused,
-	requestFocusNew,
 	open,
 }: {
 	commitId: string;
@@ -328,11 +325,8 @@ export function CommitConversationView({
 	readOnly: boolean;
 	drafts: ConversationDrafts;
 	setDrafts: Dispatch<SetStateAction<ConversationDrafts>>;
-	showNew: boolean;
-	setShowNew: (show: boolean) => void;
 	focusNewRequest: number;
 	onNewComposerFocused: () => void;
-	requestFocusNew: () => void;
 	open: boolean;
 }) {
 	const lix = useLix();
@@ -342,15 +336,14 @@ export function CommitConversationView({
 			(document.activeElement as HTMLElement).blur();
 	}, [open]);
 	async function create(text: string) {
-		await createCommitConversation(lix, commitId, drafts.title, text);
+		await createCommitConversation(lix, commitId, text);
 		onRefresh();
-		setDrafts((current) => ({ ...current, title: "", text: "" }));
-		setShowNew(false);
+		setDrafts((current) => ({ ...current, text: "" }));
 	}
 	return (
 		<div
 			ref={rootRef}
-			className="mx-1.5 mb-2 border-t border-accent-border px-3 pb-2 pt-3"
+			className="mx-1.5 mb-2 px-3 pb-2 pt-2"
 			aria-label="Commit conversations"
 		>
 			{status === "error" ? (
@@ -371,7 +364,7 @@ export function CommitConversationView({
 			) : null}
 			{conversations.length > 0 ? (
 				<div className="space-y-4">
-					{conversations.map((conversation) => (
+					{conversations.map((conversation, index) => (
 						<Thread
 							key={conversation.id}
 							conversation={conversation}
@@ -383,77 +376,22 @@ export function CommitConversationView({
 									replies: { ...current.replies, [conversation.id]: text },
 								}))
 							}
+							focusRequest={index === 0 ? focusNewRequest : 0}
+							onFocusHandled={onNewComposerFocused}
 						/>
 					))}
 				</div>
 			) : null}
-			{!readOnly && status === "success" ? (
-				<div
-					className={
-						conversations.length
-							? "mt-4 border-t border-accent-border pt-2"
-							: ""
-					}
-				>
-					{showNew ? (
-						<>
-							<input
-								aria-label="Conversation title"
-								value={drafts.title}
-								onChange={(event) =>
-									setDrafts((current) => ({
-										...current,
-										title: event.target.value,
-									}))
-								}
-								placeholder="Title (optional)"
-								className="w-full rounded-control border border-history-input-border px-2 py-1.5 text-[12px] text-fg outline-none focus:ring-2 focus:ring-ring placeholder:text-history-selected-secondary"
-								style={REPLY_FIELD_BACKGROUND}
-							/>
-							<Composer
-								label="New comment"
-								placeholder="Comment on this checkpoint…"
-								value={drafts.text}
-								onChange={(text) =>
-									setDrafts((current) => ({ ...current, text }))
-								}
-								onSubmit={create}
-								focusRequest={focusNewRequest}
-								onFocusHandled={onNewComposerFocused}
-								onEscape={() => setShowNew(false)}
-							/>
-							<button
-								type="button"
-								onClick={() => setShowNew(false)}
-								className="mt-1 text-[11px] text-history-selected-secondary hover:underline"
-							>
-								{hasConversationDraft(drafts) ? "Keep draft" : "Cancel"}
-							</button>
-						</>
-					) : conversations.length ? (
-						<button
-							type="button"
-							onClick={requestFocusNew}
-							className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-accent hover:underline"
-						>
-							<MessageSquare aria-hidden="true" className="size-3.5" />{" "}
-							{drafts.title || drafts.text
-								? "Continue draft"
-								: "New conversation"}
-						</button>
-					) : (
-						<button
-							type="button"
-							onClick={requestFocusNew}
-							className="w-full rounded-control border border-history-input-border px-2 py-1.5 text-left text-[12.5px] text-history-selected-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							style={REPLY_FIELD_BACKGROUND}
-						>
-							{drafts.title || drafts.text
-								? "Continue draft…"
-								: "Comment on this checkpoint…"}
-						</button>
-					)}
-				</div>
+			{!readOnly && status === "success" && conversations.length === 0 ? (
+				<Composer
+					label="New comment"
+					placeholder="Comment on this checkpoint…"
+					value={drafts.text}
+					onChange={(text) => setDrafts((current) => ({ ...current, text }))}
+					onSubmit={create}
+					focusRequest={focusNewRequest}
+					onFocusHandled={onNewComposerFocused}
+				/>
 			) : null}
 		</div>
 	);

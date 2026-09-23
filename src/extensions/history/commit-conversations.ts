@@ -141,10 +141,42 @@ export function commentParagraphs(body: unknown): string[] {
 	});
 }
 
+/** A useful immediate label until the reader chooses a checkpoint title. */
+export function titleFromFirstComment(text: string): string {
+	const firstLine =
+		text.trim().split(/\r?\n/, 1)[0]?.replace(/\s+/g, " ").trim() ?? "";
+	if (firstLine.length <= 60) return firstLine;
+	const prefix = firstLine.slice(0, 59);
+	const lastSpace = prefix.lastIndexOf(" ");
+	return `${(lastSpace > 30 ? prefix.slice(0, lastSpace) : prefix).trimEnd()}…`;
+}
+
+export async function setCommitConversationTitle(
+	lix: Lix,
+	commitId: string,
+	conversationId: string | null,
+	title: string,
+): Promise<void> {
+	const normalizedTitle = title.trim() || null;
+	if (conversationId) {
+		const result = await lix.execute(
+			"UPDATE lix_conversation SET title = $1 WHERE id = $2 AND target = lix_row_ref('lix_commit', NULL, $3) AND lixcol_global = true RETURNING id",
+			[normalizedTitle, conversationId, commitId],
+		);
+		if (result.rows.length === 0)
+			throw new Error("Conversation no longer exists.");
+		return;
+	}
+	if (!normalizedTitle) return;
+	await lix.execute(
+		"INSERT INTO lix_conversation (id, target, title, lixcol_global) VALUES ($1, lix_row_ref('lix_commit', NULL, $2), $3, true)",
+		[crypto.randomUUID(), commitId, normalizedTitle],
+	);
+}
+
 export async function createCommitConversation(
 	lix: Lix,
 	commitId: string,
-	title: string,
 	text: string,
 ): Promise<void> {
 	const conversationId = crypto.randomUUID();
@@ -152,7 +184,7 @@ export async function createCommitConversation(
 	try {
 		await transaction.execute(
 			"INSERT INTO lix_conversation (id, target, title, lixcol_global) VALUES ($1, lix_row_ref('lix_commit', NULL, $2), $3, true)",
-			[conversationId, commitId, title.trim() || null],
+			[conversationId, commitId, titleFromFirstComment(text)],
 		);
 		await transaction.execute(
 			"INSERT INTO lix_comment (id, conversation_id, body, lixcol_global) VALUES ($1, $2, $3::jsonb, true)",

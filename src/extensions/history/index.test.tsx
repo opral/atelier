@@ -856,12 +856,8 @@ describe("checkpoint conversation flows", () => {
 		);
 		const view = render(renderHistory(first.commitId));
 		try {
-			fireEvent.click(
-				await screen.findByRole("button", {
-					name: "Comment on this checkpoint…",
-				}),
-			);
-			const field = screen.getByRole("textbox", { name: "New comment" });
+			const field = await screen.findByRole("textbox", { name: "New comment" });
+			act(() => field.focus());
 			expect(field).toHaveFocus();
 			fireEvent.change(field, { target: { value: "Remember this thought" } });
 			view.rerender(renderHistory(second.commitId));
@@ -882,7 +878,7 @@ describe("checkpoint conversation flows", () => {
 	test("keeps the first and latest comments visible, then unfolds the whole middle", async () => {
 		const lix = await openLix();
 		const { commitId } = await createCheckpoint(lix);
-		await createCommitConversation(lix, commitId, "Review", "First");
+		await createCommitConversation(lix, commitId, "First");
 		const conversation = (
 			await selectCommitConversations(lix, commitId).execute()
 		)[0]!;
@@ -897,11 +893,61 @@ describe("checkpoint conversation flows", () => {
 			const unfold = await screen.findByRole("button", {
 				name: /Show 3 more comments/,
 			});
-			expect(screen.getByText("First", { exact: true })).toBeVisible();
+			expect(screen.getAllByText("First", { exact: true })[0]).toBeVisible();
 			expect(screen.getByText("Comment 6", { exact: true })).toBeVisible();
 			expect(screen.queryByText("Comment 3", { exact: true })).toBeNull();
 			fireEvent.click(unfold);
 			expect(screen.getByText("Comment 3", { exact: true })).toBeVisible();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("edits a checkpoint title inline without requiring a comment", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		const open = vi.fn(async () => {});
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ open })} />
+			</LixProvider>,
+		);
+		try {
+			fireEvent.click(await screen.findByText("Initial checkpoint"));
+			const title = screen.getByRole("textbox", { name: "Checkpoint title" });
+			expect(open).not.toHaveBeenCalled();
+			expect(screen.queryByRole("textbox", { name: "New comment" })).toBeNull();
+			fireEvent.change(title, { target: { value: "Release ready" } });
+			await act(async () => fireEvent.keyDown(title, { key: "Enter" }));
+			await waitFor(() =>
+				expect(screen.getByText("Release ready")).toBeVisible(),
+			);
+			let conversations = await selectCommitConversations(
+				lix,
+				commitId,
+			).execute();
+			expect(conversations).toHaveLength(1);
+			expect(conversations[0]?.title).toBe("Release ready");
+			expect(screen.queryByLabelText("1 comment")).toBeNull();
+
+			fireEvent.click(screen.getByText("Release ready"));
+			const editing = screen.getByRole("textbox", { name: "Checkpoint title" });
+			fireEvent.change(editing, { target: { value: "Discarded edit" } });
+			fireEvent.keyDown(editing, { key: "Escape" });
+			expect(screen.getByText("Release ready")).toBeVisible();
+			fireEvent.click(screen.getByText("Release ready"));
+			const clearing = screen.getByRole("textbox", {
+				name: "Checkpoint title",
+			});
+			fireEvent.change(clearing, { target: { value: "" } });
+			await act(async () => fireEvent.keyDown(clearing, { key: "Enter" }));
+			await waitFor(() =>
+				expect(screen.getByText("Initial checkpoint")).toBeVisible(),
+			);
+			conversations = await selectCommitConversations(lix, commitId).execute();
+			expect(conversations).toHaveLength(1);
+			expect(conversations[0]?.title).toBeNull();
 		} finally {
 			view.unmount();
 			await lix.close();

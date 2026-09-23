@@ -116,6 +116,21 @@ describe("selectFilesystemEntries", () => {
 });
 
 describe("checkpoint queries", () => {
+	test("an empty checkpoint filter returns no file changes", async () => {
+		const lix = await openLix();
+		try {
+			expect(
+				await selectFileCheckpointChanges(
+					lix,
+					fakeUuid("no-checkpoints"),
+					[],
+				).execute(),
+			).toEqual([]);
+		} finally {
+			await lix.close();
+		}
+	});
+
 	test("uses a dirty fork's actual baseline for review and checkpoint history", async () => {
 		const lix = await openLix();
 		try {
