@@ -2292,6 +2292,7 @@ function LayoutShellLoadedContentResolved({
 			focus = true,
 			pending = false,
 			documentOrigin = "existing",
+			navigationCause = "foreground",
 			newTab,
 		}: {
 			area: Area;
@@ -2302,6 +2303,7 @@ function LayoutShellLoadedContentResolved({
 			focus?: boolean;
 			pending?: boolean;
 			documentOrigin?: "existing" | "new";
+			navigationCause?: "foreground" | "route" | "restoration";
 			newTab?: boolean;
 		}) => {
 			const handler =
@@ -2311,6 +2313,7 @@ function LayoutShellLoadedContentResolved({
 				type: "document_open_attempted",
 				fileId,
 				filePath,
+				navigationCause,
 				documentOrigin,
 				viewKind: kind,
 				supported: Boolean(handler),
@@ -2384,6 +2387,7 @@ function LayoutShellLoadedContentResolved({
 						fileId: doc.fileId,
 						filePath: doc.filePath,
 						focus: doc.wasActive,
+						navigationCause: "restoration",
 						newTab: true,
 					});
 				}
@@ -2570,6 +2574,7 @@ function LayoutShellLoadedContentResolved({
 			focus,
 			pending,
 			documentOrigin,
+			navigationCause,
 			newTab,
 			signal,
 		}: {
@@ -2579,6 +2584,7 @@ function LayoutShellLoadedContentResolved({
 			focus?: boolean;
 			pending?: boolean;
 			documentOrigin?: "existing" | "new";
+			navigationCause?: "foreground" | "route" | "restoration";
 			newTab?: boolean;
 			signal?: AbortSignal;
 		}) => {
@@ -2615,6 +2621,7 @@ function LayoutShellLoadedContentResolved({
 				focus,
 				pending,
 				documentOrigin,
+				navigationCause,
 				newTab,
 			});
 			return resolvedFile.path;
@@ -2669,6 +2676,7 @@ function LayoutShellLoadedContentResolved({
 					state,
 					focus: options.focus ?? true,
 					documentOrigin: options.documentOrigin ?? "existing",
+					navigationCause: options.navigationCause,
 					newTab: options.newTab,
 				});
 				return historicalFile.path;
@@ -2681,6 +2689,7 @@ function LayoutShellLoadedContentResolved({
 				state,
 				focus: options.focus ?? true,
 				documentOrigin: options.documentOrigin ?? "existing",
+				navigationCause: options.navigationCause,
 				newTab: options.newTab,
 			});
 		},
