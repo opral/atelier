@@ -42,14 +42,23 @@ export function DeclarativeExtension({
 		state: ExtensionState;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
-	const documentPath = typeof view.state.filePath === "string"
-		? view.state.filePath
-		: undefined;
+	const documentPath =
+		typeof view.state.filePath === "string" ? view.state.filePath : undefined;
 	const documentAtelier = useMemo(
-		() => documentPath && atelier.scopeDocumentLix
-			? { ...atelier, lix: atelier.scopeDocumentLix(documentPath, atelier.lix) }
-			: atelier,
-		[atelier, documentPath],
+		() =>
+			documentPath && atelier.scopeDocumentLix
+				? {
+						...atelier,
+						lix: atelier.scopeDocumentLix(
+							documentPath,
+							typeof view.state.fileId === "string"
+								? view.state.fileId
+								: undefined,
+							atelier.lix,
+						),
+					}
+				: atelier,
+		[atelier, documentPath, view.state.fileId],
 	);
 	const destination: AtelierLocation =
 		typeof view.state.filePath === "string" &&
@@ -216,6 +225,11 @@ export function DeclarativeExtension({
 								<DocumentLoaded
 									opening={opening}
 									atelier={atelier}
+									fileId={
+										typeof view.state.fileId === "string"
+											? view.state.fileId
+											: undefined
+									}
 									filePath={view.state.filePath}
 									viewKind={definition.kind}
 								/>
@@ -245,11 +259,13 @@ function DocumentShown({ onShown }: { readonly onShown?: () => void }) {
 function DocumentLoaded({
 	opening,
 	atelier,
+	fileId,
 	filePath,
 	viewKind,
 }: {
 	readonly opening: { startedAt: number; reported: boolean };
 	readonly atelier: ExtensionRuntime;
+	readonly fileId: string | undefined;
 	readonly filePath: string;
 	readonly viewKind: string;
 }) {
@@ -259,6 +275,7 @@ function DocumentLoaded({
 		try {
 			atelier.events?.emit({
 				type: "document_loaded",
+				fileId,
 				filePath,
 				viewKind,
 				durationMs: performance.now() - opening.startedAt,
@@ -266,6 +283,6 @@ function DocumentLoaded({
 		} catch {
 			/* Telemetry must not interrupt successful document loading. */
 		}
-	}, [atelier.events, opening, filePath, viewKind]);
+	}, [atelier.events, opening, fileId, filePath, viewKind]);
 	return null;
 }

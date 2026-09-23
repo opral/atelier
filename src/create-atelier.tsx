@@ -314,6 +314,7 @@ function LiveAtelier(props: AtelierProps) {
 			if (file)
 				await instance.documents.open(location.path, {
 					signal: controller.signal,
+					navigationCause: "route",
 				});
 			else {
 				const directory = await qb(instance.lix)

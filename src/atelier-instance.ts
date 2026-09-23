@@ -39,7 +39,11 @@ export type AtelierMainAreaOptions = {
 export type AtelierOptions = {
 	readonly lix: Lix;
 	/** Scope one document's Lix operations across asynchronous view work. */
-	readonly scopeDocumentLix?: (path: string, lix: Lix) => Lix;
+	readonly scopeDocumentLix?: (
+		path: string,
+		fileId: string | undefined,
+		lix: Lix,
+	) => Lix;
 	/** Optional host bridge consumed by Atelier's bundled Debug extension. */
 	readonly debug?: AtelierExtensionRuntime["debug"];
 	/**
