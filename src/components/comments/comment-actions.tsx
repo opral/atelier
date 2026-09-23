@@ -11,11 +11,13 @@ import "./comments.css";
  * A comment's "…": on the reader's own comments, a small icon at the end of
  * its header, shown while the comment is pointed at or has focus (like
  * "Open conversation"), so a thread at rest looks as designed. It opens a
- * menu with Delete, which asks once more in place: "Delete? Delete Cancel".
- * No dialog: the question stays where the comment is.
+ * menu whose "Delete comment" deletes at once: no question in between.
  *
- * Arrow keys move through the menu, Esc closes it and gives the keyboard
- * back to the "…" (and goes no further: the card, the checkpoint stay open).
+ * Only a fresh press acts: a click, or an Enter or Space pressed on the
+ * item. The Enter that opened the menu, still held and repeating, lands on
+ * the item it focused and must not delete. Arrow keys move through the
+ * menu, Esc closes it and gives the keyboard back to the "…" (and goes no
+ * further: the card, the checkpoint stay open).
  */
 export function CommentActions({
 	onDelete,
@@ -23,23 +25,24 @@ export function CommentActions({
 	/** Resolves once the comment is gone; a rejection is said in the menu. */
 	readonly onDelete: () => Promise<void>;
 }) {
-	const [menu, setMenu] = useState<"closed" | "menu" | "confirm">("closed");
+	const [open, setOpen] = useState(false);
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const menuId = useId();
-	const open = menu !== "closed";
+	// Set by a press that began on an item since the menu opened.
+	const armedRef = useRef(false);
 
-	// The first item takes the keyboard as the menu opens and as it turns
-	// into the question: Delete, where the Enter that asked it was pressed.
+	// The first item takes the keyboard as the menu opens.
 	useEffect(() => {
 		if (!open) return;
+		armedRef.current = false;
 		menuRef.current
 			?.querySelector<HTMLElement>("[role=menuitem]")
 			?.focus({ preventScroll: true });
-	}, [menu, open]);
+	}, [open]);
 
 	// A press anywhere else closes it, as a click away closes any menu.
 	useEffect(() => {
@@ -58,20 +61,21 @@ export function CommentActions({
 	}, [open]);
 
 	function close(refocus: boolean) {
-		setMenu("closed");
+		setOpen(false);
 		setError(null);
 		if (refocus) triggerRef.current?.focus({ preventScroll: true });
 	}
 
-	async function confirm() {
-		if (pending) return;
+	async function remove() {
+		if (!armedRef.current || pending) return;
+		armedRef.current = false;
 		setPending(true);
 		setError(null);
 		try {
 			await onDelete();
 			// The row goes with the comment; if it is still here (a slow read),
 			// the menu at least is not.
-			setMenu("closed");
+			setOpen(false);
 		} catch (cause) {
 			console.error(cause);
 			setError("Could not delete the comment. Try again.");
@@ -88,9 +92,10 @@ export function CommentActions({
 			close(true);
 			return;
 		}
-		// A held Enter must not answer the question it just asked.
-		if (event.key === "Enter" && event.repeat) {
-			event.preventDefault();
+		if (event.key === "Enter" || event.key === " ") {
+			// A held key repeating is not a press: it neither acts nor arms.
+			if (event.repeat) event.preventDefault();
+			else armedRef.current = true;
 			return;
 		}
 		if (event.key === "Tab") {
@@ -135,11 +140,11 @@ export function CommentActions({
 				aria-controls={open ? menuId : undefined}
 				data-attr="comment-actions"
 				className="comment-action"
-				onClick={() => (open ? close(false) : setMenu("menu"))}
+				onClick={() => (open ? close(false) : setOpen(true))}
 				onKeyDown={(event) => {
 					if (event.key === "ArrowDown" && !open) {
 						event.preventDefault();
-						setMenu("menu");
+						setOpen(true);
 					}
 				}}
 			>
@@ -177,62 +182,35 @@ export function CommentActions({
 						close(false);
 					}}
 				>
-					{menu === "menu" ? (
-						<button
-							type="button"
-							role="menuitem"
-							tabIndex={-1}
-							data-attr="comment-delete"
-							className="comment-menu-item"
-							data-tone="danger"
-							onClick={() => setMenu("confirm")}
+					<button
+						type="button"
+						role="menuitem"
+						tabIndex={-1}
+						data-attr="comment-delete"
+						aria-disabled={pending || undefined}
+						className="comment-menu-item"
+						data-tone="danger"
+						onPointerDown={() => {
+							armedRef.current = true;
+						}}
+						onClick={() => void remove()}
+					>
+						<svg
+							aria-hidden="true"
+							viewBox="0 0 24 24"
+							className="size-3.5 shrink-0"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth={2}
+							strokeLinecap="round"
+							strokeLinejoin="round"
 						>
-							<svg
-								aria-hidden="true"
-								viewBox="0 0 24 24"
-								className="size-3.5 shrink-0"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth={2}
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<path d="M3 6h18" />
-								<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-								<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-							</svg>
-							Delete comment
-						</button>
-					) : (
-						<div className="comment-menu-confirm">
-							<span id={`${menuId}-question`} className="comment-menu-question">
-								Delete?
-							</span>
-							<button
-								type="button"
-								role="menuitem"
-								tabIndex={-1}
-								data-attr="comment-delete-confirm"
-								aria-describedby={`${menuId}-question`}
-								aria-disabled={pending || undefined}
-								className="comment-menu-item"
-								data-tone="danger"
-								onClick={() => void confirm()}
-							>
-								Delete
-							</button>
-							<button
-								type="button"
-								role="menuitem"
-								tabIndex={-1}
-								data-attr="comment-delete-cancel"
-								className="comment-menu-item"
-								onClick={() => close(true)}
-							>
-								Cancel
-							</button>
-						</div>
-					)}
+							<path d="M3 6h18" />
+							<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+							<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+						</svg>
+						Delete comment
+					</button>
 					{error ? (
 						<p role="alert" className="comment-menu-error">
 							{error}

@@ -334,23 +334,6 @@
 		cursor: progress;
 		opacity: 0.6;
 	}
-	/* The Delete item, asked about in its own place. */
-	.comment-menu-confirm {
-		display: flex;
-		align-items: center;
-		gap: 2px;
-	}
-	.comment-menu-question {
-		padding: 0 6px 0 8px;
-		color: var(--atelier-fg-muted);
-		font-size: 12px;
-		font-weight: 600;
-		line-height: 28px;
-		white-space: nowrap;
-	}
-	.comment-menu-confirm > .comment-menu-item {
-		padding: 0 7px;
-	}
 	.comment-menu-error {
 		max-width: 220px;
 		margin: 2px 8px 4px;

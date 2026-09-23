@@ -208,17 +208,21 @@ describe("CommentThread delete", () => {
 		);
 	}
 
+	/** A fresh Enter on the item: its keydown, then the click it makes. */
+	async function pressEnter(item: HTMLElement, repeat = false) {
+		fireEvent.keyDown(item, { key: "Enter", repeat });
+		await act(async () => {
+			fireEvent.click(item);
+		});
+	}
+
 	async function deleteByKeyboard(text: string) {
 		const trigger = actionsIn(text)!;
 		act(() => trigger.focus());
-		fireEvent.click(trigger);
-		fireEvent.click(screen.getByRole("menuitem", { name: /Delete comment/ }));
-		expect(document.activeElement).toBe(
-			screen.getByRole("menuitem", { name: "Delete" }),
-		);
-		await act(async () => {
-			fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-		});
+		fireEvent.keyDown(trigger, { key: "ArrowDown" });
+		const item = screen.getByRole("menuitem", { name: /Delete comment/ });
+		expect(document.activeElement).toBe(item);
+		await pressEnter(item);
 	}
 
 	test("only the reader's own comments offer Delete, and only where writing is allowed", () => {
@@ -250,7 +254,7 @@ describe("CommentThread delete", () => {
 		);
 	});
 
-	test("the menu asks before deleting; Cancel deletes nothing", async () => {
+	test("Delete comment deletes at once, with no question in between", async () => {
 		const onDelete = vi.fn(async () => {});
 		render(
 			<CommentThread
@@ -264,16 +268,41 @@ describe("CommentThread delete", () => {
 		expect(trigger).toHaveAttribute("aria-expanded", "true");
 		const item = screen.getByRole("menuitem", { name: /Delete comment/ });
 		expect(document.activeElement).toBe(item);
-		fireEvent.click(item);
-		expect(screen.getByText("Delete?")).toBeInTheDocument();
-		expect(onDelete).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+		fireEvent.pointerDown(item);
+		await act(async () => {
+			fireEvent.click(item);
+		});
+		expect(onDelete).toHaveBeenCalledTimes(1);
 		expect(screen.queryByRole("menu")).toBeNull();
-		expect(document.activeElement).toBe(trigger);
-		expect(onDelete).not.toHaveBeenCalled();
 	});
 
-	test("arrow keys move through the question; Esc closes the menu and goes no further", () => {
+	test("the Enter that opened the menu, held and repeating, does not delete", async () => {
+		const onDelete = vi.fn(async () => {});
+		render(
+			<CommentThread
+				comments={[own("c1", "Mine")]}
+				accountId={ME}
+				onDelete={onDelete}
+			/>,
+		);
+		const trigger = actionsIn("Mine")!;
+		act(() => trigger.focus());
+		fireEvent.keyDown(trigger, { key: "Enter" });
+		fireEvent.click(trigger);
+		const item = screen.getByRole("menuitem", { name: /Delete comment/ });
+		expect(document.activeElement).toBe(item);
+		// The repeat lands on the item it focused: not a press.
+		expect(fireEvent.keyDown(item, { key: "Enter", repeat: true })).toBe(false);
+		await act(async () => {
+			fireEvent.click(item);
+		});
+		expect(onDelete).not.toHaveBeenCalled();
+		// A fresh Enter deletes.
+		await pressEnter(item);
+		expect(onDelete).toHaveBeenCalledTimes(1);
+	});
+
+	test("Esc closes the menu and goes no further", () => {
 		render(
 			<CommentThread
 				comments={[own("c1", "Mine")]}
@@ -287,16 +316,12 @@ describe("CommentThread delete", () => {
 			const trigger = actionsIn("Mine")!;
 			act(() => trigger.focus());
 			fireEvent.keyDown(trigger, { key: "ArrowDown" });
-			fireEvent.click(screen.getByRole("menuitem", { name: /Delete comment/ }));
 			const menu = screen.getByRole("menu");
-			fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
-			expect(document.activeElement).toBe(
-				screen.getByRole("menuitem", { name: "Cancel" }),
-			);
-			fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
-			expect(document.activeElement).toBe(
-				screen.getByRole("menuitem", { name: "Delete" }),
-			);
+			const item = screen.getByRole("menuitem", { name: /Delete comment/ });
+			expect(document.activeElement).toBe(item);
+			// One item: the arrows keep it.
+			fireEvent.keyDown(item, { key: "ArrowDown" });
+			expect(document.activeElement).toBe(item);
 			fireEvent.keyDown(menu, { key: "Escape" });
 			expect(screen.queryByRole("menu")).toBeNull();
 			expect(document.activeElement).toBe(trigger);
@@ -351,10 +376,9 @@ describe("CommentThread delete", () => {
 				/>,
 			);
 			fireEvent.click(actionsIn("Mine")!);
-			fireEvent.click(screen.getByRole("menuitem", { name: /Delete comment/ }));
-			await act(async () => {
-				fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-			});
+			await pressEnter(
+				screen.getByRole("menuitem", { name: /Delete comment/ }),
+			);
 			expect(screen.getByRole("alert")).toHaveTextContent(
 				"Could not delete the comment.",
 			);

@@ -1138,11 +1138,12 @@ describe("checkpoint conversation flows", () => {
 			fireEvent.click(
 				within(row).getByRole("button", { name: "Comment actions" }),
 			);
-			fireEvent.click(
-				within(row).getByRole("menuitem", { name: /Delete comment/ }),
-			);
+			const item = within(row).getByRole("menuitem", {
+				name: /Delete comment/,
+			});
+			fireEvent.pointerDown(item);
 			await act(async () => {
-				fireEvent.click(within(row).getByRole("menuitem", { name: "Delete" }));
+				fireEvent.click(item);
 			});
 			await waitFor(() =>
 				expect(screen.queryByRole("list", { name: "Comments" })).toBeNull(),
