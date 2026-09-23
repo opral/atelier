@@ -136,10 +136,11 @@ export function FormattingToolbar({
 	const displayedFormatState = frontmatterEditing
 		? initialFormatState
 		: formatState;
-	const controlsDisabled = disabled || !editor || frontmatterEditing;
+	const controlsDisabled =
+		disabled || !editor || editor.isDestroyed || frontmatterEditing;
 
 	useEffect(() => {
-		if (!editor) {
+		if (!editor || editor.isDestroyed) {
 			setFrontmatterEditing(false);
 			return;
 		}
@@ -269,7 +270,7 @@ export function FormattingToolbar({
 
 	// Mod-K in the editor opens the same popover the Link button does.
 	useEffect(() => {
-		if (!editor || controlsDisabled) return;
+		if (!editor || editor.isDestroyed || controlsDisabled) return;
 		const dom = editor.view.dom;
 		const open = () => setLinkOpen(true);
 		dom.addEventListener("atelier-markdown-link", open);
