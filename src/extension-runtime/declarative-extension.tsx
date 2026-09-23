@@ -42,6 +42,15 @@ export function DeclarativeExtension({
 		state: ExtensionState;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
+	const documentPath = typeof view.state.filePath === "string"
+		? view.state.filePath
+		: undefined;
+	const documentAtelier = useMemo(
+		() => documentPath && atelier.scopeDocumentLix
+			? { ...atelier, lix: atelier.scopeDocumentLix(documentPath, atelier.lix) }
+			: atelier,
+		[atelier, documentPath],
+	);
 	const destination: AtelierLocation =
 		typeof view.state.filePath === "string" &&
 		!["beforeCommitId", "afterCommitId", "sourceCommitId"].some(
@@ -128,7 +137,7 @@ export function DeclarativeExtension({
 					controller = request;
 					try {
 						const next = await definition.load!({
-							lix: atelier.lix,
+							lix: documentAtelier.lix,
 							location,
 							signal: request.signal,
 						});
@@ -150,7 +159,7 @@ export function DeclarativeExtension({
 		// observer's first frame. That initial frame starts the first load; starting
 		// another load here would fetch the same content twice. Changes during a
 		// fetch coalesce into one follow-up without discarding the completed read.
-		const events = atelier.lix.observe(
+		const events = documentAtelier.lix.observe(
 			"SELECT lix_active_branch_commit_id() AS commit_id",
 		);
 		void (async () => {
@@ -173,7 +182,7 @@ export function DeclarativeExtension({
 			clearTimeout(timer);
 			void events.return?.();
 		};
-	}, [atelier.lix, definition, fileKey, key, location]);
+	}, [documentAtelier.lix, definition, fileKey, key, location]);
 
 	const Component = definition.Component!;
 	const settled =
@@ -183,7 +192,7 @@ export function DeclarativeExtension({
 	return (
 		<AtelierErrorBoundary>
 			<Suspense fallback={<DocumentLoading />}>
-				<LixProvider lix={atelier.lix}>
+				<LixProvider lix={documentAtelier.lix}>
 					{error && data !== undefined && !shown?.held ? (
 						<div role="alert">
 							Could not refresh {definition.label}: {error.message}
@@ -198,7 +207,7 @@ export function DeclarativeExtension({
 						<>
 							<Component
 								data={data ?? null}
-								atelier={atelier}
+								atelier={documentAtelier}
 								view={shown?.view ?? view}
 							/>
 							{data !== undefined &&

@@ -374,6 +374,7 @@ export type AtelierDocumentLinks = {
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
+	readonly scopeDocumentLix?: (path: string, lix: Lix) => Lix;
 	/** The host's file URLs, when it has any; see `AtelierDocumentLinks`. */
 	readonly documentLinks?: AtelierDocumentLinks;
 	/**

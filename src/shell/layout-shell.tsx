@@ -4662,6 +4662,9 @@ function LayoutShellLoadedContentResolved({
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
+			...(configuration.scopeDocumentLix !== undefined
+				? { scopeDocumentLix: configuration.scopeDocumentLix }
+				: {}),
 			readOnly: configuration.readOnly ?? false,
 			...(configuration.debug !== undefined
 				? { debug: configuration.debug }
@@ -4704,6 +4707,7 @@ function LayoutShellLoadedContentResolved({
 			configuration.debug,
 			configuration.documentLinks,
 			configuration.filesView,
+			configuration.scopeDocumentLix,
 			configuration.readOnly,
 			emitEvent,
 			activeBranchId,
