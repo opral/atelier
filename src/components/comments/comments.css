@@ -168,4 +168,24 @@
 	.comment-editor .zettel_list {
 		padding-inline-start: 1.4em;
 	}
+	/* The base reset strips list markers; a numbered list needs its numbers. */
+	.comment-body ul.zettel_list,
+	.comment-editor ul.zettel_list {
+		list-style: disc;
+	}
+	.comment-body ol.zettel_list,
+	.comment-editor ol.zettel_list {
+		list-style: decimal;
+	}
+	/* A comment's headings stay in the comment's scale: a step up, no more. */
+	.comment-body :is(h1, h2, h3, h4, h5, h6).zettel_block,
+	.comment-editor :is(h1, h2, h3, h4, h5, h6).zettel_block {
+		font-size: 1.08em;
+		font-weight: 600;
+		line-height: var(--comment-body-line-height);
+	}
+	/* A kept blank paragraph is a visible line, as it was in the field. */
+	.comment-body p.zettel_block:empty {
+		min-height: var(--comment-body-line-height);
+	}
 }

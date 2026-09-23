@@ -55,8 +55,16 @@ export function trimEmptyBlocks(document: Document): Document {
 	let end = document.blocks.length;
 	while (start < end && isEmpty(document.blocks[start]!)) start++;
 	while (end > start && isEmpty(document.blocks[end - 1]!)) end--;
-	if (start === 0 && end === document.blocks.length) return document;
-	return { ...document, blocks: document.blocks.slice(start, end) };
+	// Inside, a run of blank paragraphs is one paragraph break: that is what
+	// the rendered comment can show.
+	const blocks = document.blocks
+		.slice(start, end)
+		.filter(
+			(block, index, kept) =>
+				!(isEmpty(block) && index > 0 && isEmpty(kept[index - 1]!)),
+		);
+	if (blocks.length === document.blocks.length) return document;
+	return { ...document, blocks };
 }
 
 export function hasCommentText(document: Document | null | undefined): boolean {
@@ -113,6 +121,7 @@ export function Composer({
 	className = "",
 }: ComposerProps) {
 	const fieldRef = useRef<HTMLDivElement>(null);
+	const rootRef = useRef<HTMLDivElement>(null);
 	const editorRef = useRef<LexicalEditor | null>(null);
 	if (!editorRef.current) {
 		editorRef.current = createZettelEditor({
@@ -151,6 +160,7 @@ export function Composer({
 				const serialized = JSON.stringify(document);
 				if (serialized === serializedRef.current) return;
 				serializedRef.current = serialized;
+				setError(null);
 				onChangeRef.current(document);
 			},
 		);
@@ -175,37 +185,52 @@ export function Composer({
 		onFocusHandled?.();
 	}, [editor, focusRequest, onFocusHandled]);
 
+	function replaceDocument(document: Document) {
+		serializedRef.current = JSON.stringify(document);
+		loadDocument(editor, document);
+		onChangeRef.current(document);
+	}
+
 	async function send() {
 		const document = exportDocument(editor);
 		if (!hasCommentText(document) || sending) return;
 		setSending(true);
 		setError(null);
+		// Cleared before the write, so text typed while it is in flight is
+		// the next comment rather than lost when the field clears afterwards.
+		replaceDocument(emptyCommentDocument());
 		try {
 			await onSubmit(trimEmptyBlocks(document));
-			const empty = emptyCommentDocument();
-			serializedRef.current = JSON.stringify(empty);
-			loadDocument(editor, empty);
-			onChangeRef.current(empty);
 			// The reading view keeps the field for a follow-up.
 			if (size === "view") focusEnd(editor, fieldRef.current);
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : String(cause));
+			if (!hasCommentText(exportDocument(editor))) replaceDocument(document);
+			setError(
+				cause instanceof Error && cause.message
+					? `Couldn't send: ${cause.message}`
+					: "Couldn't send. Try again.",
+			);
 		} finally {
 			setSending(false);
 		}
 	}
 
 	function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+		const inField = fieldRef.current?.contains(event.target as Node) ?? false;
 		if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+			// Outside the text (the wrapper holds focus after Esc) ⌘↵ does
+			// nothing: it must neither send nor reach the review's Restore.
 			event.preventDefault();
 			event.stopPropagation();
-			void send();
+			if (inField) void send();
 			return;
 		}
-		if (event.key === "Escape" && !event.nativeEvent.isComposing) {
+		if (event.key === "Escape" && inField && !event.nativeEvent.isComposing) {
 			event.preventDefault();
 			event.stopPropagation();
-			fieldRef.current?.blur();
+			// Focus stays on the field's wrapper, which ignores the review's
+			// shortcuts, so a reflexive ⌘↵ after Esc can't restore a file.
+			rootRef.current?.focus({ preventScroll: true });
 			onCancel?.(exportDocument(editor));
 		}
 	}
@@ -215,11 +240,13 @@ export function Composer({
 		const open = focused || hasText;
 		return (
 			<div
+				ref={rootRef}
+				tabIndex={-1}
 				data-review-shortcut-ignore=""
 				data-attr="comment-composer"
 				data-tone={tone}
 				data-size={size}
-				className={`comment-surface flex flex-col gap-1.5 ${className}`}
+				className={`comment-surface flex flex-col outline-none gap-1.5 ${className}`}
 				onKeyDownCapture={onKeyDown}
 			>
 				<div
@@ -253,6 +280,7 @@ export function Composer({
 							aria-label={label}
 							aria-multiline="true"
 							aria-placeholder={placeholder}
+							aria-keyshortcuts="Meta+Enter Control+Enter"
 							contentEditable
 							suppressContentEditableWarning
 							spellCheck
@@ -293,11 +321,13 @@ export function Composer({
 	}
 	return (
 		<div
+			ref={rootRef}
+			tabIndex={-1}
 			data-review-shortcut-ignore=""
 			data-attr="comment-composer"
 			data-tone={tone}
 			data-size={size}
-			className={`comment-surface flex flex-col ${
+			className={`comment-surface flex flex-col outline-none ${
 				inDocument ? "gap-3" : "gap-[5px]"
 			} ${className}`}
 			onKeyDownCapture={onKeyDown}
@@ -340,6 +370,7 @@ export function Composer({
 						aria-label={label}
 						aria-multiline="true"
 						aria-placeholder={placeholder}
+						aria-keyshortcuts="Meta+Enter Control+Enter"
 						contentEditable
 						suppressContentEditableWarning
 						spellCheck

@@ -13,8 +13,11 @@ patchedDependencies:
   '@glideapps/glide-data-grid@6.0.3':
     hash: 4caa186a2f62fb20d155a8c8b8f5a0656d0ec60a3b1d491a03192a29cbb7d56c
     path: patches/@glideapps__glide-data-grid@6.0.3.patch
+  '@opral/zettel-html@1.1.0':
+    hash: 599a2254ca356d62b49287421c7d941adc5f49d5e42347396c8a27a1f400da3b
+    path: patches/@opral__zettel-html@1.1.0.patch
   '@opral/zettel-lexical@1.1.0':
-    hash: f34b6dfc261896c4dcbf8af1dfe70e6b10c2629af9bc58d2902b9d0ea86b4d9f
+    hash: 61a6a965c147b531416d50f44b102ca85598a4d85393e49234a3ac6571f74be5
     path: patches/@opral__zettel-lexical@1.1.0.patch
   '@pierre/trees':
     hash: 9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6
@@ -89,10 +92,10 @@ importers:
         version: 1.1.0
       '@opral/zettel-html':
         specifier: 1.1.0
-        version: 1.1.0
+        version: 1.1.0(patch_hash=599a2254ca356d62b49287421c7d941adc5f49d5e42347396c8a27a1f400da3b)
       '@opral/zettel-lexical':
         specifier: 1.1.0
-        version: 1.1.0(patch_hash=f34b6dfc261896c4dcbf8af1dfe70e6b10c2629af9bc58d2902b9d0ea86b4d9f)(lexical@0.30.0)
+        version: 1.1.0(patch_hash=61a6a965c147b531416d50f44b102ca85598a4d85393e49234a3ac6571f74be5)(lexical@0.30.0)
       '@pierre/trees':
         specifier: 1.0.0-beta.5
         version: 1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
@@ -6318,17 +6321,17 @@ snapshots:
     dependencies:
       ajv: 8.20.0
 
-  '@opral/zettel-html@1.1.0':
+  '@opral/zettel-html@1.1.0(patch_hash=599a2254ca356d62b49287421c7d941adc5f49d5e42347396c8a27a1f400da3b)':
     dependencies:
       '@opral/zettel-ast': 1.1.0
       parse5: 7.3.0
 
-  '@opral/zettel-lexical@1.1.0(patch_hash=f34b6dfc261896c4dcbf8af1dfe70e6b10c2629af9bc58d2902b9d0ea86b4d9f)(lexical@0.30.0)':
+  '@opral/zettel-lexical@1.1.0(patch_hash=61a6a965c147b531416d50f44b102ca85598a4d85393e49234a3ac6571f74be5)(lexical@0.30.0)':
     dependencies:
       '@lexical/history': 0.30.0
       '@lexical/utils': 0.30.0
       '@opral/zettel-ast': 1.1.0
-      '@opral/zettel-html': 1.1.0
+      '@opral/zettel-html': 1.1.0(patch_hash=599a2254ca356d62b49287421c7d941adc5f49d5e42347396c8a27a1f400da3b)
       lexical: 0.30.0
 
   '@oxc-project/types@0.139.0': {}
