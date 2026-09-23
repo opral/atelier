@@ -334,8 +334,9 @@ export function FormattingToolbar({
 	// Popups portal into the app root, not document.body: that is where the
 	// font stack and the theme tokens live.
 	const portalContainer =
-		(editor?.view.dom.closest(".atelier-root") as HTMLElement | null) ??
-		undefined;
+		(editor && !editor.isDestroyed
+			? (editor.view.dom.closest(".atelier-root") as HTMLElement | null)
+			: null) ?? undefined;
 
 	return (
 		<Tooltip.Provider delay={TOOLBAR_TOOLTIP_DELAY}>
