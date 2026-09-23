@@ -38,6 +38,8 @@ export type AtelierMainAreaOptions = {
 
 export type AtelierOptions = {
 	readonly lix: Lix;
+	/** Scope one document's Lix operations across asynchronous view work. */
+	readonly scopeDocumentLix?: (path: string, lix: Lix) => Lix;
 	/** Optional host bridge consumed by Atelier's bundled Debug extension. */
 	readonly debug?: AtelierExtensionRuntime["debug"];
 	/**
@@ -243,6 +245,9 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		sessionStateStore,
 		preferencesStore,
 		branchSession,
+		...(options.scopeDocumentLix !== undefined
+			? { scopeDocumentLix: options.scopeDocumentLix }
+			: {}),
 		reviewStatusStore,
 		...(options.debug !== undefined ? { debug: options.debug } : {}),
 		...(options.documentLinks !== undefined
