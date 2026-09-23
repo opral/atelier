@@ -1957,6 +1957,62 @@ test("applies different-origin markdown update when editor is clean", async () =
 	});
 });
 
+test("an outside write elsewhere keeps the writer's unsaved trailing space, block ids and caret", async () => {
+	const fileId = fakeUuid("file_external_trailing_space");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown:
+			"# Title\n\nAlpha one.\n\nBravo two.\n\nFoxtrot six.\n\nGolf seven.\n",
+		persistDebounceMs: 0,
+	});
+	const blockIds = () => {
+		const list: unknown[] = [];
+		editor.state.doc.forEach((node) => list.push(node.attrs.data?.id));
+		return list;
+	};
+	// The caret at the end of "Foxtrot six.", then " and " typed: the file
+	// cannot keep the trailing space.
+	let foxtrotEnd = 0;
+	editor.state.doc.forEach((node, offset, index) => {
+		if (index === 3) foxtrotEnd = offset + node.nodeSize - 1;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(foxtrotEnd);
+		editor.commands.insertContent(" and ");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain(
+			"Foxtrot six. and\n",
+		),
+	);
+	await settleMarkdownObserver();
+	const ids = blockIds();
+	const caret = editor.state.selection.from;
+
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		file.replace("Alpha one.", "Alpha one (agent)."),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.child(1).textContent).toBe("Alpha one (agent)."),
+	);
+
+	expect(blockIds()).toEqual(ids);
+	expect(editor.state.doc.child(3).textContent).toBe("Foxtrot six. and ");
+	expect(editor.state.selection.from).toBe(caret + " (agent)".length);
+	await act(async () => {
+		editor.commands.insertContent("more");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			"# Title\n\nAlpha one (agent).\n\nBravo two.\n\nFoxtrot six. and more\n\nGolf seven.\n",
+		),
+	);
+});
+
 test("delivers external markdown revisions without origin reads", async () => {
 	const fileId = fakeUuid("file_external_single_delivery");
 	const { lix } = await renderEditorForMarkdownFile({
