@@ -859,6 +859,7 @@ describe("checkpoint conversation flows", () => {
 		);
 		const view = render(renderHistory(first.commitId));
 		try {
+			fireEvent.click(await screen.findByRole("button", { name: "Comment" }));
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});
@@ -894,6 +895,38 @@ describe("checkpoint conversation flows", () => {
 		}
 	});
 
+	test("an open checkpoint without comments offers a Comment button, then the field", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			const button = await screen.findByRole("button", { name: "Comment" });
+			expect(
+				screen.queryByRole("textbox", { name: "Comment on this checkpoint" }),
+			).toBeNull();
+			fireEvent.click(button);
+			const field = await screen.findByRole("textbox", {
+				name: "Comment on this checkpoint",
+			});
+			// (Focus is Lexical's, which jsdom can't do; the browser check covers it.)
+			// Esc on an empty field folds it back to the button.
+			fireEvent.keyDown(field, { key: "Escape" });
+			await waitFor(() =>
+				expect(screen.getByRole("button", { name: "Comment" })).toHaveFocus(),
+			);
+			expect(
+				screen.queryByRole("textbox", { name: "Comment on this checkpoint" }),
+			).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
 	test("a new checkpoint keeps drafts on the rows it shifts", async () => {
 		const lix = await openLix();
 		const first = await createCheckpoint(lix);
@@ -907,6 +940,7 @@ describe("checkpoint conversation flows", () => {
 		);
 		const view = render(renderHistory(first.commitId));
 		try {
+			fireEvent.click(await screen.findByRole("button", { name: "Comment" }));
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});
@@ -944,6 +978,7 @@ describe("checkpoint conversation flows", () => {
 			</LixProvider>,
 		);
 		try {
+			fireEvent.click(await screen.findByRole("button", { name: "Comment" }));
 			const field = await screen.findByRole("textbox", {
 				name: "Comment on this checkpoint",
 			});

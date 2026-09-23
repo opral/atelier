@@ -6,6 +6,7 @@ import {
 	type SetStateAction,
 } from "react";
 import type { Document } from "@opral/zettel-ast";
+import { MessageSquarePlus } from "lucide-react";
 import { useLix, useQueryResult } from "@/lib/lix-react";
 import {
 	Composer,
@@ -90,6 +91,23 @@ export function CommitConversationView({
 			(document.activeElement as HTMLElement).blur();
 	}, [open]);
 	const primary = conversations[0] ?? null;
+	// With no comments yet the card offers a small Comment button (not a
+	// resting field); pressing it, the row's Comment chip or a kept draft
+	// shows the field.
+	const [composing, setComposing] = useState(false);
+	const [localFocusRequest, setLocalFocusRequest] = useState(0);
+	const commentButtonRef = useRef<HTMLButtonElement>(null);
+	const refocusButtonRef = useRef(false);
+	const showCommentButton =
+		rows.length === 0 &&
+		!composing &&
+		focusRequest === 0 &&
+		!hasCommentText(draft);
+	useEffect(() => {
+		if (!showCommentButton || !refocusButtonRef.current) return;
+		refocusButtonRef.current = false;
+		commentButtonRef.current?.focus({ preventScroll: true });
+	}, [showCommentButton]);
 	const loadFailed = status === "error" || comments.status === "error";
 	// Only the first read shows a loading line. After that the field stays
 	// mounted: the reader's own first comment creates a conversation, which
@@ -154,17 +172,64 @@ export function CommitConversationView({
 				</p>
 			) : null}
 			{!readOnly && !loadFailed && !firstLoad ? (
-				<Composer
-					label={rows.length > 0 ? "Reply" : "Comment on this checkpoint"}
-					placeholder={rows.length > 0 ? "Reply" : "Comment"}
-					value={draft}
-					onChange={setDraft}
-					onSubmit={submit}
-					onCancel={onCancel}
-					focusRequest={focusRequest}
-					onFocusHandled={onFocusHandled}
-					className="mr-2 ml-[23px]"
-				/>
+				showCommentButton ? (
+					<button
+						ref={commentButtonRef}
+						type="button"
+						data-attr="history-start-comment"
+						onClick={() => {
+							setComposing(true);
+							setLocalFocusRequest((value) => value + 1);
+						}}
+						className="ml-[23px] inline-flex h-[22px] cursor-pointer items-center gap-[5px] self-start rounded-[6px] bg-panel px-[7px] text-[11px] font-semibold text-fg-muted ring-1 ring-border-strong hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						<MessageSquarePlus
+							aria-hidden="true"
+							className="size-3"
+							strokeWidth={2.2}
+						/>
+						Comment
+					</button>
+				) : (
+					<div
+						className="contents"
+						onBlur={(event) => {
+							// Leaving an empty first comment folds it back to the button.
+							if (
+								rows.length === 0 &&
+								!hasCommentText(draft) &&
+								!event.currentTarget.parentElement?.contains(
+									event.relatedTarget as Node | null,
+								)
+							)
+								setComposing(false);
+						}}
+					>
+						<Composer
+							label={rows.length > 0 ? "Reply" : "Comment on this checkpoint"}
+							placeholder={rows.length > 0 ? "Reply" : "Comment"}
+							value={draft}
+							onChange={setDraft}
+							onSubmit={submit}
+							onCancel={(document) => {
+								if (rows.length === 0 && !hasCommentText(document)) {
+									setComposing(false);
+									refocusButtonRef.current = true;
+									return;
+								}
+								onCancel();
+							}}
+							focusRequest={focusRequest || localFocusRequest}
+							onFocusHandled={() => {
+								// The row's Comment chip opens the field for good, not just once.
+								setComposing(true);
+								setLocalFocusRequest(0);
+								onFocusHandled();
+							}}
+							className="mr-2 ml-[23px]"
+						/>
+					</div>
+				)
 			) : null}
 		</div>
 	);
