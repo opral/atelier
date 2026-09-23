@@ -208,6 +208,7 @@ export type AtelierEvent =
 	| {
 			/** The first document data has rendered; excludes subsequent refreshes. */
 			type: "document_loaded";
+			fileId: string | undefined;
 			filePath: string;
 			viewKind: string;
 			durationMs: number;
