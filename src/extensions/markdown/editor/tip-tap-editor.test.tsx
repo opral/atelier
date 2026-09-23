@@ -2091,6 +2091,46 @@ test("an outside write that prepends a block keeps the writer's caret in the old
 	);
 });
 
+test("undoing a split after an outside write saves the block the write put between its halves", async () => {
+	const fileId = fakeUuid("file_external_undo_guard");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "# Title\n\nBravo two.\n\nCharlie three.\n",
+		persistDebounceMs: 0,
+	});
+	let split = 0;
+	editor.state.doc.forEach((_node, offset, index) => {
+		if (index === 1) split = offset + 1 + "Bravo".length;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(split);
+		editor.commands.splitBlock();
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("Bravo\n\ntwo."),
+	);
+	await settleMarkdownObserver();
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		file.replace("Bravo\n\n", "Bravo\n\nAgent block.\n\n"),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.textContent).toContain("Agent block."),
+	);
+	await settleMarkdownObserver();
+	await act(async () => {
+		editor.commands.undo();
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			"# Title\n\nBravo two.\n\nAgent block.\n\nCharlie three.\n",
+		),
+	);
+});
+
 test("delivers external markdown revisions without origin reads", async () => {
 	const fileId = fakeUuid("file_external_single_delivery");
 	const { lix } = await renderEditorForMarkdownFile({

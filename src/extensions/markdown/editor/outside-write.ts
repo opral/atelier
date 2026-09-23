@@ -1,10 +1,18 @@
+import { Extension } from "@tiptap/core";
 import {
 	Mark,
 	type Fragment,
 	type Node as ProseMirrorNode,
 	type Schema,
 } from "@tiptap/pm/model";
-import type { EditorState, Transaction } from "@tiptap/pm/state";
+import {
+	Plugin,
+	PluginKey,
+	type EditorState,
+	type Transaction,
+} from "@tiptap/pm/state";
+import { Mapping, ReplaceStep } from "@tiptap/pm/transform";
+import { isHistoryTransaction } from "@tiptap/pm/history";
 import { topLevelNodeMarkdown } from "./incremental-markdown-save";
 import { parseMarkdown } from "./markdown";
 import { astToTiptapDoc } from "./tiptap-markdown-bridge/mdwc-to-tiptap";
@@ -30,9 +38,15 @@ import { astToTiptapDoc } from "./tiptap-markdown-bridge/mdwc-to-tiptap";
  * hold: the editor then saves exactly what the file says.
  *
  * The steps stay out of the writer's undo history; prosemirror-history maps
- * the writer's own steps through them, so ⌘Z undoes the writer's edits
- * rather than the outside write.
+ * the writer's own steps through them, so ⌘Z undoes the writer's edits and
+ * never the outside write. Mapping cannot tell when undoing the writer's
+ * step spans content the write put inside it (a block inserted between the
+ * two halves of a split, text inside a word being typed), so
+ * `OutsideWriteGuardExtension` puts such content back after the undo.
  */
+
+/** Marks a transaction whose inserted content came from outside the editor. */
+export const OUTSIDE_WRITE_META = "atelierOutsideWrite";
 
 /** A node's JSON without the editor ids ProseMirror keeps in `attrs.data`. */
 function withoutIds(value: unknown): unknown {
@@ -645,9 +659,9 @@ function mergeNode(
 
 /**
  * The transaction that merges the file `next` into `state.doc`, touching only
- * what the write changed, marked as not the writer's (`addToHistory: false`)
- * and as loaded from the file (`preventUpdate`). Null when the file holds
- * what the editor does.
+ * what the write changed, marked as not the writer's (`addToHistory: false`),
+ * as loaded from the file (`preventUpdate`) and as an outside write. Null
+ * when the file holds what the editor does.
  */
 export function outsideWriteTransaction(
 	state: EditorState,
@@ -739,5 +753,112 @@ export function outsideWriteTransaction(
 		}
 	}
 	if (!tr.docChanged) return null;
-	return tr.setMeta("addToHistory", false).setMeta("preventUpdate", true);
+	return tr
+		.setMeta("addToHistory", false)
+		.setMeta("preventUpdate", true)
+		.setMeta(OUTSIDE_WRITE_META, true);
 }
+
+type GuardedRange = { readonly from: number; readonly to: number };
+
+const guardKey = new PluginKey<readonly GuardedRange[]>(
+	"atelierOutsideWriteGuard",
+);
+
+/** How many inserted stretches are remembered; the oldest go first. */
+const MAX_GUARDED_RANGES = 500;
+
+/** The stretches of `tr.doc` that the transaction's replace steps inserted. */
+function insertedRanges(tr: Transaction): GuardedRange[] {
+	const ranges: GuardedRange[] = [];
+	tr.steps.forEach((step, index) => {
+		if (!(step instanceof ReplaceStep) || step.slice.size === 0) return;
+		const rest = tr.mapping.slice(index + 1);
+		step.getMap().forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+			if (newEnd <= newStart) return;
+			const from = rest.map(newStart, 1);
+			const to = rest.map(newEnd, -1);
+			if (from < to) ranges.push({ from, to });
+		});
+	});
+	return ranges;
+}
+
+/**
+ * Keeps an undo from taking content an outside write put there. Undo
+ * inverts the writer's own steps, mapped through the outside write; when
+ * the write inserted content inside what a step is undoing (a block between
+ * the two halves of a split), the mapped inverse spans it and deletes it.
+ * The plugin remembers where outside writes inserted content and, after an
+ * undo or redo that removed such a stretch whole, puts it back where the
+ * undo left its place.
+ */
+export function createOutsideWriteGuardPlugin(): Plugin {
+	return new Plugin<readonly GuardedRange[]>({
+		key: guardKey,
+		state: {
+			init: () => [],
+			apply(tr, ranges) {
+				let next = ranges;
+				if (tr.docChanged)
+					next = ranges
+						.map((range) => ({
+							from: tr.mapping.map(range.from, 1),
+							to: tr.mapping.map(range.to, -1),
+						}))
+						.filter((range) => range.from < range.to);
+				if (tr.getMeta(OUTSIDE_WRITE_META))
+					next = [...next, ...insertedRanges(tr)].slice(-MAX_GUARDED_RANGES);
+				return next;
+			},
+		},
+		appendTransaction(transactions, oldState, newState) {
+			const changing = transactions.filter((tr) => tr.docChanged);
+			if (
+				changing.length === 0 ||
+				!changing.every((tr) => isHistoryTransaction(tr))
+			)
+				return null;
+			const ranges = guardKey.getState(oldState) ?? [];
+			if (ranges.length === 0) return null;
+			const mapping = new Mapping();
+			for (const tr of transactions) mapping.appendMapping(tr.mapping);
+			const lost: Array<{ at: number; range: GuardedRange }> = [];
+			for (const range of ranges) {
+				const from = mapping.map(range.from, 1);
+				const to = mapping.map(range.to, -1);
+				if (from >= to) lost.push({ at: Math.min(from, to), range });
+			}
+			if (lost.length === 0) return null;
+			const tr = newState.tr;
+			for (const { at, range } of lost.sort((x, y) => x.at - y.at)) {
+				const slice = oldState.doc.slice(range.from, range.to);
+				const depth = oldState.doc.resolve(range.from).depth;
+				let pos = tr.mapping.map(at);
+				const blocks =
+					slice.openStart === 0 && Boolean(slice.content.firstChild?.isBlock);
+				if (blocks) {
+					// Blocks go back between blocks: after the one the undo left
+					// their place inside.
+					const $pos = tr.doc.resolve(pos);
+					if ($pos.depth > depth) pos = $pos.after(depth + 1);
+				}
+				try {
+					tr.replace(pos, pos, slice);
+				} catch {
+					// Nowhere it fits: left out.
+				}
+			}
+			if (!tr.docChanged) return null;
+			return tr.setMeta(OUTSIDE_WRITE_META, true);
+		},
+	});
+}
+
+/** The editor side of `outsideWriteTransaction`: see the plugin. */
+export const OutsideWriteGuardExtension = Extension.create({
+	name: "markdownOutsideWriteGuard",
+	addProseMirrorPlugins() {
+		return [createOutsideWriteGuardPlugin()];
+	},
+});

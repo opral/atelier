@@ -617,9 +617,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			// Capture the payload while TipTap is alive. The persistence owner can
 			// then finish independently if the view is destroyed before its save window
 			// or an in-flight write completes.
+			// The editor's document, not the transaction's: what plugins
+			// appended to it (an outside write's content put back after an
+			// undo) is part of what the writer now sees.
 			pendingPersistenceSnapshot = {
 				revision: persistenceBaseline.documentRevision,
-				doc: transaction.doc,
+				doc: editor.state.doc,
 			};
 			if (persistWindowMs <= 0) {
 				void runPersist().catch(() => {});
