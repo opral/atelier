@@ -83,16 +83,19 @@ function Composer({
 	function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
 		if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
 			event.preventDefault();
+			event.stopPropagation();
 			void send();
 		}
 		if (event.key === "Escape") {
+			event.preventDefault();
+			event.stopPropagation();
 			event.currentTarget.blur();
 			setActive(false);
 			onEscape?.();
 		}
 	}
 	return (
-		<div ref={containerRef} className="mt-2">
+		<div ref={containerRef} data-review-shortcut-ignore="" className="mt-2">
 			<div
 				className="flex items-end gap-2 rounded-control border border-history-input-border px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring"
 				style={REPLY_FIELD_BACKGROUND}

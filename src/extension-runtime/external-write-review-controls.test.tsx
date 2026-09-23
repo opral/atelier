@@ -1039,6 +1039,31 @@ describe("ExternalWriteReviewControls", () => {
 		expect(exit).toHaveBeenCalledOnce();
 	});
 
+	test("leaves the comment composer shortcut to its own editor", async () => {
+		const primary = vi.fn(async () => {});
+		render(
+			<>
+				<div data-review-shortcut-ignore="">
+					<textarea aria-label="Comment" />
+				</div>
+				<ExternalWriteReviewControls
+					isActive
+					mode="working-changes"
+					navigation={NAVIGATION}
+					files={FILES}
+					onPrimary={primary}
+				/>
+			</>,
+		);
+		fireEvent.keyDown(screen.getByRole("textbox", { name: "Comment" }), {
+			key: "Enter",
+			ctrlKey: true,
+		});
+		expect(primary).not.toHaveBeenCalled();
+		fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+		await waitFor(() => expect(primary).toHaveBeenCalledOnce());
+	});
+
 	test("an open menu takes the keyboard: focus, arrows, Escape back to the trigger", () => {
 		render(
 			<ExternalWriteReviewControls
