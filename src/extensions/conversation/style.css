@@ -1,0 +1,34 @@
+@import "../../shell/layers.css";
+
+@layer atelier {
+	/* The context line's links: quiet until pointed at (design "1a"). */
+	.conversation-context-link:hover,
+	.conversation-context-link:focus-visible {
+		color: var(--atelier-accent);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		outline: none;
+	}
+
+	.conversation-row:hover,
+	.conversation-row:focus-visible {
+		background: var(--atelier-bg-hover);
+		outline: none;
+	}
+
+	/* A Markdown block's text, quoted in a quiet well. */
+	.conversation-well {
+		background: var(--atelier-bg-subtle);
+		text-wrap: pretty;
+	}
+	.conversation-well:hover,
+	.conversation-well:focus-visible {
+		background: var(--atelier-bg-hover);
+		outline: none;
+	}
+
+	.conversation-title-input::placeholder {
+		color: var(--atelier-history-flag);
+		font-weight: 600;
+	}
+}

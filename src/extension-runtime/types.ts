@@ -65,6 +65,15 @@ export interface ExtensionDefinition {
 	readonly fileExtensions?: readonly string[];
 	/** Allow more than one view of this extension in the same panel. */
 	readonly multiInstance?: boolean;
+	/**
+	 * The main-area instance a state belongs to, when the view has one
+	 * instance per subject (a conversation per conversation id): opening the
+	 * same subject again activates its tab instead of adding one. An explicit
+	 * `instanceId` still wins.
+	 */
+	readonly instanceIdForState?: (
+		state: ExtensionState | undefined,
+	) => string | undefined;
 	/** Panel sides this view may occupy. Defaults to the side areas. */
 	readonly placement?: readonly Area[];
 	/** Excludes the view from add-view menus (still mountable programmatically). */

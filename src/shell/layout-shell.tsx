@@ -3455,7 +3455,14 @@ function LayoutShellLoadedContentResolved({
 		const statePath =
 			typeof entry.state?.path === "string" ? entry.state.path : "";
 		const filePath = documentPathFromView(entry) ?? "";
-		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}`;
+		// A view that names itself once it has read its data (a conversation
+		// titles its tab) re-announces itself, so a host's URL can follow.
+		// Documents are named by their path, which is already in the key.
+		const label =
+			!filePath && typeof entry.state?.atelier?.label === "string"
+				? entry.state.atelier.label
+				: "";
+		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}::${label}`;
 		if (lastActivatedCentralViewRef.current === signature) return;
 		lastActivatedCentralViewRef.current = signature;
 		emitEvent({
@@ -3875,6 +3882,7 @@ function LayoutShellLoadedContentResolved({
 			const instanceId = isHome
 				? CENTRAL_HOME_INSTANCE
 				: (options.instanceId ??
+					definition.instanceIdForState?.(options.state) ??
 					(definition.multiInstance
 						? createExtensionInstanceId(extensionId)
 						: extensionId));

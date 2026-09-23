@@ -68,6 +68,11 @@ import { SlashCommandMenu } from "./components/slash-command-menu";
 import { CodeLanguageMenu } from "./components/code-language-menu";
 import { TableControls } from "./components/table-controls";
 import { SelectionToolbar } from "./components/selection-toolbar";
+import {
+	BlockConversations,
+	BlockConversationsLayer,
+} from "./components/block-conversations";
+import { ConversationViewsContext } from "../conversation/open-conversation";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
 import { MentionMenu } from "./components/mention-menu";
@@ -595,83 +600,89 @@ function MarkdownLiveDocument({
 	}
 	return (
 		<MarkdownFrontmatterEditingContext.Provider value={frontmatterEditing}>
-			<TipTapEditor
-				className="h-full"
+			<BlockConversations
 				fileId={effectiveFileRow.id}
-				activeBranchId={activeBranchId}
-				filePath={editorSourcePath ?? effectiveFileRow.path}
-				isActiveView={isActiveView}
-				focusOnLoad={focusOnLoad}
-				defaultBlock={defaultBlock}
-				readOnly={editorReadOnly}
-				suspendExternalSync={reviewLocked}
-				additionalExtensions={MarkdownReviewExtensions}
-				onReady={(editor) => {
-					setLiveEditorState({ fileId: effectiveFileRow.id, editor });
-				}}
-				onDispose={(editor) => {
-					setLiveEditorState((current) =>
-						current?.editor === editor ? null : current,
-					);
-				}}
-				openWorkspaceFile={openWorkspaceFile}
-				onPersist={({ filePath: persistedPath, commit }) => {
-					const resolvedPath = persistedPath ?? effectiveFileRow.path;
-					onDocumentModified?.(resolvedPath, commit);
-				}}
-			/>
-			{!readOnly && review && reviewDiff && liveEditor ? (
-				<MarkdownLiveReviewController
+				enabled={!editorReadOnly && liveEditor !== null}
+			>
+				<TipTapEditor
+					className="h-full"
 					fileId={effectiveFileRow.id}
-					sourceFilePath={effectiveFileRow.path}
-					editor={liveEditor}
-					review={review}
-					reviewDiff={reviewDiff}
-					reviewId={review.reviewId}
-					beforeCommitId={review.beforeCommitId}
-					afterCommitId={review.afterCommitId}
+					activeBranchId={activeBranchId}
+					filePath={editorSourcePath ?? effectiveFileRow.path}
+					isActiveView={isActiveView}
+					focusOnLoad={focusOnLoad}
+					defaultBlock={defaultBlock}
+					readOnly={editorReadOnly}
+					suspendExternalSync={reviewLocked}
+					additionalExtensions={MarkdownReviewExtensions}
+					onReady={(editor) => {
+						setLiveEditorState({ fileId: effectiveFileRow.id, editor });
+					}}
+					onDispose={(editor) => {
+						setLiveEditorState((current) =>
+							current?.editor === editor ? null : current,
+						);
+					}}
 					openWorkspaceFile={openWorkspaceFile}
-					isActive={isActiveView && isPanelFocused}
-					onDiffAccept={onDiffAccept}
-					onDiffReject={onDiffReject}
-					onDiffResolve={onDiffResolve}
-					autoAccept={autoAcceptReviews}
-					onDocumentApplied={() => setAppliedReviewKey(reviewKey)}
-					onCompletionStart={() => {
-						setFinishingReview({
-							fileId: effectiveFileRow.id,
-							reviewId: review.reviewId,
-							review,
-						});
+					onPersist={({ filePath: persistedPath, commit }) => {
+						const resolvedPath = persistedPath ?? effectiveFileRow.path;
+						onDocumentModified?.(resolvedPath, commit);
 					}}
-					onCompletionSuccess={(markdown) => {
-						hydrateMarkdownEditorAuthoritativeMarkdown(
-							liveEditor,
-							markdown,
-							defaultBlock,
-						);
-						setFinishingReview((current) =>
-							current?.reviewId === review.reviewId ? null : current,
-						);
-					}}
-					onCompletionFailure={() => {
-						setFinishingReview((current) =>
-							current?.reviewId === review.reviewId ? null : current,
-						);
-					}}
+					surfaceOverlay={<BlockConversationsLayer />}
 				/>
-			) : null}
-			{editorReadOnly ? null : (
-				<>
-					<SelectionToolbar />
-					<SlashCommandMenu />
-					<CodeLanguageMenu />
-					<TableControls />
-					<EmojiPickerMenu />
-					<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
-					<MentionMenu sourceFilePath={effectiveFileRow.path} />
-				</>
-			)}
+				{!readOnly && review && reviewDiff && liveEditor ? (
+					<MarkdownLiveReviewController
+						fileId={effectiveFileRow.id}
+						sourceFilePath={effectiveFileRow.path}
+						editor={liveEditor}
+						review={review}
+						reviewDiff={reviewDiff}
+						reviewId={review.reviewId}
+						beforeCommitId={review.beforeCommitId}
+						afterCommitId={review.afterCommitId}
+						openWorkspaceFile={openWorkspaceFile}
+						isActive={isActiveView && isPanelFocused}
+						onDiffAccept={onDiffAccept}
+						onDiffReject={onDiffReject}
+						onDiffResolve={onDiffResolve}
+						autoAccept={autoAcceptReviews}
+						onDocumentApplied={() => setAppliedReviewKey(reviewKey)}
+						onCompletionStart={() => {
+							setFinishingReview({
+								fileId: effectiveFileRow.id,
+								reviewId: review.reviewId,
+								review,
+							});
+						}}
+						onCompletionSuccess={(markdown) => {
+							hydrateMarkdownEditorAuthoritativeMarkdown(
+								liveEditor,
+								markdown,
+								defaultBlock,
+							);
+							setFinishingReview((current) =>
+								current?.reviewId === review.reviewId ? null : current,
+							);
+						}}
+						onCompletionFailure={() => {
+							setFinishingReview((current) =>
+								current?.reviewId === review.reviewId ? null : current,
+							);
+						}}
+					/>
+				) : null}
+				{editorReadOnly ? null : (
+					<>
+						<SelectionToolbar />
+						<SlashCommandMenu />
+						<CodeLanguageMenu />
+						<TableControls />
+						<EmojiPickerMenu />
+						<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />
+						<MentionMenu sourceFilePath={effectiveFileRow.path} />
+					</>
+				)}
+			</BlockConversations>
 		</MarkdownFrontmatterEditingContext.Provider>
 	);
 }
@@ -1263,64 +1274,66 @@ export const extension = createReactExtensionDefinition({
 				}
 			>
 				<DocumentLinksContext.Provider value={atelier.documentLinks}>
-					<MarkdownView
-						fileId={view.state.fileId as string}
-						filePath={view.state.filePath as string | undefined}
-						readOnly={hostReadOnly}
-						isActiveView={view.isActive}
-						isPanelFocused={view.isFocused}
-						focusOnLoad={Boolean(view.state.focusOnLoad)}
-						defaultBlock={
-							view.state.defaultBlock === "heading1" ? "heading1" : undefined
-						}
-						activeBranchId={atelier.branches.activeId}
-						diffSession={atelier.diff.session}
-						beforeCommitId={
-							typeof view.state.beforeCommitId === "string"
-								? view.state.beforeCommitId
-								: null
-						}
-						afterCommitId={
-							typeof view.state.afterCommitId === "string"
-								? view.state.afterCommitId
-								: null
-						}
-						beforeFileId={
-							typeof view.state.beforeFileId === "string"
-								? view.state.beforeFileId
-								: null
-						}
-						beforeExists={view.state.beforeExists !== false}
-						afterExists={view.state.afterExists !== false}
-						afterFileId={
-							typeof view.state.afterFileId === "string"
-								? view.state.afterFileId
-								: null
-						}
-						onDiffAccept={atelier.diff.accept}
-						onDiffReject={atelier.diff.reject}
-						onDiffResolve={atelier.diff.resolve}
-						autoAcceptReviews={
-							(atelier.diff.session !== null &&
-								"working" in atelier.diff.session.target) ||
-							atelier.diff.autoAccept
-						}
-						openWorkspaceFile={(args) =>
-							atelier.documents.open(args.filePath, {
-								...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
-								...(args.state ? { state: args.state } : {}),
-								...(args.focus !== undefined ? { focus: args.focus } : {}),
-							})
-						}
-						onDocumentModified={(filePath, commit) =>
-							atelier.events.emit({
-								type: "document_modified",
-								filePath,
-								modifiedBy: "user",
-								...(commit !== undefined ? { commit } : {}),
-							})
-						}
-					/>
+					<ConversationViewsContext.Provider value={atelier.views}>
+						<MarkdownView
+							fileId={view.state.fileId as string}
+							filePath={view.state.filePath as string | undefined}
+							readOnly={hostReadOnly}
+							isActiveView={view.isActive}
+							isPanelFocused={view.isFocused}
+							focusOnLoad={Boolean(view.state.focusOnLoad)}
+							defaultBlock={
+								view.state.defaultBlock === "heading1" ? "heading1" : undefined
+							}
+							activeBranchId={atelier.branches.activeId}
+							diffSession={atelier.diff.session}
+							beforeCommitId={
+								typeof view.state.beforeCommitId === "string"
+									? view.state.beforeCommitId
+									: null
+							}
+							afterCommitId={
+								typeof view.state.afterCommitId === "string"
+									? view.state.afterCommitId
+									: null
+							}
+							beforeFileId={
+								typeof view.state.beforeFileId === "string"
+									? view.state.beforeFileId
+									: null
+							}
+							beforeExists={view.state.beforeExists !== false}
+							afterExists={view.state.afterExists !== false}
+							afterFileId={
+								typeof view.state.afterFileId === "string"
+									? view.state.afterFileId
+									: null
+							}
+							onDiffAccept={atelier.diff.accept}
+							onDiffReject={atelier.diff.reject}
+							onDiffResolve={atelier.diff.resolve}
+							autoAcceptReviews={
+								(atelier.diff.session !== null &&
+									"working" in atelier.diff.session.target) ||
+								atelier.diff.autoAccept
+							}
+							openWorkspaceFile={(args) =>
+								atelier.documents.open(args.filePath, {
+									...(args.newTab !== undefined ? { newTab: args.newTab } : {}),
+									...(args.state ? { state: args.state } : {}),
+									...(args.focus !== undefined ? { focus: args.focus } : {}),
+								})
+							}
+							onDocumentModified={(filePath, commit) =>
+								atelier.events.emit({
+									type: "document_modified",
+									filePath,
+									modifiedBy: "user",
+									...(commit !== undefined ? { commit } : {}),
+								})
+							}
+						/>
+					</ConversationViewsContext.Provider>
 				</DocumentLinksContext.Provider>
 			</PreparedFileSurface>
 		);

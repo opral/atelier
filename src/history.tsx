@@ -1,5 +1,9 @@
 import { Suspense } from "react";
-import type { AtelierDiffApi, AtelierExtensionRuntime } from "./extension-api";
+import type {
+	AtelierDiffApi,
+	AtelierExtensionRuntime,
+	AtelierViewsApi,
+} from "./extension-api";
 import { AtelierErrorBoundary } from "./atelier-error-boundary";
 import { LixProvider } from "./lib/lix-react";
 import { HistoryView } from "./extensions/history";
@@ -18,6 +22,11 @@ export type AtelierHistoryProps = {
 			readonly activeFileId: string | null;
 			readonly activeFilePath: string | null;
 		};
+		/**
+		 * Opens a checkpoint's conversation in its own tab. Without it the
+		 * open checkpoint has no "Open conversation" link.
+		 */
+		readonly views?: AtelierViewsApi;
 	};
 	/** Lets the header scope switch and the list share the chosen scope. */
 	readonly preferences?: import("./extension-api").AtelierExtensionPreferences;

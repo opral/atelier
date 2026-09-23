@@ -1,0 +1,171 @@
+@import "../../shell/layers.css";
+@import "@opral/zettel-html/style.css" layer(atelier);
+
+@layer atelier {
+	/*
+	 * A thread's secondary colour, its reply field and its body size are set
+	 * by the surface it sits on. The defaults are the History checkpoint's
+	 * orange (design 4a with the Turn 5 contrast fixes); a white surface
+	 * redeclares them on its own root.
+	 */
+	.comment-surface {
+		--comment-secondary: var(--atelier-history-selected-secondary);
+		--comment-field-edge: var(--atelier-history-input-border);
+		--comment-field-bg: color-mix(
+			in srgb,
+			var(--atelier-panel) 72%,
+			transparent
+		);
+		--comment-fold-bg: color-mix(
+			in srgb,
+			var(--atelier-accent) 6%,
+			transparent
+		);
+		--comment-avatar-ring: var(--atelier-accent-subtle);
+		--comment-body-size: 12.5px;
+		--comment-body-line-height: 18px;
+	}
+	/* White surfaces: a document margin card, a host's own app. */
+	.comment-surface[data-tone="neutral"] {
+		--comment-secondary: var(--atelier-history-secondary);
+		--comment-field-edge: var(--atelier-border-strong);
+		--comment-field-bg: var(--atelier-bg-subtle);
+		--comment-fold-bg: var(--atelier-bg-hover);
+		--comment-avatar-ring: var(--atelier-panel);
+	}
+	/*
+	 * The conversation view's reading column: a 14px body in the page's text
+	 * colour, and a reply box whose resting edge is the quietest grey that
+	 * still keeps 3:1 against white (the checkpoint flag's), as a field's
+	 * edge must.
+	 */
+	.comment-surface[data-size="view"] {
+		--comment-body-size: 14px;
+		--comment-body-line-height: 21px;
+		--comment-field-edge: var(--atelier-history-flag);
+		--comment-field-bg: var(--atelier-panel);
+		--comment-avatar-ring: var(--atelier-panel);
+	}
+	.comment-surface[data-size="view"]
+		li:not([data-comment-grouped])
+		.comment-body {
+		margin-top: 2px;
+	}
+	.comment-surface[data-size="view"] .comment-body.zettel,
+	.comment-surface[data-size="view"] .comment-body .zettel {
+		--zettel-text-color: var(--atelier-fg);
+	}
+	.comment-fold-view:hover {
+		background: var(--atelier-bg-hover);
+	}
+	.comment-fold-avatar-view {
+		box-shadow: 0 0 0 2px var(--comment-avatar-ring);
+	}
+
+	.comment-avatar-blue {
+		background: var(--atelier-tag-blue);
+		color: var(--atelier-tag-blue-fg);
+	}
+	.comment-avatar-green {
+		background: var(--atelier-tag-green);
+		color: var(--atelier-tag-green-fg);
+	}
+	.comment-avatar-purple {
+		background: var(--atelier-tag-purple);
+		color: var(--atelier-tag-purple-fg);
+	}
+	.comment-avatar-orange {
+		background: var(--atelier-tag-orange);
+		color: var(--atelier-tag-orange-fg);
+	}
+	.comment-avatar-pink {
+		background: var(--atelier-tag-pink);
+		color: var(--atelier-tag-pink-fg);
+	}
+	.comment-avatar-yellow {
+		background: var(--atelier-tag-yellow);
+		color: var(--atelier-tag-yellow-fg);
+	}
+	.comment-avatar-brown {
+		background: var(--atelier-tag-brown);
+		color: var(--atelier-tag-brown-fg);
+	}
+	.comment-avatar-red {
+		background: var(--atelier-tag-red);
+		color: var(--atelier-tag-red-fg);
+	}
+
+	.comment-body-text {
+		font-size: var(--comment-body-size);
+		line-height: var(--comment-body-line-height);
+	}
+
+	.comment-fold {
+		background: var(--comment-fold-bg);
+	}
+	.comment-fold-avatar {
+		box-shadow: 0 0 0 1.5px var(--comment-avatar-ring);
+	}
+
+	.comment-field {
+		background: var(--comment-field-bg);
+		box-shadow: inset 0 0 0 1px var(--comment-field-edge);
+	}
+	/* Writing: solid white, and the accent edge doubled into a 2px ring. */
+	.comment-field[data-state="writing"] {
+		background: var(--atelier-panel);
+		box-shadow:
+			inset 0 0 0 1px var(--atelier-accent),
+			0 0 0 1px var(--atelier-accent);
+	}
+	.comment-field-placeholder,
+	.comment-secondary {
+		color: var(--comment-secondary);
+	}
+
+	/* Zettel content inside a comment body and inside the composer. */
+	.comment-body.zettel,
+	.comment-body .zettel,
+	.comment-editor.zettel {
+		--zettel-font-family: inherit;
+		--zettel-font-size: var(--comment-body-size);
+		--zettel-line-height: var(--comment-body-line-height);
+		--zettel-text-color: var(--atelier-fg-muted);
+		--zettel-muted-color: var(--comment-secondary);
+		--zettel-border-color: var(--atelier-accent-border);
+		--zettel-code-background: var(--atelier-bg-subtle);
+		--zettel-code-color: var(--atelier-fg);
+		--zettel-link-color: var(--atelier-accent);
+		text-wrap: pretty;
+		overflow-wrap: anywhere;
+	}
+	.comment-editor.zettel {
+		--zettel-text-color: var(--atelier-fg);
+		caret-color: var(--atelier-accent);
+		outline: none;
+	}
+	.comment-body .zettel_block,
+	.comment-editor .zettel_block,
+	.comment-body .zettel_list,
+	.comment-editor .zettel_list,
+	.comment-body .zettel_quote,
+	.comment-editor .zettel_quote,
+	.comment-body .zettel_code,
+	.comment-editor .zettel_code {
+		margin: 0;
+	}
+	.comment-body .zettel > * + *,
+	.comment-editor.zettel > * + * {
+		margin-top: 6px;
+	}
+	.comment-body .zettel_code,
+	.comment-editor .zettel_code {
+		border-radius: var(--atelier-radius-tag);
+		padding: 4px 6px;
+		font-size: 0.92em;
+	}
+	.comment-body .zettel_list,
+	.comment-editor .zettel_list {
+		padding-inline-start: 1.4em;
+	}
+}

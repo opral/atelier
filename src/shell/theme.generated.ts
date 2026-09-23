@@ -86,8 +86,12 @@ rgb(243 216 190),
 rgb(120 66 30)
 );
 --atelier-history-secondary: light-dark(
-rgb(111 104 98),
+rgb(109 102 96),
 rgb(190 183 175)
+);
+--atelier-history-flag: light-dark(
+rgb(137 131 125),
+rgb(150 143 136)
 );
 --atelier-history-selected-secondary: light-dark(
 rgb(133 87 58),

@@ -1,0 +1,9 @@
+{
+	"apiVersion": 1,
+	"id": "atelier_conversation",
+	"name": "Conversation",
+	"description": "One conversation: its title, what it is attached to, its comments.",
+	"entry": "./index.js",
+	"multiInstance": true,
+	"placement": ["main"]
+}

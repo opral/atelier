@@ -1,12 +1,16 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { Editor, type JSONContent } from "@tiptap/core";
 import {
 	MarkdownWc,
 	astToTiptapDoc,
 } from "@/extensions/markdown/editor/tiptap-markdown-bridge";
 import { SelectionToolbar } from "./selection-toolbar";
+import {
+	BlockCommentsContext,
+	type BlockCommentsApi,
+} from "./block-comments-context";
 import { EditorProvider, useEditorCtx } from "../editor/editor-context";
 import { buildMarkdownFromEditor } from "../editor/build-markdown-from-editor";
 import { parseMarkdown } from "../editor/markdown";
@@ -39,7 +43,10 @@ function InjectEditor({ editor }: { editor: Editor }) {
 	return null;
 }
 
-function createEditor(content: JSONContent): EditorSetup {
+function createEditor(
+	content: JSONContent,
+	blockComments: BlockCommentsApi | null = null,
+): EditorSetup {
 	const element = document.createElement("div");
 	element.className = "atelier-root";
 	document.body.appendChild(element);
@@ -57,8 +64,10 @@ function createEditor(content: JSONContent): EditorSetup {
 	});
 	const utils = render(
 		<EditorProvider>
-			<InjectEditor editor={editor} />
-			<SelectionToolbar />
+			<BlockCommentsContext.Provider value={blockComments}>
+				<InjectEditor editor={editor} />
+				<SelectionToolbar />
+			</BlockCommentsContext.Provider>
 		</EditorProvider>,
 	);
 	// Tiptap tracks focus through the DOM events on its surface.
@@ -260,5 +269,47 @@ describe("SelectionToolbar", () => {
 		);
 		expect(linkTargetPluginKey.getState(editor.state)?.find()).toHaveLength(0);
 		expect(editor.view.dom.querySelector(".markdown-link-target")).toBeNull();
+	});
+
+	describe("Comment row", () => {
+		const twoParagraphs = astToTiptapDoc(
+			parseMarkdown("First paragraph here.\n\nSecond paragraph there.\n"),
+		) as JSONContent;
+		const commentRow = () => screen.queryByRole("button", { name: /Comment/ });
+
+		test("shows under the formatting row when the selection sits in one block", async () => {
+			const startComment = vi.fn();
+			const { editor } = createEditor(twoParagraphs, { startComment });
+			await select(editor, "paragraph here");
+			await screen.findByRole("toolbar");
+			const row = commentRow();
+			expect(row).not.toBeNull();
+			expect(row).toHaveAttribute("data-attr", "markdown-selection-comment");
+			expect(row).toHaveTextContent(/Comment(⌘⌥M|Ctrl\+Alt\+M)/);
+			await act(async () => {
+				fireEvent.click(row!);
+			});
+			expect(startComment).toHaveBeenCalledTimes(1);
+		});
+
+		test("hides when the selection spans blocks", async () => {
+			const { editor } = createEditor(twoParagraphs, {
+				startComment: vi.fn(),
+			});
+			const from = textSelection(editor, "paragraph here").from;
+			const to = textSelection(editor, "paragraph there").to;
+			await act(async () => {
+				editor.commands.setTextSelection({ from, to });
+			});
+			await screen.findByRole("toolbar");
+			expect(commentRow()).toBeNull();
+		});
+
+		test("is absent where the document takes no comments", async () => {
+			const { editor } = createEditor(twoParagraphs);
+			await select(editor, "paragraph here");
+			await screen.findByRole("toolbar");
+			expect(commentRow()).toBeNull();
+		});
 	});
 });

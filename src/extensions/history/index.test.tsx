@@ -20,6 +20,7 @@ import {
 	createCommitConversation,
 	replyToConversation,
 	selectCommitConversations,
+	setCommitConversationTitle,
 } from "./commit-conversations";
 import type { AtelierExtensionPreferences } from "@/extension-api";
 
@@ -858,7 +859,9 @@ describe("checkpoint conversation flows", () => {
 		);
 		const view = render(renderHistory(first.commitId));
 		try {
-			const field = await screen.findByRole("textbox", { name: "New comment" });
+			const field = await screen.findByRole("textbox", {
+				name: "Comment on this checkpoint",
+			});
 			act(() => field.focus());
 			expect(field).toHaveFocus();
 			const editor = (
@@ -872,18 +875,127 @@ describe("checkpoint conversation flows", () => {
 					{ discrete: true },
 				),
 			);
+			// The open row is where the text is; the marker is for closed rows.
+			expect(screen.queryByText("Draft", { exact: true })).toBeNull();
+			view.rerender(renderHistory(second.commitId));
 			await waitFor(() =>
 				expect(screen.getByText("Draft", { exact: true })).toBeVisible(),
 			);
-			view.rerender(renderHistory(second.commitId));
+			view.rerender(renderHistory(first.commitId));
+			expect(
+				screen.getByRole("textbox", { name: "Comment on this checkpoint" }),
+			).toHaveTextContent("Remember this thought");
+			expect(
+				screen.getByRole("textbox", { name: "Comment on this checkpoint" }),
+			).not.toHaveFocus();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("a new checkpoint keeps drafts on the rows it shifts", async () => {
+		const lix = await openLix();
+		const first = await createCheckpoint(lix);
+		await createCheckpoint(lix);
+		const renderHistory = (commitId?: string) => (
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub(commitId ? { historicalCommitId: commitId } : {})}
+				/>
+			</LixProvider>
+		);
+		const view = render(renderHistory(first.commitId));
+		try {
+			const field = await screen.findByRole("textbox", {
+				name: "Comment on this checkpoint",
+			});
+			await typeInto(field, "Survive the shift");
+			view.rerender(renderHistory());
+			await waitFor(() =>
+				expect(screen.getByText("Draft", { exact: true })).toBeVisible(),
+			);
+			await act(async () => {
+				await createCheckpoint(lix);
+			});
+			await screen.findByText("Latest checkpoint");
+			await waitFor(() =>
+				expect(screen.getAllByRole("listitem").length).toBeGreaterThan(2),
+			);
 			expect(screen.getByText("Draft", { exact: true })).toBeVisible();
 			view.rerender(renderHistory(first.commitId));
 			expect(
-				screen.getByRole("textbox", { name: "New comment" }),
-			).toHaveTextContent("Remember this thought");
-			expect(
-				screen.getByRole("textbox", { name: "New comment" }),
-			).not.toHaveFocus();
+				await screen.findByRole("textbox", {
+					name: "Comment on this checkpoint",
+				}),
+			).toHaveTextContent("Survive the shift");
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("posting keeps the field mounted and focused for a follow-up", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			const field = await screen.findByRole("textbox", {
+				name: "Comment on this checkpoint",
+			});
+			act(() => field.focus());
+			await typeInto(field, "First thought");
+			await act(async () =>
+				fireEvent.keyDown(field, { key: "Enter", metaKey: true }),
+			);
+			const thread = await screen.findByRole("list", { name: "Comments" });
+			await within(thread).findByText("First thought");
+			await waitFor(() => expect(field).not.toHaveTextContent("First thought"));
+			// The same element: the field never unmounted for a loading state.
+			expect(field).toBeInTheDocument();
+			expect(field).toHaveFocus();
+			expect(field).not.toHaveTextContent("First thought");
+			expect(screen.queryByText("Loading conversation…")).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("an untouched title field doesn't write back over a concurrent rename", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await setCommitConversationTitle(lix, commitId, null, "Before");
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			fireEvent.click(await screen.findByText("Before"));
+			const input = screen.getByRole("textbox", { name: "Checkpoint title" });
+			const [conversation] = await selectCommitConversations(
+				lix,
+				commitId,
+			).execute();
+			await act(async () => {
+				await setCommitConversationTitle(
+					lix,
+					commitId,
+					conversation!.id,
+					"Renamed elsewhere",
+				);
+			});
+			await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+			await waitFor(() =>
+				expect(screen.getByText("Renamed elsewhere")).toBeVisible(),
+			);
+			const [after] = await selectCommitConversations(lix, commitId).execute();
+			expect(after?.title).toBe("Renamed elsewhere");
 		} finally {
 			view.unmount();
 			await lix.close();
@@ -923,9 +1035,9 @@ describe("checkpoint conversation flows", () => {
 		}
 	});
 
-	test("edits a checkpoint title inline without requiring a comment", async () => {
+	test("opens a closed checkpoint from its title instead of renaming it", async () => {
 		const lix = await openLix();
-		const { commitId } = await createCheckpoint(lix);
+		await createCheckpoint(lix);
 		const open = vi.fn(async () => {});
 		const view = render(
 			<LixProvider lix={lix}>
@@ -934,9 +1046,31 @@ describe("checkpoint conversation flows", () => {
 		);
 		try {
 			fireEvent.click(await screen.findByText("Initial checkpoint"));
+			expect(open).toHaveBeenCalledTimes(1);
+			expect(
+				screen.queryByRole("textbox", { name: "Checkpoint title" }),
+			).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("edits the open checkpoint's title inline without requiring a comment", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		const open = vi.fn(async () => {});
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView
+					atelier={atelierStub({ open, historicalCommitId: commitId })}
+				/>
+			</LixProvider>,
+		);
+		try {
+			fireEvent.click(await screen.findByText("Initial checkpoint"));
 			const title = screen.getByRole("textbox", { name: "Checkpoint title" });
 			expect(open).not.toHaveBeenCalled();
-			expect(screen.queryByRole("textbox", { name: "New comment" })).toBeNull();
 			fireEvent.change(title, { target: { value: "Release ready" } });
 			await act(async () => fireEvent.keyDown(title, { key: "Enter" }));
 			await waitFor(() =>
@@ -973,6 +1107,19 @@ describe("checkpoint conversation flows", () => {
 		}
 	});
 });
+
+async function typeInto(field: HTMLElement, text: string) {
+	const editor = (field as HTMLElement & { __zettelEditor?: LexicalEditor })
+		.__zettelEditor!;
+	await act(async () =>
+		editor.update(
+			() => {
+				$getRoot().selectEnd().insertText(text);
+			},
+			{ discrete: true },
+		),
+	);
+}
 
 function memoryPreferences(
 	initial: Record<string, unknown> = {},

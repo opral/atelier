@@ -112,9 +112,13 @@
 		rgb(120 66 30)
 	); /* edge of an accent-subtle surface */
 	--atelier-history-secondary: light-dark(
-		rgb(111 104 98),
+		rgb(109 102 96),
 		rgb(190 183 175)
-	); /* accessible checkpoint and comment metadata */
+	); /* checkpoint and comment metadata: 4.5:1 on the canvas and on a hovered row */
+	--atelier-history-flag: light-dark(
+		rgb(137 131 125),
+		rgb(150 143 136)
+	); /* a checkpoint's flag at rest: the quietest icon that keeps 3:1 on a hovered row */
 	--atelier-history-selected-secondary: light-dark(
 		rgb(133 87 58),
 		rgb(220 176 140)

@@ -10,6 +10,7 @@ import {
 	ChevronRight,
 	Code2,
 	Italic,
+	MessageSquare,
 	RemoveFormatting,
 	Strikethrough,
 } from "lucide-react";
@@ -25,6 +26,11 @@ import {
 } from "../editor/block-commands";
 import { getClipRect, isAnchorClipped } from "./clip-rect";
 import { LinkPopover } from "./link-popover";
+import {
+	blockCommentShortcutLabel,
+	selectedTopLevelBlock,
+	useBlockComments,
+} from "./block-comments-context";
 import {
 	TOOLBAR_TOOLTIP_DELAY,
 	ToolbarIconButton,
@@ -42,6 +48,8 @@ type SelectionToolbarState = {
 	isStrike: boolean;
 	isCode: boolean;
 	isLink: boolean;
+	/** The selection sits inside one top-level block, so it can be commented on. */
+	singleBlock: boolean;
 };
 
 const INACTIVE_STATE: SelectionToolbarState = {
@@ -55,11 +63,14 @@ const INACTIVE_STATE: SelectionToolbarState = {
 	isStrike: false,
 	isCode: false,
 	isLink: false,
+	singleBlock: false,
 };
 
 /** Panel footprint used to decide whether it fits above the selection. */
 const PANEL_WIDTH = 208;
 const PANEL_HEIGHT = 80;
+/** With the Comment row: a divider (9px) and the 32px row under the rest. */
+const PANEL_HEIGHT_WITH_COMMENT = 118;
 const GAP = 8;
 
 type PanelPosition = {
@@ -94,6 +105,7 @@ function readSelectionState(editor: Editor): SelectionToolbarState {
 		isStrike: editor.isActive("strike"),
 		isCode: editor.isActive("code"),
 		isLink: editor.isActive("link"),
+		singleBlock: selectedTopLevelBlock(editor.state) !== null,
 	};
 }
 
@@ -101,6 +113,7 @@ function computePanelPosition(
 	editor: Editor,
 	from: number,
 	to: number,
+	panelHeight: number = PANEL_HEIGHT,
 ): PanelPosition | null {
 	const { view } = editor;
 	let start: { top: number; bottom: number; left: number };
@@ -117,7 +130,7 @@ function computePanelPosition(
 	const hidden = isAnchorClipped(start, clip);
 	const roomAbove = start.top - GAP - Math.max(clip.top, 0);
 	const placement: PanelPosition["placement"] =
-		roomAbove >= PANEL_HEIGHT ? "above" : "below";
+		roomAbove >= panelHeight ? "above" : "below";
 
 	let left = start.left;
 	if (editorRect.width > 0) {
@@ -162,6 +175,7 @@ const SELECTION_TOOLBAR_HOVER_CLOSE_MS = 160;
 
 export function SelectionToolbar() {
 	const { editor } = useEditorCtx();
+	const blockComments = useBlockComments();
 	const state =
 		useEditorState<SelectionToolbarState>({
 			editor,
@@ -229,13 +243,16 @@ export function SelectionToolbar() {
 		setLinkOpen(false);
 	}, [shouldShow]);
 
+	const showsComment = Boolean(blockComments && state.singleBlock);
 	useEffect(() => {
 		if (!editor || !shouldShow) {
 			setPosition(null);
 			return;
 		}
 		const { from, to } = state;
-		const update = () => setPosition(computePanelPosition(editor, from, to));
+		const panelHeight = showsComment ? PANEL_HEIGHT_WITH_COMMENT : PANEL_HEIGHT;
+		const update = () =>
+			setPosition(computePanelPosition(editor, from, to, panelHeight));
 		update();
 		window.addEventListener("scroll", update, true);
 		window.addEventListener("resize", update);
@@ -243,7 +260,7 @@ export function SelectionToolbar() {
 			window.removeEventListener("scroll", update, true);
 			window.removeEventListener("resize", update);
 		};
-	}, [editor, shouldShow, state.from, state.to]);
+	}, [editor, shouldShow, state.from, state.to, showsComment]);
 
 	const visible = Boolean(shouldShow && position && !position.hidden);
 	useEffect(() => {
@@ -487,6 +504,33 @@ export function SelectionToolbar() {
 						<RemoveFormatting className="size-3.5" aria-hidden />
 					</ToolbarIconButton>
 				</Toolbar.Group>
+
+				{showsComment && blockComments ? (
+					<>
+						<Toolbar.Separator className="markdown-selection-toolbar-divider" />
+						<Toolbar.Button
+							className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment"
+							onClick={() => blockComments.startComment()}
+							aria-keyshortcuts={
+								blockCommentShortcutLabel() === "⌘⌥M"
+									? "Meta+Alt+M"
+									: "Control+Alt+M"
+							}
+							data-attr="markdown-selection-comment"
+						>
+							<MessageSquare
+								className="markdown-selection-toolbar-trigger-icon"
+								aria-hidden
+							/>
+							<span className="markdown-selection-toolbar-trigger-label">
+								Comment
+							</span>
+							<span className="markdown-selection-toolbar-shortcut" aria-hidden>
+								{blockCommentShortcutLabel()}
+							</span>
+						</Toolbar.Button>
+					</>
+				) : null}
 			</Toolbar.Root>
 		</Tooltip.Provider>,
 		portalTarget,

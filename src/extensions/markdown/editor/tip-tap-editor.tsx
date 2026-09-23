@@ -7,6 +7,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type ReactNode,
 } from "react";
 import { EditorContent, useEditorState } from "@tiptap/react";
 import type { CommitSpan } from "@lix-js/sdk";
@@ -72,6 +73,11 @@ type TipTapEditorProps = {
 		/** The transition this save produced, for surfaces tracking their own writes. */
 		commit?: CommitSpan | null;
 	}) => void;
+	/**
+	 * Laid out inside the scrolling surface, after the document, so it scrolls
+	 * with it: the block conversations' margin and popovers.
+	 */
+	surfaceOverlay?: ReactNode;
 };
 
 export type MarkdownFileDelivery = {
@@ -152,6 +158,7 @@ export function TipTapEditor({
 	originKey,
 	openWorkspaceFile,
 	onPersist,
+	surfaceOverlay,
 }: TipTapEditorProps) {
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
 	if (!resolvedActiveBranchId) {
@@ -175,6 +182,7 @@ export function TipTapEditor({
 			originKey={originKey}
 			openWorkspaceFile={openWorkspaceFile}
 			onPersist={onPersist}
+			surfaceOverlay={surfaceOverlay}
 		/>
 	);
 }
@@ -293,6 +301,7 @@ function TipTapEditorLoadedContent({
 	originKey,
 	openWorkspaceFile,
 	onPersist,
+	surfaceOverlay,
 	hasInitialFile,
 	initialMarkdown,
 	sourceFilePath,
@@ -851,6 +860,7 @@ function TipTapEditorLoadedContent({
 					editor={editor}
 					surfaceRef={scrollContainerRef}
 				/>
+				{surfaceOverlay}
 			</div>
 			<div
 				ref={scrollThumbRef}

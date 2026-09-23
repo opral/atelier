@@ -49,6 +49,48 @@ export type { AtelierHistoryProps } from "./history";
 export { DiffGlyph, WorkingDot } from "./components/diff-glyph";
 export type { DiffGlyphKind } from "./components/diff-glyph";
 
+/**
+ * The comment field and thread History uses for checkpoint conversations,
+ * for a host that discusses things in its own surfaces. The composer edits a
+ * Zettel document with Lexical (bold, italic, code, links, lists), which is
+ * what `lix_comment.body` stores; the thread renders those documents.
+ */
+export {
+	Composer,
+	emptyCommentDocument,
+	hasCommentText,
+} from "./components/comments/comment-composer";
+export type {
+	ComposerProps,
+	ComposerTone,
+} from "./components/comments/comment-composer";
+export { CommentThread } from "./components/comments/comment-thread";
+export type { ThreadComment } from "./components/comments/comment-thread";
+
+/**
+ * The conversation view: one `lix_conversation` read as a page, in its own
+ * main tab. Open it with `views.open(ATELIER_CONVERSATION_VIEW_ID, { state:
+ * { conversationId } })` or `location={conversationLocation(id)}`; while it
+ * is active, `main_view_activated` carries `state.conversationId`,
+ * `state.title` and `state.atelier.label`. `selectConversationSummary`
+ * names a conversation for a URL slug without mounting anything.
+ */
+export {
+	ATELIER_CONVERSATION_VIEW_ID,
+	conversationLocation,
+} from "./extensions/conversation/conversation-location";
+export type { AtelierConversationViewState } from "./extensions/conversation/conversation-location";
+export { selectConversationSummary } from "./extensions/conversation/conversation-queries";
+export type {
+	ConversationAnchorKind,
+	ConversationSummary,
+} from "./extensions/conversation/conversation-queries";
+export {
+	OpenConversationButton,
+	openConversation,
+	useConversationHref,
+} from "./extensions/conversation/open-conversation";
+
 export { AtelierFile } from "./atelier-file";
 export type { AtelierFileProps } from "./atelier-file";
 

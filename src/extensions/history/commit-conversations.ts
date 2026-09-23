@@ -77,7 +77,15 @@ export function selectCheckpointConversations(
 		.$castTo<CheckpointConversation>();
 }
 
-export function selectConversationComments(lix: Lix, conversationId: string) {
+/** One conversation's comments, or several read as one thread in time order. */
+export function selectConversationComments(
+	lix: Lix,
+	conversationIds: string | readonly string[],
+) {
+	const ids =
+		typeof conversationIds === "string"
+			? [conversationIds]
+			: [...conversationIds];
 	return qb(lix)
 		.selectFrom("lix_comment as comment")
 		.leftJoin("lix_change as change", "change.id", "comment.lixcol_change_id")
@@ -88,7 +96,7 @@ export function selectConversationComments(lix: Lix, conversationId: string) {
 			"comment.lixcol_created_at as lixcol_created_at",
 			"author.name as author_name",
 		])
-		.where("comment.conversation_id", "=", conversationId)
+		.where("comment.conversation_id", "in", ids.length ? ids : [""])
 		.where("comment.lixcol_global", "=", true)
 		.orderBy("comment.lixcol_created_at", "asc")
 		.orderBy("comment.id", "asc")
@@ -115,26 +123,7 @@ export function commentBody(text: string): Document {
 	};
 }
 
-export function emptyCommentBody(): Document {
-	return {
-		_type: "zettel_doc",
-		blocks: [
-			{
-				_type: "zettel_block",
-				_key: crypto.randomUUID(),
-				style: "normal",
-				markDefs: [],
-				children: [],
-			},
-		],
-	};
-}
-
-export function parseCommentBody(body: unknown): Document {
-	const value = typeof body === "string" ? JSON.parse(body) : body;
-	assertDocument(value);
-	return value;
-}
+export { parseCommentBody } from "@/components/comments/comment-thread";
 
 /** The initial composer writes plain text Zettel blocks; read them safely as text. */
 export function commentParagraphs(body: unknown): string[] {
@@ -162,17 +151,6 @@ export function commentParagraphs(body: unknown): string[] {
 					.join("")
 			: "";
 	});
-}
-
-/** A useful immediate label until the reader chooses a checkpoint title. */
-export function titleFromFirstComment(document: Document): string {
-	const text = toPlainText(document);
-	const firstLine =
-		text.trim().split(/\r?\n/, 1)[0]?.replace(/\s+/g, " ").trim() ?? "";
-	if (firstLine.length <= 60) return firstLine;
-	const prefix = firstLine.slice(0, 59);
-	const lastSpace = prefix.lastIndexOf(" ");
-	return `${(lastSpace > 30 ? prefix.slice(0, lastSpace) : prefix).trimEnd()}…`;
 }
 
 export async function setCommitConversationTitle(
@@ -209,8 +187,8 @@ export async function createCommitConversation(
 	const transaction = await lix.beginTransaction();
 	try {
 		await transaction.execute(
-			"INSERT INTO lix_conversation (id, target, title, lixcol_global) VALUES ($1, lix_row_ref('lix_commit', NULL, $2), $3, true)",
-			[conversationId, commitId, titleFromFirstComment(body)],
+			"INSERT INTO lix_conversation (id, target, lixcol_global) VALUES ($1, lix_row_ref('lix_commit', NULL, $2), true)",
+			[conversationId, commitId],
 		);
 		await transaction.execute(
 			"INSERT INTO lix_comment (id, conversation_id, body, lixcol_global) VALUES ($1, $2, $3::jsonb, true)",
@@ -236,4 +214,74 @@ export async function replyToConversation(
 	);
 	if (result.rows.length === 0)
 		throw new Error("Conversation no longer exists.");
+}
+
+/**
+ * Plugin relations whose rows people comment on (a Markdown block, a CSV
+ * row). History counts their conversations per file under a checkpoint;
+ * relations a repository has not installed are skipped.
+ */
+export const COMMENTABLE_ROW_RELATIONS = ["markdown_node", "csv_row"] as const;
+
+export function selectInstalledCommentableRelations(lix: Lix) {
+	return qb(lix)
+		.selectFrom("lix_registered_schema")
+		.select("schema_key")
+		.distinct()
+		.where("schema_key", "in", [...COMMENTABLE_ROW_RELATIONS])
+		.$castTo<{ schema_key: string }>();
+}
+
+export type FileConversationCount = {
+	file_id: string;
+	conversation_count: number;
+};
+
+/**
+ * Design 4a, "File count in accent": per file, the conversations on rows
+ * this checkpoint changed. Row conversations live in their branch, so only
+ * local ones count. `relations` must be installed (see above).
+ */
+export function selectCheckpointFileConversationCounts(
+	lix: Lix,
+	beforeCommitId: string | null,
+	afterCommitId: string,
+	relations: readonly string[],
+) {
+	const perRelation = relations.map((relation) => {
+		// The relation must be a literal, not a parameter (opral/lix#1889).
+		const fileId = sql<string>`coalesce(changed.to_lixcol_file_id, changed.from_lixcol_file_id)`;
+		return qb(lix)
+			.selectFrom(
+				sql<{
+					row_ref: string;
+				}>`lix_diff(${sql.lit(relation)}, ${beforeCommitId}, ${afterCommitId})`.as(
+					"changed",
+				),
+			)
+			.innerJoin(
+				"lix_conversation as conversation",
+				"conversation.target",
+				"changed.row_ref",
+			)
+			.select([fileId.as("file_id"), "conversation.id as conversation_id"])
+			.where("conversation.lixcol_global", "=", false);
+	});
+	const [first, ...rest] = perRelation;
+	const changedRows = first
+		? rest.reduce((union, next) => union.unionAll(next), first)
+		: qb(lix)
+				.selectFrom("lix_conversation")
+				.select([sql<string>`NULL`.as("file_id"), "id as conversation_id"])
+				.where(sql<boolean>`false`);
+	return qb(lix)
+		.selectFrom(changedRows.as("row_conversation"))
+		.select([
+			"row_conversation.file_id as file_id",
+			sql<number>`count(DISTINCT row_conversation.conversation_id)`.as(
+				"conversation_count",
+			),
+		])
+		.groupBy("row_conversation.file_id")
+		.$castTo<FileConversationCount>();
 }

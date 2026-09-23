@@ -40,6 +40,7 @@
 	--color-accent-subtle: var(--atelier-accent-subtle);
 	--color-accent-border: var(--atelier-accent-border);
 	--color-history-secondary: var(--atelier-history-secondary);
+	--color-history-flag: var(--atelier-history-flag);
 	--color-history-selected-secondary: var(--atelier-history-selected-secondary);
 	--color-history-input-border: var(--atelier-history-input-border);
 	--color-link: var(--atelier-link);

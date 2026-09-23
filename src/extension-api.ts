@@ -38,6 +38,7 @@ export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	text: "atelier_text",
 	excalidraw: "atelier_excalidraw",
 	sqlExplorer: "sql_explorer",
+	conversation: "atelier_conversation",
 } as const;
 
 export type AtelierBuiltinExtensionId =
@@ -247,8 +248,11 @@ export type AtelierEvent =
 	  }
 	| {
 			/**
-			 * The active main view changed (open, tab click, close, restore).
-			 * Hosts that own routing map this to a URL.
+			 * The active main view changed (open, tab click, close, restore),
+			 * or the active non-document view renamed its tab
+			 * (`state.atelier.label`; a conversation titles its tab once read).
+			 * Hosts that own routing map this to a URL; a repeat for the same
+			 * `instanceId` is a rename, so replace the entry rather than push.
 			 */
 			type: "main_view_activated";
 			viewKind: string;
