@@ -10,10 +10,11 @@ import { isMacPlatform } from "@/lib/platform";
 export type BlockCommentsApi = {
 	readonly startComment: () => void;
 	/**
-	 * Opens a conversation on its block, the caret in its reply field, as
-	 * soon as its thread is placed.
+	 * Opens a conversation on its block (at `index`), the caret in its reply
+	 * field, as soon as its thread is placed. One with no comments yet opens
+	 * the block's comment field, and the comment goes into it.
 	 */
-	readonly openConversation: (conversationId: string) => void;
+	readonly openConversation: (conversationId: string, index: number) => void;
 };
 
 export const BlockCommentsContext = createContext<BlockCommentsApi | null>(

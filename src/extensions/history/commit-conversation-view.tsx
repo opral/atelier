@@ -129,7 +129,9 @@ export function CommitConversationView({
 		if (primary) await replyToConversation(lix, primary.id, document);
 		else await createCommitConversation(lix, commitId, document);
 	}
-	const replying = primary !== null || rows.length > 0;
+	// Replying is answering someone: a conversation with a title and no
+	// comments yet (a checkpoint named in another client) takes a comment.
+	const replying = rows.length > 0;
 
 	return (
 		<div

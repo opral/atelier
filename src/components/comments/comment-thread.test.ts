@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
 	foldComments,
 	formatCommentTime,
+	renderCommentHtml,
 	sharesCommentHeader,
 	type ThreadComment,
 } from "./comment-thread";
@@ -91,5 +92,34 @@ describe("avatars", () => {
 	test("recognizes Claude by name", () => {
 		expect(isClaudeAuthor(" claude ")).toBe(true);
 		expect(isClaudeAuthor("Claudette")).toBe(false);
+	});
+});
+
+describe("renderCommentHtml", () => {
+	test("shows raw HTML stored in a comment as its text, not a code chip", () => {
+		const html = renderCommentHtml({
+			_type: "zettel_doc",
+			blocks: [
+				{
+					_type: "zettel_block",
+					_key: "a",
+					style: "normal",
+					markDefs: [],
+					children: [
+						{ _type: "zettel_span", _key: "b", text: "Hello", marks: [] },
+						{
+							_type: "zettel_html_inline",
+							_key: "c",
+							value: "<o:p></o:p>",
+							marks: [],
+						},
+					],
+				},
+				{ _type: "zettel_html", _key: "d", value: "<x-custom>b</x-custom>" },
+			],
+		});
+		expect(html).not.toMatch(/<code|<pre|o:p|x-custom/);
+		expect(html).toContain("Hello");
+		expect(html).toMatch(/<p[^>]*><span[^>]*>b<\/span><\/p>/);
 	});
 });

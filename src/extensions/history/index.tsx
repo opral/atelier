@@ -211,6 +211,13 @@ function HistoryFilePath({ path }: { readonly path: string }) {
 type CheckpointRowMemory = {
 	readonly drafts: Map<string, ConversationDraft>;
 	readonly unfolded: Set<string>;
+	/**
+	 * Whether the reader's last input was a pointer. Focus a row moves in
+	 * code shows the ring (and the header's open-conversation link) when the
+	 * focus it moves from had one, as the row has after Esc; after a click
+	 * it must not. Kept current by the History view.
+	 */
+	readonly lastInput: { pointer: boolean };
 };
 
 const CheckpointRowMemoryContext = createContext<CheckpointRowMemory | null>(
@@ -222,6 +229,7 @@ function useCheckpointRowMemory(): CheckpointRowMemory {
 	const [fallback] = useState<CheckpointRowMemory>(() => ({
 		drafts: new Map(),
 		unfolded: new Set(),
+		lastInput: { pointer: false },
 	}));
 	return memory ?? fallback;
 }
@@ -238,7 +246,23 @@ export function HistoryView({
 	const [rowMemory] = useState<CheckpointRowMemory>(() => ({
 		drafts: new Map(),
 		unfolded: new Set(),
+		lastInput: { pointer: false },
 	}));
+	useEffect(() => {
+		const { lastInput } = rowMemory;
+		const onPointer = () => {
+			lastInput.pointer = true;
+		};
+		const onKey = () => {
+			lastInput.pointer = false;
+		};
+		document.addEventListener("pointerdown", onPointer, true);
+		document.addEventListener("keydown", onKey, true);
+		return () => {
+			document.removeEventListener("pointerdown", onPointer, true);
+			document.removeEventListener("keydown", onKey, true);
+		};
+	}, [rowMemory]);
 	const { scope, activeFileId, activeFilePath } = useHistoryScope(
 		atelier,
 		preferences,
@@ -964,7 +988,11 @@ function CheckpointItem({
 		focusRowSoon();
 	}
 	function focusRow() {
-		rowButtonRef.current?.focus({ preventScroll: true });
+		rowButtonRef.current?.focus({
+			preventScroll: true,
+			// See `lastInput`. Unset otherwise: the browser decides for the keyboard.
+			...(rowMemory.lastInput.pointer ? { focusVisible: false } : {}),
+		} as FocusOptions);
 	}
 	// The input unmounts; keyboard users continue from the row, not <body>.
 	function focusRowSoon() {
@@ -972,7 +1000,7 @@ function CheckpointItem({
 			if (!rowButtonRef.current?.isConnected) return;
 			if (document.activeElement && document.activeElement !== document.body)
 				return;
-			rowButtonRef.current.focus({ preventScroll: true });
+			focusRow();
 		});
 	}
 	async function saveTitle() {
@@ -1137,7 +1165,16 @@ function CheckpointItem({
 						}
 						void openCheckpoint();
 					}}
-					onMouseDown={(event) => event.preventDefault()}
+					onMouseDown={(event) => {
+						// A click leaves focus in the document being read. Focus
+						// already on a checkpoint moves to this row (see
+						// openCheckpoint), and the mouse moves it without a ring,
+						// which focus moved in code would keep after Esc.
+						if (
+							!document.activeElement?.closest("[data-attr=history-checkpoint]")
+						)
+							event.preventDefault();
+					}}
 					onKeyDown={(event) => {
 						if (event.key === "F2" && isViewing && !atelier.readOnly) {
 							event.preventDefault();

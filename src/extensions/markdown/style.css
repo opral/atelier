@@ -2741,7 +2741,7 @@
 			height: 32px;
 			align-items: center;
 			gap: 6px;
-			padding: 0 6px 0 8px;
+			padding: 0 8px;
 			border-radius: 7px;
 			color: var(--atelier-fg);
 			font-size: 12.5px;
@@ -2783,7 +2783,8 @@
 		.markdown-selection-toolbar-trigger-chevron {
 			display: inline-flex;
 			flex: 0 0 auto;
-			color: var(--atelier-fg-subtle);
+			/* N1: a step darker than fg-subtle, as the comment metadata. */
+			color: var(--atelier-history-secondary);
 		}
 
 		.markdown-selection-toolbar-divider {
@@ -2798,12 +2799,8 @@
 			gap: 2px;
 		}
 
-		/* The Comment row (Turn 7, N1): built like the "Turn into" row, with
-		   its shortcut where the chevron would be. */
-		.markdown-selection-toolbar-comment {
-			padding: 0 8px;
-		}
-
+		/* The Comment row (Turn 7, N1) is a "Turn into" row with its shortcut
+		   where the chevron would be. */
 		.markdown-selection-toolbar-shortcut {
 			flex: 0 0 auto;
 			color: var(--atelier-history-secondary);
@@ -2877,17 +2874,22 @@
 			--markdown-comment-line: 75%;
 		}
 
-		/* On a wide panel the column moves left and a margin beside it holds
-		   the cards (design N3): a 64px gutter, the column, a 40px gap, the
-		   280px margin, and at least 32px after it. */
+		/* On a wide panel a margin beside the column holds the cards (design
+		   N3): the column, a 40px gap, the 280px margin, and at least 32px
+		   after it. The column stays centred while that fits and moves left
+		   only as far as it must, to a 64px gutter (`marginColumnLeft`, set
+		   by the layer on the surface). */
 		.markdown-view
 			.tiptap-container:has(
 				> .markdown-block-comments[data-layout="margin"][data-has-threads]
 			)
 			.ProseMirror {
 			--atelier-doc-gutter: 0px;
-			padding-left: 64px;
-			padding-right: calc(100% - 64px - var(--markdown-content-width));
+			padding-left: var(--markdown-margin-column-left, 64px);
+			padding-right: calc(
+				100% - var(--markdown-margin-column-left, 64px) -
+					var(--markdown-content-width)
+			);
 		}
 
 		/* Narrow: the counts sit in the right gutter. It keeps room for them in

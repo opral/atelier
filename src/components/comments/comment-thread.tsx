@@ -9,7 +9,7 @@ import { toHtml } from "@opral/zettel-html";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
 import { CommentAvatar } from "./comment-avatar";
-import { withoutImages } from "./comment-document";
+import { asCommentText } from "./comment-document";
 import "./comments.css";
 
 export type ThreadComment = {
@@ -92,9 +92,9 @@ export function parseCommentBody(body: unknown): Document {
 
 export function renderCommentHtml(body: unknown): string | null {
 	try {
-		// A comment stored with an image (pasted before the field refused
-		// them) shows its alt text, not a remote picture.
-		return toHtml(withoutImages(parseCommentBody(body)));
+		// A comment stored with an image or raw HTML (pasted before the field
+		// refused them) shows its text, not a remote picture or a code chip.
+		return toHtml(asCommentText(parseCommentBody(body)));
 	} catch {
 		return null;
 	}
@@ -165,25 +165,36 @@ function guardLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
  */
 export type CommentThreadSize = "compact" | "document" | "view";
 
+/**
+ * The first comment an unfolding revealed takes focus in place of the fold
+ * row, which is gone: a ring for the keyboard, none for the mouse.
+ */
+const REVEALED_FOCUS =
+	"rounded-[6px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 function CommentRow({
 	comment,
 	grouped,
 	size,
+	revealed,
 }: {
 	readonly comment: ThreadComment;
 	readonly grouped: boolean;
 	readonly size: CommentThreadSize;
+	readonly revealed: boolean;
 }) {
 	const name = authorName(comment);
 	if (size === "view")
 		return <ViewCommentRow comment={comment} grouped={grouped} />;
 	const inDocument = size === "document";
+	const focus = revealed ? { tabIndex: -1 } : undefined;
 	if (grouped) {
 		return (
 			<li
 				data-comment-id={comment.id}
 				data-comment-grouped=""
-				className={inDocument ? "-mt-1.5 pl-7" : "-mt-2 pl-[48px] pr-2"}
+				{...focus}
+				className={`${inDocument ? "-mt-1.5 pl-7" : "-mt-2 pl-[48px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 			>
 				<CommentBody body={comment.body} />
 			</li>
@@ -192,7 +203,8 @@ function CommentRow({
 	return (
 		<li
 			data-comment-id={comment.id}
-			className={inDocument ? "flex gap-2" : "flex gap-[7px] pl-[23px] pr-2"}
+			{...focus}
+			className={`${inDocument ? "flex gap-2" : "flex gap-[7px] pl-[23px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 		>
 			<CommentAvatar name={name} size={inDocument ? "lg" : "md"} />
 			<div className="min-w-0 flex-1">
@@ -406,6 +418,20 @@ export function CommentThread({
 }) {
 	const [localExpanded, setLocalExpanded] = useState(false);
 	const expanded = controlledExpanded ?? localExpanded;
+	const listRef = useRef<HTMLOListElement>(null);
+	// Unfolding removes the fold row, which had focus; the first comment it
+	// revealed takes it, so a keyboard reader goes on from where it was.
+	const [revealedId, setRevealedId] = useState<string | null>(null);
+	const focusRevealedRef = useRef(false);
+	useLayoutEffect(() => {
+		if (!focusRevealedRef.current || revealedId === null) return;
+		const row = listRef.current?.querySelector<HTMLElement>(
+			`[data-comment-id="${CSS.escape(revealedId)}"]`,
+		);
+		if (!row) return;
+		focusRevealedRef.current = false;
+		row.focus({ preventScroll: true });
+	}, [revealedId, expanded]);
 	const setExpanded = (value: boolean) => {
 		setLocalExpanded(value);
 		onExpandedChange?.(value);
@@ -434,6 +460,7 @@ export function CommentThread({
 				key={comment.id}
 				comment={comment}
 				size={size}
+				revealed={comment.id === revealedId}
 				grouped={
 					// The first comment after the fold row starts a new header.
 					!(offset > 0 && index === 0 && hidden.length > 0) &&
@@ -444,6 +471,7 @@ export function CommentThread({
 	if (comments.length === 0) return null;
 	return (
 		<ol
+			ref={listRef}
 			aria-label={label}
 			data-tone={tone}
 			data-size={size}
@@ -466,7 +494,14 @@ export function CommentThread({
 				<FoldRow
 					hidden={hidden}
 					size={size}
-					onExpand={() => setExpanded(true)}
+					onExpand={() => {
+						// Only when the row had focus (Safari's click leaves it
+						// where it was): the reader's place is not taken elsewhere.
+						focusRevealedRef.current =
+							listRef.current?.contains(document.activeElement) ?? false;
+						setRevealedId(hidden[0]?.id ?? null);
+						setExpanded(true);
+					}}
 				/>
 			) : null}
 			{rows(tail, comments.length - tail.length)}

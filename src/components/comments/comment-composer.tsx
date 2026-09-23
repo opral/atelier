@@ -6,18 +6,27 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
+	$createZettelSpanNode,
+	$createZettelTextBlockNode,
 	createZettelEditor,
 	exportDocument,
 	loadDocument,
 	registerZettelLexicalPlugin,
 	toPlainText,
+	ZettelHtmlNode,
 	ZettelImageNode,
+	ZettelInlineHtmlNode,
 	ZettelSpanNode,
 	type Document,
 } from "@opral/zettel-lexical";
-import { $getRoot, type LexicalEditor } from "lexical";
+import { $getRoot, type LexicalEditor, type LexicalNode } from "lexical";
 import { isMacPlatform } from "@/lib/platform";
-import { isBlankComment, withoutImages } from "./comment-document";
+import {
+	asCommentText,
+	htmlBlockLines,
+	htmlInlineText,
+	isBlankComment,
+} from "./comment-document";
 import "./comments.css";
 
 export type ComposerTone = "accent" | "neutral";
@@ -130,8 +139,8 @@ export type ComposerProps = {
  * thread is for reading; focus comes from a click or a Comment button), then
  * the writing field: white, the accent ring, the send button in its corner
  * and the key hints under it. Text is a Zettel document edited with Lexical,
- * so bold, italic, code, links and lists survive the round trip. Images do
- * not: a comment is text (see `withoutImages`).
+ * so bold, italic, code, links and lists survive the round trip. Images and
+ * raw HTML do not: a comment is text (see `asCommentText`).
  *
  * The draft lives with the caller too, so the field can unmount (a
  * checkpoint closing) and come back with what was typed.
@@ -167,7 +176,7 @@ export function Composer({
 	const editor = editorRef.current;
 	const onChangeRef = useRef(onChange);
 	onChangeRef.current = onChange;
-	const [initialValue] = useState(() => withoutImages(value));
+	const [initialValue] = useState(() => asCommentText(value));
 	const [current, setCurrent] = useState(initialValue);
 	const serializedRef = useRef(JSON.stringify(initialValue));
 	// The last text that exported as a valid document. Lexical can leave a
@@ -230,6 +239,37 @@ export function Composer({
 				);
 			},
 		);
+		// Raw HTML (Word pastes `<o:p></o:p>` after every paragraph) is a
+		// read-only node: it would post as a code chip, and ⌘A ⌫ could not
+		// remove it. It becomes the text it holds.
+		const unregisterInlineHtml = editor.registerNodeTransform(
+			ZettelInlineHtmlNode,
+			(html) => {
+				const text = htmlInlineText(html.value);
+				if (!text) html.remove();
+				else html.replace(new ZettelSpanNode({ text, marks: html.marks }));
+			},
+		);
+		const unregisterHtml = editor.registerNodeTransform(
+			ZettelHtmlNode,
+			(html) => {
+				const paragraphs = htmlBlockLines(html.value).map((line) =>
+					$createZettelTextBlockNode().append(
+						$createZettelSpanNode({ text: line }),
+					),
+				);
+				// A container keeps a block to type in.
+				if (
+					paragraphs.length === 0 &&
+					html.getParent()?.getChildrenSize() === 1
+				)
+					paragraphs.push($createZettelTextBlockNode());
+				let previous: LexicalNode = html;
+				for (const paragraph of paragraphs)
+					previous = previous.insertAfter(paragraph);
+				html.remove();
+			},
+		);
 		loadDocument(editor, initialValue);
 		const unregisterChanges = editor.registerUpdateListener(
 			({ dirtyElements, dirtyLeaves }) => {
@@ -245,6 +285,8 @@ export function Composer({
 		);
 		return () => {
 			unregisterChanges();
+			unregisterHtml();
+			unregisterInlineHtml();
 			unregisterImages();
 			unregisterPlugin();
 			editor.setRootElement(null);
@@ -314,7 +356,7 @@ export function Composer({
 		// (see ComposerProps.onSubmit).
 		replaceDocument(emptyCommentDocument());
 		try {
-			await onSubmit(trimEmptyBlocks(withoutImages(document)));
+			await onSubmit(trimEmptyBlocks(asCommentText(document)));
 			// The reading view keeps the field for a follow-up.
 			if (size === "view") focusEnd(editor, fieldRef.current);
 		} catch (cause) {

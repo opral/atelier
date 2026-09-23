@@ -61,6 +61,17 @@ export function RevealMarkdownBlock({
 	}, [editor]);
 	const blockComments = useBlockComments();
 	const revealed = useRef<string | null>(null);
+	// The conversation to open once block conversations are up: a file
+	// opened for the reveal has its blocks before they publish.
+	const [opening, setOpening] = useState<{
+		readonly conversationId: string;
+		readonly index: number;
+	} | null>(null);
+	useEffect(() => {
+		if (!opening || !blockComments) return;
+		setOpening(null);
+		blockComments.openConversation(opening.conversationId, opening.index);
+	}, [blockComments, opening]);
 	useEffect(() => {
 		const rowId = reveal.rowId;
 		if (!rowId || revealed.current === reveal.key) return;
@@ -81,7 +92,7 @@ export function RevealMarkdownBlock({
 		reveal.consume();
 		// A request for one conversation opens it, the caret in its reply.
 		if (reveal.conversationId)
-			blockComments?.openConversation(reveal.conversationId);
+			setOpening({ conversationId: reveal.conversationId, index });
 		// After the document region has laid the document out.
 		requestAnimationFrame(() => {
 			element.scrollIntoView({ block: "center" });
@@ -94,6 +105,6 @@ export function RevealMarkdownBlock({
 					{ duration: 1600, easing: "ease-out" },
 				);
 		});
-	}, [blockComments, blocks.rows, blocks.status, editor, reveal, revision]);
+	}, [blocks.rows, blocks.status, editor, reveal, revision]);
 	return null;
 }

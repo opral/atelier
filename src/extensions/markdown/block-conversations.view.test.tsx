@@ -987,6 +987,61 @@ describe("two conversations on one block", () => {
 		}
 	});
 
+	test("a reveal for a conversation with no comments marks its block with the comment field, and the comment goes into it", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"First para.",
+		);
+		try {
+			const { lix, fileId, editor } = view;
+			const rows = (await selectMarkdownBlocks(
+				lix,
+				fileId,
+			).execute()) as MarkdownBlockRow[];
+			const row = rows.find(
+				(candidate) => blockRowText(candidate) === "Second para.",
+			)!;
+			const empty = crypto.randomUUID();
+			await lix.execute(
+				"INSERT INTO lix_conversation (id, target) VALUES ($1, lix_row_ref('markdown_node', $2, $3))",
+				[empty, fileId, row.id],
+			);
+			Element.prototype.scrollIntoView ??= () => {};
+			await view.reveal({
+				key: "reveal-empty",
+				rowId: row.id,
+				rowNumber: null,
+				conversationId: empty,
+				at: Date.now(),
+				consume: () => {},
+			});
+			const field = await within(document.body).findByRole("textbox", {
+				name: "Comment on this block",
+			});
+			const second = editor.view.dom.children[2] as HTMLElement;
+			expect(second).toHaveTextContent("Second para.");
+			expect(second).toHaveAttribute("data-block-comment");
+			await typeInto(field, "The first word");
+			await act(async () =>
+				fireEvent.keyDown(field, { key: "Enter", metaKey: true }),
+			);
+			await waitFor(async () => {
+				const result = await lix.execute(
+					"SELECT conversation_id FROM lix_comment WHERE conversation_id = $1",
+					[empty],
+				);
+				expect(result.rows).toHaveLength(1);
+			});
+			const conversations = await lix.execute(
+				"SELECT id FROM lix_conversation WHERE target = lix_row_ref('markdown_node', $1, $2)",
+				[fileId, row.id],
+			);
+			expect(conversations.rows).toHaveLength(1);
+		} finally {
+			await view.close();
+		}
+	});
+
 	test("a reveal for the second thread puts the caret in the second thread's reply", async () => {
 		const view = await setup(
 			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",

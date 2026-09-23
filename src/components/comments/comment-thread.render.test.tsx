@@ -135,4 +135,18 @@ describe("CommentThread foldWithin", () => {
 		])
 			expect(within(list).getByText(text)).toBeInTheDocument();
 	});
+
+	test("unfolding hands focus to the first comment it revealed", () => {
+		render(<CommentThread comments={thread(6)} />);
+		const list = screen.getByRole("list", { name: "Comments" });
+		const fold = within(list).getByRole("button", {
+			name: /Show 3 more comments/,
+		});
+		fold.focus();
+		fireEvent.click(fold);
+		expect(within(list).queryByRole("button")).toBeNull();
+		const revealed = within(list).getByText("comment 2").closest("li");
+		expect(document.activeElement).toBe(revealed);
+		expect(revealed).toHaveAttribute("tabindex", "-1");
+	});
 });

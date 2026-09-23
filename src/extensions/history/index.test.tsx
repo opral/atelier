@@ -1039,6 +1039,28 @@ describe("checkpoint conversation flows", () => {
 		}
 	});
 
+	test("a titled checkpoint with no comments asks for a comment, not a reply", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await setCommitConversationTitle(lix, commitId, null, "Research moved");
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			// The conversation (its title) has been read.
+			await screen.findByText("Research moved");
+			expect(
+				screen.getByRole("textbox", { name: "Comment on this checkpoint" }),
+			).toBeVisible();
+			expect(screen.queryByRole("textbox", { name: "Reply" })).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
 	test("text typed while a comment is sending stays in the field", async () => {
 		const lix = await openLix();
 		const { commitId } = await createCheckpoint(lix);
@@ -1094,6 +1116,49 @@ describe("checkpoint conversation flows", () => {
 				"data-review-shortcut-ignore",
 			);
 			expect(field).toHaveTextContent("Keep me");
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("a click on another checkpoint lets the mouse move focus from History, not from the document", async () => {
+		const lix = await openLix();
+		await createCheckpoint(lix);
+		const { commitId } = await createCheckpoint(lix);
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			const field = await screen.findByRole("textbox", {
+				name: "Comment on this checkpoint",
+			});
+			const rows = await waitFor(() => {
+				const found = screen
+					.getAllByRole("listitem")
+					.map((item) =>
+						item.querySelector<HTMLElement>(
+							":scope > [data-attr=history-view-checkpoint]",
+						),
+					)
+					.filter((row) => row !== null);
+				expect(found.length).toBeGreaterThan(1);
+				return found;
+			});
+			const other = rows.find((row) => !row.closest("li")!.contains(field))!;
+			// Focus in the document stays there.
+			const outside = document.createElement("button");
+			document.body.append(outside);
+			act(() => outside.focus());
+			expect(fireEvent.mouseDown(other)).toBe(false);
+			// After Esc the row has focus, with the keyboard's ring; the mouse
+			// moves it on, which paints none (focus moved in code would).
+			act(() => field.focus());
+			fireEvent.keyDown(field, { key: "Escape" });
+			expect(fireEvent.mouseDown(other)).toBe(true);
+			outside.remove();
 		} finally {
 			view.unmount();
 			await lix.close();

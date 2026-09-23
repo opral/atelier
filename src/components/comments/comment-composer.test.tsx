@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { $getRoot, type LexicalEditor } from "lexical";
+import { $getRoot, type ElementNode, type LexicalEditor } from "lexical";
+import { ZettelHtmlNode, ZettelInlineHtmlNode } from "@opral/zettel-lexical";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import type { Document, TextBlock } from "@opral/zettel-ast";
+import type { Document, Span, TextBlock } from "@opral/zettel-ast";
 import { Composer, emptyCommentDocument } from "./comment-composer";
-import { isBlankComment, withoutImages } from "./comment-document";
+import { asCommentText, isBlankComment } from "./comment-document";
 
 function editorOf(field: HTMLElement): LexicalEditor {
 	return (field as HTMLElement & { __lexicalEditor: LexicalEditor })
@@ -115,6 +116,75 @@ describe("Composer", () => {
 		expect(field.querySelector("img")).toBeNull();
 		expect(field).toHaveTextContent("diagram");
 	});
+
+	test("raw HTML in a draft comes in as its text", () => {
+		render(
+			<Composer
+				label="Reply"
+				placeholder="Reply"
+				value={paragraph(
+					textBlock([
+						{ _type: "zettel_span", _key: "a", text: "Hello", marks: [] },
+						{
+							_type: "zettel_html_inline",
+							_key: "b",
+							value: "<o:p></o:p>",
+							marks: [],
+						},
+					]),
+					{ _type: "zettel_html", _key: "c", value: "<x-custom>b</x-custom>" },
+				)}
+				onChange={() => {}}
+				onSubmit={async () => {}}
+			/>,
+		);
+		const field = screen.getByRole("textbox", { name: "Reply" });
+		expect(field.querySelector("code, pre")).toBeNull();
+		expect(field.textContent).toBe("Hellob");
+	});
+
+	test("raw HTML let into the field (a Word paste) becomes its text", async () => {
+		let reported: Document | null = null;
+		render(
+			<Composer
+				label="Reply"
+				placeholder="Reply"
+				value={emptyCommentDocument()}
+				onChange={(document) => {
+					reported = document;
+				}}
+				onSubmit={async () => {}}
+			/>,
+		);
+		const field = screen.getByRole("textbox", { name: "Reply" });
+		await typeInto(field, "Hello");
+		// What the paste handler inserts for Word's `<o:p>` and a block of HTML.
+		await act(async () =>
+			editorOf(field).update(
+				() => {
+					const root = $getRoot();
+					(root.getFirstChild() as ElementNode).append(
+						new ZettelInlineHtmlNode({ value: "<o:p></o:p>", marks: [] }),
+						new ZettelInlineHtmlNode({ value: "<b> bold</b>", marks: [] }),
+					);
+					root.append(
+						new ZettelHtmlNode({ value: "<o:p>&nbsp;</o:p>" }),
+						new ZettelHtmlNode({ value: "<x-custom>b</x-custom>" }),
+					);
+				},
+				{ discrete: true },
+			),
+		);
+		expect(field.querySelector("code, pre")).toBeNull();
+		expect(JSON.stringify(reported)).not.toContain("zettel_html");
+		expect(
+			reported!.blocks.map((block) =>
+				(block as TextBlock).children
+					.map((child) => (child as Span).text)
+					.join(""),
+			),
+		).toEqual(["Hello bold", "b"]);
+	});
 });
 
 describe("isBlankComment", () => {
@@ -152,7 +222,7 @@ describe("isBlankComment", () => {
 	});
 });
 
-describe("withoutImages", () => {
+describe("asCommentText", () => {
 	test("turns an image into its alt text and drops one without", () => {
 		const document = paragraph(
 			textBlock([
@@ -173,17 +243,58 @@ describe("withoutImages", () => {
 				},
 			]),
 		);
-		const block = withoutImages(document).blocks[0] as TextBlock;
+		const block = asCommentText(document).blocks[0] as TextBlock;
 		expect(block.children).toEqual([
 			{ _type: "zettel_span", _key: "a", text: "See ", marks: [] },
 			{ _type: "zettel_span", _key: "b", text: "the chart", marks: ["link"] },
 		]);
 	});
 
-	test("returns the same document when there is no image", () => {
+	test("turns raw HTML into the text it holds and drops it when empty", () => {
+		// Word's paragraph, and a custom element as a paste leaves it.
+		const document = paragraph(
+			textBlock([
+				{ _type: "zettel_span", _key: "a", text: "Hello ", marks: [] },
+				{ _type: "zettel_span", _key: "b", text: "bold", marks: ["strong"] },
+				{
+					_type: "zettel_html_inline",
+					_key: "c",
+					value: "<o:p></o:p>",
+					marks: [],
+				},
+				{
+					_type: "zettel_html_inline",
+					_key: "d",
+					value: "<x-custom>b &amp; c</x-custom>",
+					marks: ["em"],
+				},
+			]),
+			{ _type: "zettel_html", _key: "e", value: "<o:p>&nbsp;</o:p>" },
+			{
+				_type: "zettel_html",
+				_key: "f",
+				value: "<div>one</div>\n<!-- a note -->\n<x-custom>two</x-custom>",
+			},
+		);
+		const next = asCommentText(document);
+		expect((next.blocks[0] as TextBlock).children).toEqual([
+			{ _type: "zettel_span", _key: "a", text: "Hello ", marks: [] },
+			{ _type: "zettel_span", _key: "b", text: "bold", marks: ["strong"] },
+			{ _type: "zettel_span", _key: "d", text: "b & c", marks: ["em"] },
+		]);
+		expect(
+			next.blocks
+				.slice(1)
+				.map((block) =>
+					(block as TextBlock).children.map((child) => (child as Span).text),
+				),
+		).toEqual([["one"], ["two"]]);
+	});
+
+	test("returns the same document when there is no image or raw HTML", () => {
 		const document = paragraph(
 			textBlock([{ _type: "zettel_span", _key: "a", text: "x", marks: [] }]),
 		);
-		expect(withoutImages(document)).toBe(document);
+		expect(asCommentText(document)).toBe(document);
 	});
 });

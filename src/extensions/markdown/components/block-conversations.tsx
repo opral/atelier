@@ -60,6 +60,7 @@ import {
 	blockAlignment,
 	popoverSide,
 	blockCommentLayout,
+	marginColumnLeft,
 	createBlockConversation,
 	replyToBlockConversation,
 	selectBlockComments,
@@ -106,6 +107,11 @@ type PendingComment = {
 	readonly blockId: string | null;
 	readonly index: number;
 	readonly focus: number;
+	/**
+	 * A conversation on the block with no comments yet, opened by its id:
+	 * the first comment goes into it rather than starting another.
+	 */
+	readonly conversationId?: string;
 };
 
 type ActiveConversation = {
@@ -623,21 +629,59 @@ const BlockConversationsController = memo(
 		// A conversation asked for by its id (a reveal from the conversation
 		// view) opens on its block, with the caret in its own reply field,
 		// once its thread is placed.
-		const [requested, setRequested] = useState<string | null>(null);
-		const requestConversation = useCallback((conversationId: string) => {
-			setRequested(conversationId);
-		}, []);
+		const [requested, setRequested] = useState<{
+			readonly conversationId: string;
+			readonly index: number;
+		} | null>(null);
+		const requestConversation = useCallback(
+			(conversationId: string, index: number) => {
+				setRequested({ conversationId, index });
+			},
+			[],
+		);
 		useEffect(() => {
 			if (!requested) return;
+			const { conversationId, index } = requested;
 			const entry = placed.find((candidate) =>
 				candidate.conversations.some(
-					(conversation) => conversation.conversationId === requested,
+					(conversation) => conversation.conversationId === conversationId,
 				),
 			);
-			if (!entry) return;
+			if (entry) {
+				setRequested(null);
+				activate(entry.key, true, conversationId);
+				return;
+			}
+			// One with no comments has no thread to open: its block is marked
+			// with a first comment's field, as Comment does, and the comment
+			// goes into it. A block's own thread opens in its place.
+			if (commentsResult.status !== "success" || threads.has(conversationId))
+				return;
 			setRequested(null);
-			activate(entry.key, true, requested);
-		}, [activate, placed, requested]);
+			const onBlock = threadAtBlock.get(index);
+			if (onBlock) {
+				activate(onBlock, true);
+				return;
+			}
+			if (!available || index < 0 || index >= editor.state.doc.childCount)
+				return;
+			setActive(null);
+			setPending((current) => ({
+				blockId: blockNodeId(editor.state.doc.child(index)),
+				index,
+				focus: (current?.focus ?? 0) + 1,
+				conversationId,
+			}));
+		}, [
+			activate,
+			available,
+			commentsResult.status,
+			editor,
+			placed,
+			requested,
+			threadAtBlock,
+			threads,
+		]);
 
 		const activeRef = useRef(active);
 		activeRef.current = active;
@@ -736,12 +780,11 @@ const BlockConversationsController = memo(
 					throw new Error(
 						"This block is not saved yet. Try again in a moment.",
 					);
-				const conversationId = await createBlockConversation(
-					lix,
-					fileId,
-					nodeId,
-					body,
-				);
+				const conversationId =
+					pending.conversationId ??
+					(await createBlockConversation(lix, fileId, nodeId, body));
+				if (pending.conversationId)
+					await replyToBlockConversation(lix, pending.conversationId, body);
 				const blockId = blockNodeId(editor.state.doc.child(blockIndex));
 				if (blockId)
 					carriers.current.set(conversationId, {
@@ -1604,6 +1647,12 @@ function BlockConversationsSurface({
 	measuring.current = indexes.length > 0;
 	useLayoutEffect(() => {
 		const surface = layerRef.current?.parentElement;
+		return () => {
+			surface?.style.removeProperty("--markdown-margin-column-left");
+		};
+	}, []);
+	useLayoutEffect(() => {
+		const surface = layerRef.current?.parentElement;
 		if (!surface || !viewReady || !hasView(editor)) return;
 		const bump = () => setTick((value) => value + 1);
 		const bumpOnEdit = () => {
@@ -1624,6 +1673,11 @@ function BlockConversationsSurface({
 		if (!surface || !viewReady || !hasView(editor)) return;
 		const width = surface.clientWidth;
 		setLayout(blockCommentLayout(width));
+		// The column's place beside the margin (style.css reads it).
+		surface.style.setProperty(
+			"--markdown-margin-column-left",
+			`${marginColumnLeft(width)}px`,
+		);
 		const surfaceRect = surface.getBoundingClientRect();
 		const toSurface = (rect: DOMRect) => ({
 			top: rect.top - surfaceRect.top + surface.scrollTop,
@@ -2044,7 +2098,11 @@ function CountBadge({
 			aria-label={`${count} ${count === 1 ? "comment" : "comments"}`}
 			style={{
 				top: box.top + Math.max(0, (box.lineHeight - 22) / 2),
-				left: Math.max(box.right, columnRight) + 16,
+				// N5 sets the count's right edge 52px past the text (the
+				// block's 12px inset, then 40px), so it grows toward the text:
+				// "3" sits 17.4px off it.
+				left: Math.max(box.right, columnRight) + 52,
+				translate: "-100% 0",
 			}}
 			// A caret in the document keeps its focus; from anywhere else the
 			// count takes it, so Esc in the conversation is the document's.

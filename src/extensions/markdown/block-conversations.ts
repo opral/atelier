@@ -436,10 +436,11 @@ export function blockAlignment(
 }
 
 /*
- * Where the conversations sit. On a wide panel the document column moves
- * left and a margin beside it holds one card per commented block; when the
- * column and the margin do not both fit, the margin goes away and each
- * commented block shows its count just outside its right edge.
+ * Where the conversations sit. On a wide panel a margin beside the document
+ * column holds one card per commented block, the column staying centred
+ * while the margin fits beside it; when the column and the margin do not
+ * both fit, the margin goes away and each commented block shows its count
+ * just outside its right edge.
  */
 
 /** The document column, `--markdown-content-width`. */
@@ -464,6 +465,24 @@ export function blockCommentLayout(panelWidth: number): BlockCommentLayout {
 			MARGIN_GUTTER_RIGHT
 		? "margin"
 		: "narrow";
+}
+
+/**
+ * Where the column starts, from the panel's left, while the margin shows:
+ * centred in the panel, as a document without conversations is, with the
+ * margin to its right. When the margin would run into the panel's right
+ * gutter the column moves left just enough, never past its left gutter
+ * (narrower than that, the layout is narrow).
+ */
+export function marginColumnLeft(panelWidth: number): number {
+	const centred = (panelWidth - DOCUMENT_COLUMN_WIDTH) / 2;
+	const marginFits =
+		panelWidth -
+		DOCUMENT_COLUMN_WIDTH -
+		MARGIN_GAP -
+		MARGIN_CARD_WIDTH -
+		MARGIN_GUTTER_RIGHT;
+	return Math.max(MARGIN_GUTTER_LEFT, Math.min(centred, marginFits));
 }
 
 /**

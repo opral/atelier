@@ -13,6 +13,7 @@ import {
 	alignBlocks,
 	blockAlignment,
 	blockCommentLayout,
+	marginColumnLeft,
 	createBlockConversation,
 	groupBlockThreads,
 	popoverSide,
@@ -96,6 +97,23 @@ describe("blockCommentLayout", () => {
 		expect(blockCommentLayout(1184)).toBe("margin");
 		expect(blockCommentLayout(1183)).toBe("narrow");
 		expect(blockCommentLayout(640)).toBe("narrow");
+	});
+});
+
+describe("marginColumnLeft", () => {
+	// 768px column, 40px gap, 280px margin, 32px right gutter, 64px left.
+	test("centres the column while the margin fits beside it", () => {
+		expect(marginColumnLeft(1472)).toBe(352);
+		expect(marginColumnLeft(1920)).toBe(576);
+		expect(marginColumnLeft(2560)).toBe(896);
+	});
+
+	test("moves left just enough to keep the margin, down to the gutter", () => {
+		// Centred would be 316, and the margin would end 36px past its gutter.
+		expect(marginColumnLeft(1400)).toBe(280);
+		expect(marginColumnLeft(1400) + 768 + 40 + 280 + 32).toBe(1400);
+		expect(marginColumnLeft(1184)).toBe(64);
+		expect(marginColumnLeft(1000)).toBe(64);
 	});
 });
 
