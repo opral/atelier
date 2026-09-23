@@ -718,6 +718,23 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("activate: false in a side area only updates an open instance", async () => {
+		const shell = await renderTabbedShell();
+		try {
+			await act(async () => {
+				await shell.atelier.views.open(SIDE_EXTENSION_ID, {
+					area: "right",
+					instanceId: "side-not-open",
+					state: { note: "x" },
+					activate: false,
+				});
+			});
+			expect(screen.queryByTestId("test-side-tool")).toBeNull();
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("collapsing a sidebar leaves the keyboard on its top-bar toggle", async () => {
 		const shell = await renderTabbedShell();
 		try {

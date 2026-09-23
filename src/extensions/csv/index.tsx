@@ -1,4 +1,8 @@
-import { documentReveal, type DocumentReveal } from "@/lib/document-reveal";
+import {
+	clearDocumentReveal,
+	documentReveal,
+	type DocumentReveal,
+} from "@/lib/document-reveal";
 import { CsvContent } from "./csv-content";
 import {
 	loadTextFile,
@@ -2034,6 +2038,8 @@ function CsvTable({
 		if (!reveal || reveal.rowNumber === null || !gridPainted) return;
 		if (revealedKey.current === reveal.key) return;
 		revealedKey.current = reveal.key;
+		// Done with, whatever happens below: a remount must not do it again.
+		reveal.consume();
 		const row =
 			reveal.rowNumber < 1 ? -1 : rowMap.indexOf(reveal.rowNumber - 1);
 		if (row < 0) {
@@ -3484,7 +3490,14 @@ export const extension = createReactExtensionDefinition({
 					}
 					isActiveView={view.isActive}
 					isPanelFocused={view.isFocused}
-					reveal={documentReveal(view.state)}
+					reveal={documentReveal(
+						view.state,
+						clearDocumentReveal(
+							atelier.views,
+							manifestJson.id,
+							view.instanceId,
+						),
+					)}
 				/>
 			</PreparedFileSurface>
 		);

@@ -258,6 +258,46 @@ describe("ConversationView", () => {
 		).toBeTruthy();
 	});
 
+	test("a missing conversation reads history only when it can have changed, and not in the background", async () => {
+		lix = await openLix();
+		const execute = vi.spyOn(lix, "execute");
+		const historyReads = () =>
+			execute.mock.calls.filter(([statement]) =>
+				String(statement).includes("lix_history"),
+			).length;
+		const id = crypto.randomUUID();
+		const background = render(
+			<LixProvider lix={lix}>
+				<ConversationView
+					atelier={runtimeStub() as never}
+					view={{
+						instanceId: "bg",
+						isActive: false,
+						state: { conversationId: id },
+					}}
+				/>
+			</LixProvider>,
+		);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		expect(historyReads()).toBe(0);
+		background.unmount();
+
+		renderView(runtimeStub(), id);
+		expect(
+			await screen.findByText("This conversation isn’t available"),
+		).toBeTruthy();
+		const reads = historyReads();
+		expect(reads).toBeGreaterThan(0);
+		// Commits elsewhere in the workspace are not a reason to read again.
+		for (let index = 0; index < 3; index++)
+			await lix.execute(
+				"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
+				[`elsewhere-${index}`, "x"],
+			);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		expect(historyReads()).toBe(reads);
+	});
+
 	test("a malformed id needs no read", async () => {
 		lix = await openLix();
 		renderView(runtimeStub(), "not-a-uuid");

@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import { useQueryResult } from "@/lib/lix-react";
-import type { DocumentReveal } from "@/lib/document-reveal";
+import {
+	documentRevealIsCurrent,
+	type DocumentReveal,
+} from "@/lib/document-reveal";
 import {
 	blockAlignment,
 	selectMarkdownBlocks,
 	type MarkdownBlockRow,
 } from "../block-conversations";
-
-/** How long a reveal waits for its block before giving up. */
-const REVEAL_PATIENCE_MS = 10_000;
 
 function blockElement(editor: Editor, index: number): HTMLElement | null {
 	const { doc } = editor.state;
@@ -59,14 +59,16 @@ export function RevealMarkdownBlock({
 		};
 	}, [editor]);
 	const revealed = useRef<string | null>(null);
-	const startedAt = useRef({ key: reveal.key, at: Date.now() });
-	if (startedAt.current.key !== reveal.key)
-		startedAt.current = { key: reveal.key, at: Date.now() };
 	useEffect(() => {
 		const rowId = reveal.rowId;
 		if (!rowId || revealed.current === reveal.key) return;
+		// Waited for its block as long as the request stands: done with it.
+		if (!documentRevealIsCurrent(reveal)) {
+			revealed.current = reveal.key;
+			reveal.consume();
+			return;
+		}
 		if (blocks.status !== "success" || !editorViewReady(editor)) return;
-		if (Date.now() - startedAt.current.at > REVEAL_PATIENCE_MS) return;
 		const index = blockAlignment(editor.state.doc, blocks.rows).blockOfRow.get(
 			rowId,
 		);
@@ -74,6 +76,7 @@ export function RevealMarkdownBlock({
 		const element = blockElement(editor, index);
 		if (!element) return;
 		revealed.current = reveal.key;
+		reveal.consume();
 		// After the document region has laid the document out.
 		requestAnimationFrame(() => {
 			element.scrollIntoView({ block: "center" });
@@ -86,6 +89,6 @@ export function RevealMarkdownBlock({
 					{ duration: 1600, easing: "ease-out" },
 				);
 		});
-	}, [blocks.rows, blocks.status, editor, reveal.key, reveal.rowId, revision]);
+	}, [blocks.rows, blocks.status, editor, reveal, revision]);
 	return null;
 }

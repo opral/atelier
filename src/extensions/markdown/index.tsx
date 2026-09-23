@@ -73,7 +73,11 @@ import {
 	BlockConversationsLayer,
 } from "./components/block-conversations";
 import { ConversationViewsContext } from "../conversation/open-conversation";
-import { documentReveal, type DocumentReveal } from "@/lib/document-reveal";
+import {
+	clearDocumentReveal,
+	documentReveal,
+	type DocumentReveal,
+} from "@/lib/document-reveal";
 import { RevealMarkdownBlock } from "./components/reveal-block";
 import { EmojiPickerMenu } from "./components/emoji-picker-menu";
 import { EmbedFilePickerMenu } from "./components/embed-file-picker-menu";
@@ -1294,7 +1298,14 @@ export const extension = createReactExtensionDefinition({
 							isActiveView={view.isActive}
 							isPanelFocused={view.isFocused}
 							focusOnLoad={Boolean(view.state.focusOnLoad)}
-							reveal={documentReveal(view.state)}
+							reveal={documentReveal(
+								view.state,
+								clearDocumentReveal(
+									atelier.views,
+									manifestJson.id,
+									view.instanceId,
+								),
+							)}
 							defaultBlock={
 								view.state.defaultBlock === "heading1" ? "heading1" : undefined
 							}

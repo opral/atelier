@@ -3876,6 +3876,30 @@ function LayoutShellLoadedContentResolved({
 			}
 			const area = options.area ?? "main";
 			if (area !== "main") {
+				if (options.activate === false) {
+					// A state update for a side view that stays where it is;
+					// nothing opens when there is no such instance.
+					const instanceId = options.instanceId;
+					if (
+						instanceId &&
+						panelStatesRef.current[area].views.some(
+							(entry) => entry.instance === instanceId,
+						)
+					)
+						setAreaState(
+							area,
+							(current) => ({
+								views: current.views.map((entry) =>
+									entry.instance === instanceId
+										? { ...entry, state: { ...entry.state, ...options.state } }
+										: entry,
+								),
+								activeInstance: current.activeInstance,
+							}),
+							{ focus: false },
+						);
+					return undefined;
+				}
 				handleAddView(area, extensionId, options.state);
 				return undefined;
 			}

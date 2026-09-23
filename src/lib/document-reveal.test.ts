@@ -18,4 +18,17 @@ describe("documentReveal", () => {
 		expect(documentReveal({ reveal: { rowNumber: 1.5, at: 1 } })).toBeNull();
 		expect(documentReveal(null)).toBeNull();
 	});
+
+	test("a request is for the moment it was made", () => {
+		const request = documentRevealState({ rowId: "row-1" });
+		expect(
+			documentReveal({ reveal: request }, () => {}, request.at),
+		).not.toBeNull();
+		// A view remounted, or a workspace restored, later: not a request.
+		expect(
+			documentReveal({ reveal: request }, () => {}, request.at + 60_000),
+		).toBeNull();
+		// Cleared once consumed.
+		expect(documentReveal({ reveal: null })).toBeNull();
+	});
 });

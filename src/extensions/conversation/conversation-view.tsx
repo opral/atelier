@@ -174,12 +174,22 @@ function useAsyncRead<T>(
 }
 
 /** The branch head: it moves with every write, so a read keyed on it is live. */
-function selectBranchHead(lix: Lix) {
+/** The active branch's working baseline: it moves when a checkpoint is made. */
+function selectBranchBase(lix: Lix) {
 	return qb(lix)
 		.selectFrom("lix_branch")
-		.select("commit_id")
+		.select("working_base_commit_id")
 		.where("id", "=", sql<string>`lix_active_branch_id()`)
-		.$castTo<{ commit_id: string }>();
+		.$castTo<{ working_base_commit_id: string | null }>();
+}
+
+/** The last change to a file: it moves when the file does. */
+function selectFileChange(lix: Lix, fileId: string) {
+	return qb(lix)
+		.selectFrom("lix_file")
+		.select("lixcol_change_id")
+		.where("id", "=", fileId)
+		.$castTo<{ lixcol_change_id: string | null }>();
 }
 
 const EMPTY_AUTHORS: readonly {
@@ -237,14 +247,34 @@ function ConversationReader({
 	const [draft, setDraft] = useState<Document>(emptyCommentDocument);
 	const conversation = result.rows[0] ?? null;
 	const missing = result.status === "success" && conversation === null;
-	// Re-read as the branch moves: the removal is checkpointed later, or the
-	// conversation comes back with an undo.
-	const head = useQueryResult(selectBranchHead, { enabled: missing });
+	// The removal is read from history, which is costly, so it is read
+	// again only when what it says can change: a checkpoint is made (the
+	// removal is checkpointed) or the anchor's file changes (the anchor
+	// comes back). An undo that restores the conversation shows through the
+	// live query above. A tab in the background reads nothing.
+	const reading = missing && view.isActive;
+	const base = useQueryResult(selectBranchBase, { enabled: reading });
+	const [anchorFileId, setAnchorFileId] = useState<string | null>(null);
+	const anchorFile = useQueryResult(
+		(session) => selectFileChange(session, anchorFileId ?? ""),
+		{ enabled: reading && anchorFileId !== null },
+	);
 	const removed = useAsyncRead(
-		missing ? `${conversationId}:${head.rows[0]?.commit_id ?? ""}` : null,
+		reading && base.status === "success"
+			? `${conversationId}:${base.rows[0]?.working_base_commit_id ?? ""}:${
+					anchorFile.rows[0]?.lixcol_change_id ?? ""
+				}`
+			: null,
 		() => readRemovedConversation(lix, conversationId),
 		{ hold: true },
 	);
+	const removedTarget =
+		removed.status === "success" ? removed.value?.target : undefined;
+	const removedFileId =
+		removedTarget && "fileId" in removedTarget ? removedTarget.fileId : null;
+	useEffect(() => {
+		if (removedFileId) setAnchorFileId(removedFileId);
+	}, [removedFileId]);
 	const lostDraft = hasCommentText(draft) ? (
 		<LostDraft draft={draft} onChange={setDraft} />
 	) : null;

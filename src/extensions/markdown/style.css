@@ -3019,6 +3019,19 @@
 			padding-right: 24px;
 		}
 
+		/* Said when a save could not keep the comments on their blocks. */
+		.markdown-comment-notice {
+			top: 8px;
+			right: 32px;
+			margin: 0;
+			padding: 4px 8px;
+			border-radius: var(--atelier-radius-control);
+			background: var(--atelier-warning-subtle);
+			color: var(--atelier-fg-muted);
+			font-size: 11.5px;
+			line-height: 16px;
+		}
+
 		/* The narrow panel's count, just outside a commented block. */
 		.markdown-comment-badge {
 			display: inline-flex;

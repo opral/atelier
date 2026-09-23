@@ -39,7 +39,7 @@ import {
 	joinMarkdownEditorSaves,
 	markdownEditorLastAcknowledgedMarkdown,
 } from "../editor/create-editor";
-import type { SqlParam } from "@lix-js/sdk";
+import type { LixBatchStatement, LixTransaction, SqlParam } from "@lix-js/sdk";
 import { buildNormalizedMarkdownIncrementally } from "../editor/incremental-markdown-save";
 import {
 	blockCommentPluginKey,
@@ -113,6 +113,8 @@ type BlockConversationsState = {
 	readonly setReplyDraft: (nodeId: string, draft: Document) => void;
 	readonly submitReply: (nodeId: string, body: Document) => Promise<void>;
 	readonly authorName: string;
+	/** Said when comments could not be kept on their blocks by a save. */
+	readonly notice: string | null;
 };
 
 const BlockConversationsStateContext =
@@ -384,6 +386,10 @@ const BlockConversationsController = memo(
 		// Which block carries each conversation, followed through edits in the
 		// editor rather than read back from rows that lag the edit by a save.
 		const carriers = useRef(new Map<string, Carrier>());
+		// Conversations let go of their rows by a save that found no row for
+		// them (the document emptied) or could not finish: kept here, and put
+		// back on their blocks by the next save that changes the blocks.
+		const detachedIds = useRef(new Set<string>());
 		const [carrierVersion, setCarrierVersion] = useState(0);
 		const commentsLoaded = commentsResult.status === "success";
 		const placed = useMemo<PlacedThread[]>(() => {
@@ -409,7 +415,10 @@ const BlockConversationsController = memo(
 			}
 			if (commentsLoaded)
 				for (const conversationId of carriers.current.keys())
-					if (!live.has(conversationId))
+					if (
+						!live.has(conversationId) &&
+						!detachedIds.current.has(conversationId)
+					)
 						carriers.current.delete(conversationId);
 			// Two threads whose blocks became one (a merge) read as one thread.
 			const byIndex = new Map<number, BlockThread>();
@@ -642,14 +651,16 @@ const BlockConversationsController = memo(
 		// the blocks moves the conversations in its own transaction: let go of
 		// their rows before the write, put on their blocks' new rows after it.
 		const lastSavedStructure = useRef(structureOf(editor));
+		const [notice, setNotice] = useState<string | null>(null);
 		useEffect(() => {
 			const onTransaction = ({ transaction }: { transaction: Transaction }) => {
-				if (!transaction.docChanged) return;
+				if (!transaction.docChanged || carriers.current.size === 0) return;
 				const after = editor.state.doc;
 				// A document loaded from the file (an external write) has new
 				// block ids; its conversations are found again from the rows.
 				if (transaction.getMeta("preventUpdate")) {
 					carriers.current.clear();
+					detachedIds.current.clear();
 					lastSavedStructure.current = structureOf(editor);
 					setCarrierVersion((version) => version + 1);
 					return;
@@ -659,112 +670,216 @@ const BlockConversationsController = memo(
 					const id = blockNodeId(node);
 					if (id) present.set(id, index);
 				});
-				const offsets = new Map<string, number>();
-				const signatures = new Map<string, string | null>();
+				const before = new Map<
+					string,
+					{ readonly offset: number; readonly node: ProseMirrorNode }
+				>();
 				transaction.before.forEach((node, offset) => {
 					const id = blockNodeId(node);
-					if (!id) return;
-					offsets.set(id, offset);
-					signatures.set(id, blockSignature(node));
+					if (id) before.set(id, { offset, node });
 				});
-				// Blocks this edit brought in (a paste), by what they hold.
-				const arrived = new Map<string, string>();
-				after.forEach((node) => {
-					const id = blockNodeId(node);
-					const signature = blockSignature(node);
-					if (id && signature && !offsets.has(id) && !arrived.has(signature))
-						arrived.set(signature, id);
-				});
+				// Blocks this edit brought in (a paste, the text Enter pushed
+				// down), by what they hold. Read only for the few new blocks.
+				let arrivedCache: Map<string, string> | null = null;
+				const arrived = (): Map<string, string> => {
+					if (arrivedCache) return arrivedCache;
+					const found = new Map<string, string>();
+					after.forEach((node) => {
+						const id = blockNodeId(node);
+						if (!id || before.has(id)) return;
+						const signature = blockSignature(node);
+						if (signature && !found.has(signature)) found.set(signature, id);
+					});
+					arrivedCache = found;
+					return found;
+				};
 				let changed = false;
+				const move = (conversationId: string, next: Carrier) => {
+					carriers.current.set(conversationId, next);
+					changed = true;
+				};
 				for (const [conversationId, carrier] of carriers.current) {
-					if (present.has(carrier.blockId)) {
-						// Its own block is back (undo, a paste of the cut block).
-						if (carrier.standIn !== null) {
-							carriers.current.set(conversationId, {
-								...carrier,
+					const ownIndex = present.get(carrier.blockId);
+					if (ownIndex !== undefined) {
+						// Enter at the start of the block leaves its id on the new
+						// empty line above and its text on a new block below: the
+						// conversation goes with the text.
+						const previous = before.get(carrier.blockId)?.node;
+						const signature = previous ? blockSignature(previous) : null;
+						const pushedDown =
+							signature && after.child(ownIndex).content.size === 0
+								? arrived().get(signature)
+								: undefined;
+						if (pushedDown) {
+							move(conversationId, {
+								blockId: pushedDown,
 								standIn: null,
+								standInIndex: present.get(pushedDown) ?? ownIndex,
 							});
-							changed = true;
+							continue;
 						}
+						// Its own block is back (undo, a paste of the cut block).
+						if (carrier.standIn !== null)
+							move(conversationId, { ...carrier, standIn: null });
 						continue;
 					}
 					// The block pasted back after a cut: the conversation goes with it.
-					const pasted = carrier.lost ? arrived.get(carrier.lost) : undefined;
+					const pasted = carrier.lost ? arrived().get(carrier.lost) : undefined;
 					if (pasted) {
-						carriers.current.set(conversationId, {
+						move(conversationId, {
 							blockId: pasted,
 							standIn: null,
 							standInIndex: present.get(pasted) ?? 0,
 						});
-						changed = true;
 						continue;
 					}
 					if (carrier.standIn !== null && present.has(carrier.standIn))
 						continue;
-					const offset =
-						offsets.get(carrier.standIn ?? carrier.blockId) ??
-						offsets.get(carrier.blockId);
-					if (offset === undefined) continue;
+					const gone =
+						before.get(carrier.standIn ?? carrier.blockId) ??
+						before.get(carrier.blockId);
+					if (!gone) continue;
 					// Where the block's first character went: into the block before
 					// it on a merge, onto the block after it when it was deleted.
-					const mapped = transaction.mapping.map(offset + 1, -1);
+					const mapped = transaction.mapping.map(gone.offset + 1, -1);
 					const at = after.resolve(Math.min(mapped, after.content.size));
 					const index = Math.min(at.index(0), after.childCount - 1);
-					const standIn = index >= 0 ? blockNodeId(after.child(index)) : null;
-					carriers.current.set(conversationId, {
+					const own = before.get(carrier.blockId)?.node;
+					move(conversationId, {
 						...carrier,
-						standIn,
+						standIn: index >= 0 ? blockNodeId(after.child(index)) : null,
 						standInIndex: Math.max(0, index),
-						lost: carrier.lost ?? signatures.get(carrier.blockId) ?? undefined,
+						lost:
+							carrier.lost ?? (own ? blockSignature(own) : null) ?? undefined,
 					});
-					changed = true;
 				}
 				if (changed) setCarrierVersion((version) => version + 1);
 			};
 			editor.on("transaction", onTransaction);
+
+			/**
+			 * What moves the conversations with a save of `doc`: one statement
+			 * that lets them go of their rows, and the work that puts each on
+			 * its block's new row once the file is re-projected.
+			 */
+			const plan = (doc: ProseMirrorNode) => {
+				const conversationIds = [...carriers.current.keys()];
+				if (conversationIds.length === 0) return null;
+				const savedStructure = structureOfDoc(doc);
+				const targets = conversationIds.map(
+					(id) => [id, carrierIndex(doc, carriers.current.get(id)!)] as const,
+				);
+				let placedIds: string[] = [];
+				let unplacedIds: string[] = [];
+				const release: LixBatchStatement = {
+					sql: `UPDATE lix_conversation SET target = NULL WHERE lixcol_global = false AND id IN (${conversationIds
+						.map((_, index) => `$${index + 1}`)
+						.join(", ")})`,
+					params: conversationIds,
+				};
+				const attach = async (transaction: LixTransaction) => {
+					const query = selectMarkdownBlocks(lix, fileId).compile();
+					const saved = await transaction.execute(
+						query.sql,
+						query.parameters as SqlParam[],
+					);
+					const { rowOfBlock } = blockAlignment(
+						doc,
+						saved.rows as unknown as MarkdownBlockRow[],
+					);
+					const placements: [string, string][] = [];
+					unplacedIds = [];
+					for (const [conversationId, index] of targets) {
+						const nodeId = nearestRow(rowOfBlock, index);
+						if (nodeId) placements.push([conversationId, nodeId]);
+						else unplacedIds.push(conversationId);
+					}
+					placedIds = placements.map(([id]) => id);
+					if (placements.length === 0) return;
+					// One statement per conversation: Lix SQL has no CASE in an
+					// UPDATE's SET (opral/lix#1901), so no single statement can
+					// give each its own row.
+					for (const [conversationId, nodeId] of placements)
+						await transaction.execute(
+							"UPDATE lix_conversation SET target = lix_row_ref('markdown_node', $2, $3) WHERE id = $1",
+							[conversationId, fileId, nodeId],
+						);
+				};
+				const committed = () => {
+					lastSavedStructure.current = savedStructure;
+					for (const id of placedIds) detachedIds.current.delete(id);
+					// No row to put them on (the document was emptied): they stay
+					// let go of, and kept, until a save gives their blocks rows.
+					for (const id of unplacedIds) detachedIds.current.add(id);
+					setNotice(null);
+				};
+				return { structure: savedStructure, release, attach, committed };
+			};
+
+			// Puts conversations back on their rows outside a save, after a save
+			// had to go out without them.
+			let reattaching: ReturnType<typeof setTimeout> | null = null;
+			const reattachSoon = (attempt = 0) => {
+				if (reattaching) clearTimeout(reattaching);
+				reattaching = setTimeout(async () => {
+					reattaching = null;
+					if (editor.isDestroyed) return;
+					const doc = editor.state.doc;
+					// Only against the rows of the document on screen.
+					if (
+						markdownEditorLastAcknowledgedMarkdown(editor) !==
+						buildNormalizedMarkdownIncrementally(doc)
+					) {
+						if (attempt < 40) reattachSoon(attempt + 1);
+						return;
+					}
+					const work = plan(doc);
+					if (!work) return;
+					const transaction = await lix.beginTransaction();
+					try {
+						await work.attach(transaction);
+						await transaction.commit();
+						work.committed();
+					} catch (error) {
+						await transaction.rollback().catch(() => {});
+						if (attempt < 40) reattachSoon(attempt + 1);
+						else console.error(error);
+					}
+				}, 250);
+			};
+
 			const leave = joinMarkdownEditorSaves(editor, {
 				prepare: (doc) => {
-					const conversationIds = [...carriers.current.keys()];
-					if (conversationIds.length === 0) return null;
-					const savedStructure = structureOfDoc(doc);
+					const work = plan(doc);
+					if (!work) return null;
 					// Typing inside blocks keeps every row.
-					if (savedStructure === lastSavedStructure.current) return null;
-					const targets = conversationIds.map(
-						(id) => [id, carrierIndex(doc, carriers.current.get(id)!)] as const,
-					);
+					if (
+						work.structure === lastSavedStructure.current &&
+						detachedIds.current.size === 0
+					)
+						return null;
+					// Let go of from the moment the save starts: the conversations
+					// can drop out of the comments query before the commit's result
+					// arrives, and must not be forgotten in between.
+					for (const id of carriers.current.keys()) detachedIds.current.add(id);
 					return {
-						before: async (transaction) => {
-							await transaction.execute(
-								`UPDATE lix_conversation SET target = NULL WHERE lixcol_global = false AND id IN (${conversationIds
-									.map((_, index) => `$${index + 1}`)
-									.join(", ")})`,
-								conversationIds,
+						before: [work.release],
+						after: work.attach,
+						committed: work.committed,
+						degraded: (cause) => {
+							console.error(cause);
+							for (const id of carriers.current.keys())
+								detachedIds.current.add(id);
+							setNotice(
+								"Saved. The comments on changed blocks are being put back on them.",
 							);
-						},
-						after: async (transaction) => {
-							const query = selectMarkdownBlocks(lix, fileId).compile();
-							const saved = await transaction.execute(
-								query.sql,
-								query.parameters as SqlParam[],
-							);
-							const { rowOfBlock } = blockAlignment(
-								doc,
-								saved.rows as unknown as MarkdownBlockRow[],
-							);
-							for (const [conversationId, index] of targets) {
-								const nodeId = nearestRow(rowOfBlock, index);
-								if (!nodeId) continue;
-								await transaction.execute(
-									"UPDATE lix_conversation SET target = lix_row_ref('markdown_node', $2, $3) WHERE id = $1",
-									[conversationId, fileId, nodeId],
-								);
-							}
-							lastSavedStructure.current = savedStructure;
+							reattachSoon();
 						},
 					};
 				},
 			});
 			return () => {
+				if (reattaching) clearTimeout(reattaching);
 				editor.off("transaction", onTransaction);
 				leave();
 			};
@@ -856,6 +971,7 @@ const BlockConversationsController = memo(
 				setReplyDraft,
 				submitReply,
 				authorName: name,
+				notice,
 			}),
 			[
 				active,
@@ -865,6 +981,7 @@ const BlockConversationsController = memo(
 				hovered,
 				layout,
 				name,
+				notice,
 				pending,
 				pendingDraft,
 				pendingIndex,
@@ -1014,6 +1131,11 @@ function BlockConversationsSurface({
 			data-layout={layout}
 			data-has-threads={hasThreads ? "" : undefined}
 		>
+			{state.notice ? (
+				<p className="markdown-comment-notice" role="status">
+					{state.notice}
+				</p>
+			) : null}
 			{geometry && layout === "margin" && hasThreads ? (
 				<MarginCards state={state} geometry={geometry} />
 			) : null}

@@ -443,18 +443,9 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			? saveParticipants.get(editorInstance)?.prepare(doc)
 			: null;
 		const write = { lix, fileId: fileId!, markdown, originKey };
-		let receipt: Awaited<ReturnType<typeof upsertMarkdownFile>>;
-		if (participant) {
-			try {
-				receipt = await upsertMarkdownFileWith({ ...write, participant });
-			} catch (error) {
-				// The text is what must not be lost: save it on its own.
-				console.error(error);
-				receipt = await upsertMarkdownFile(write);
-			}
-		} else {
-			receipt = await upsertMarkdownFile(write);
-		}
+		const receipt = participant
+			? await upsertMarkdownFileWith({ ...write, participant })
+			: await upsertMarkdownFile(write);
 		if (!receipt.written)
 			throw new Error(
 				"Could not save because the file no longer exists. Your draft is still in this editor.",

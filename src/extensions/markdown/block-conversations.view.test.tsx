@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, configure, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { bundledPluginArchives } from "@lix-js/sdk";
 import type { Editor } from "@tiptap/core";
@@ -13,6 +13,10 @@ import {
 	selectMarkdownBlocks,
 	type MarkdownBlockRow,
 } from "./block-conversations";
+
+// Saves go through the real plugin; under a full parallel run they take a
+// while.
+configure({ asyncUtilTimeout: 8000 });
 
 /*
  * Block conversations against the real Markdown plugin: the editor saves
@@ -261,6 +265,122 @@ describe("block conversations follow their block through edits", () => {
 			);
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			expect(await targetText(lix, conversationId)).toBe("Research.");
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("Enter at the start of the block keeps the conversation on its text", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			await act(async () => {
+				editor
+					.chain()
+					.setTextSelection(startOf(editor, "Second para."))
+					.splitBlock()
+					.run();
+			});
+			await waitFor(() => {
+				let blocks = 0;
+				editor.state.doc.forEach(() => blocks++);
+				expect(blocks).toBe(5);
+			});
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Second para."),
+			);
+			expect(await fileText(lix, fileId)).toContain("Second para.");
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("emptying the document keeps the conversation, and undo puts it back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			await act(async () => {
+				editor.chain().selectAll().deleteSelection().run();
+			});
+			await waitFor(async () =>
+				expect((await fileText(lix, fileId)).trim()).toBe(""),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			const kept = await lix.execute(
+				"SELECT target FROM lix_conversation WHERE id = $1",
+				[conversationId],
+			);
+			// Nowhere to put it, but not deleted.
+			expect(kept.rows).toHaveLength(1);
+
+			await act(async () => {
+				editor.commands.undo();
+			});
+			await waitFor(async () =>
+				expect(await targetText(lix, conversationId)).toBe("Second para."),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+
+	test("a write that races the save does not cost the conversation", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",
+			"Second para.",
+		);
+		try {
+			const { editor, lix, fileId, conversationId } = view;
+			// Someone else (a reply, an agent) writes just before every commit
+			// of the save's transaction: it can never commit, so the save goes
+			// out the last-resort way and the conversation is put back after.
+			const other = await lix.openAnotherSession();
+			const begin = lix.beginTransaction.bind(lix);
+			let conflicts = 0;
+			lix.beginTransaction = async () => {
+				const transaction = await begin();
+				const commit = transaction.commit.bind(transaction);
+				transaction.commit = async () => {
+					if (conflicts < 10) {
+						conflicts++;
+						await other.execute(
+							"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
+							[`race-${crypto.randomUUID()}`, "x"],
+						);
+					}
+					return commit();
+				};
+				return transaction;
+			};
+			await act(async () => {
+				editor
+					.chain()
+					.setTextSelection(startOf(editor, "Second para."))
+					.joinBackward()
+					.run();
+			});
+			await waitFor(async () =>
+				expect(await fileText(lix, fileId)).toContain(
+					"First para.Second para.",
+				),
+			);
+			expect(conflicts).toBeGreaterThan(0);
+			await waitFor(
+				async () =>
+					expect(await targetText(lix, conversationId)).toBe(
+						"First para.Second para.",
+					),
+				{ timeout: 5000 },
+			);
+			lix.beginTransaction = begin;
+			await other.close();
 		} finally {
 			await view.close();
 		}
