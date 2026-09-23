@@ -22,6 +22,13 @@ async function start() {
 	await seedWorkspace(lix);
 	await seedCsvDemo(lix);
 	const params = new URLSearchParams(window.location.search);
+	if (params.get("demo") === "comments") {
+		const checkpoints = await lix.execute(
+			"SELECT commit_id FROM lix_log() WHERE is_checkpoint = true LIMIT 1",
+		);
+		if (checkpoints.rows.length === 0)
+			await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+	}
 	const filePath = params.get("file");
 	if (filePath) {
 		const result = await lix.execute(
