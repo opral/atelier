@@ -132,6 +132,32 @@ test("keeps the same Tiptap editor mounted after a partial decision", async () =
 	await act(async () => view?.unmount());
 });
 
+test("shows an empty-paragraph marker instead of the blank-file message", async () => {
+	lix = await openLix();
+	let view: ReturnType<typeof render> | undefined;
+	await act(async () => {
+		view = render(
+			<LixProvider lix={lix!}>
+				<MarkdownReviewEditor
+					reviewDiff={{ beforeMarkdown: "", afterMarkdown: "<span></span>" }}
+					sourceFilePath="/empty.md"
+				/>
+			</LixProvider>,
+		);
+	});
+
+	expect(
+		await screen.findByRole("img", { name: "Empty paragraph added" }),
+	).toHaveTextContent("¶");
+	expect(
+		screen.queryByText("This file has no visible Markdown content to compare."),
+	).toBeNull();
+	expect(screen.queryByRole("button", { name: "Undo change" })).toBeNull();
+	expect(screen.queryByRole("button", { name: "Keep change" })).toBeNull();
+
+	await act(async () => view?.unmount());
+});
+
 test("does not access an owned editor after replacing its commit-scoped resource", async () => {
 	lix = await openLix();
 	const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});

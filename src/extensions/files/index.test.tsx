@@ -391,6 +391,136 @@ describe("FilesView", () => {
 		await lix.close();
 	});
 
+	test("creates the default folder when its name is accepted unchanged", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, { isActiveView: true, isPanelFocused: true });
+		});
+
+		await chooseNewMenuItem("New folder");
+		const folderInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue("new-folder");
+			return draft;
+		});
+		fireEvent.keyDown(folderInput, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/new-folder")
+					.executeTakeFirst(),
+			).toEqual({ path: "/new-folder" });
+		});
+		await waitFor(() => {
+			expect(getFilesTreeItem("new-folder/")).toBeVisible();
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("creates in the selected folder and suffixes a root-level name collision", async () => {
+		const lix = await openLix();
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, { isActiveView: true, isPanelFocused: true });
+		});
+
+		await chooseNewMenuItem("New folder");
+		const firstInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue("new-folder");
+			return draft;
+		});
+		fireEvent.keyDown(firstInput, { key: "Enter" });
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/new-folder")
+					.executeTakeFirst(),
+			).toEqual({ path: "/new-folder" });
+		});
+		await chooseNewMenuItem("New folder");
+		const secondInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue("new-folder");
+			return draft;
+		});
+		fireEvent.keyDown(secondInput, { key: "Enter" });
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/new-folder/new-folder")
+					.executeTakeFirst(),
+			).toEqual({ path: "/new-folder/new-folder" });
+		});
+
+		// The second create remains inside the selected folder. Clearing the
+		// selection returns the destination to root and exercises a collision.
+		fireEvent.click(screen.getByLabelText("Files"));
+		await chooseNewMenuItem("New folder");
+		const rootInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue("new-folder-2");
+			return draft;
+		});
+		fireEvent.keyDown(rootInput, { key: "Enter" });
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/new-folder-2")
+					.executeTakeFirst(),
+			).toEqual({ path: "/new-folder-2" });
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
+	test("uses the next available default folder name when new-folder exists", async () => {
+		const lix = await openLix();
+		await qb(lix)
+			.insertInto("lix_directory")
+			.values({ id: fakeUuid("existing-new-folder"), path: "/new-folder" })
+			.execute();
+
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = renderFilesView(lix, { isActiveView: true, isPanelFocused: true });
+		});
+
+		await chooseNewMenuItem("New folder");
+		const folderInput = await waitFor(() => {
+			const draft = getFilesTreeRenameInput();
+			expect(draft).toHaveValue("new-folder-2");
+			return draft;
+		});
+		fireEvent.keyDown(folderInput, { key: "Enter" });
+
+		await waitFor(async () => {
+			expect(
+				await qb(lix)
+					.selectFrom("lix_directory")
+					.select("path")
+					.where("path", "=", "/new-folder-2")
+					.executeTakeFirst(),
+			).toEqual({ path: "/new-folder-2" });
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("cancels the expanded new-file form with Escape", async () => {
 		const lix = await openLix();
 		const openFile = vi.fn();

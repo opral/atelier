@@ -100,25 +100,43 @@ test("decorates inline edits and inserted items inside one rendered list", () =>
 	expect(addedItem).toBeDefined();
 });
 
-test("keeps invisible empty-paragraph changes targetable without painting them", () => {
-	const review = buildMarkdownReviewDocument({
+test.each([
+	{
+		status: "added",
 		beforeMarkdown: "# Hello World",
 		afterMarkdown: "<span></span>\n\n# Hello World",
-	});
-	editor = new Editor({
-		extensions: [...MarkdownWc(), ...MarkdownReviewExtensions],
-		editable: false,
-		content: review.doc,
-	});
-	document.body.appendChild(editor.view.dom);
+	},
+	{
+		status: "removed",
+		beforeMarkdown: "<span></span>\n\n# Hello World",
+		afterMarkdown: "# Hello World",
+	},
+])(
+	"renders a paragraph mark for an empty paragraph that is $status",
+	({ status, beforeMarkdown, afterMarkdown }) => {
+		const review = buildMarkdownReviewDocument({
+			beforeMarkdown,
+			afterMarkdown,
+		});
+		editor = new Editor({
+			extensions: [...MarkdownWc(), ...MarkdownReviewExtensions],
+			editable: false,
+			content: review.doc,
+		});
+		document.body.appendChild(editor.view.dom);
 
-	const emptyParagraph = editor.view.dom.querySelector(
-		'p[data-review-status="added"]',
-	);
-	expect(emptyParagraph).toHaveAttribute("data-review-empty", "true");
-	expect(emptyParagraph).toHaveAttribute(
-		"data-review-change-id",
-		review.changes[0]!.id,
-	);
-	expect(emptyParagraph).toHaveTextContent("");
-});
+		const emptyParagraph = editor.view.dom.querySelector(
+			`p[data-review-status="${status}"]`,
+		);
+		expect(emptyParagraph).toHaveAttribute("data-review-empty", "true");
+		expect(emptyParagraph).toHaveAttribute(
+			"data-review-change-id",
+			review.changes[0]!.id,
+		);
+		const marker = emptyParagraph?.querySelector(
+			'[data-review-empty-marker="true"]',
+		);
+		expect(marker).toHaveTextContent("¶");
+		expect(marker).toHaveAttribute("aria-label", `Empty paragraph ${status}`);
+	},
+);

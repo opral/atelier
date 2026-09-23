@@ -817,6 +817,40 @@
 			line-height: 1.35;
 		}
 
+		.markdown-frontmatter-recovery {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.75rem;
+			margin: 0.55rem 0 0;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.76rem;
+			line-height: 1.4;
+		}
+
+		.markdown-frontmatter-recovery p {
+			margin: 0;
+		}
+
+		.markdown-frontmatter-recovery button {
+			flex: 0 0 auto;
+			border: 1px solid var(--atelier-border-subtle);
+			border-radius: 6px;
+			background: var(--atelier-panel);
+			color: var(--atelier-fg);
+			font: inherit;
+			padding: 0.35rem 0.55rem;
+		}
+
+		.markdown-frontmatter-recovery button:hover {
+			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-frontmatter-recovery button:focus-visible {
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+			outline: none;
+		}
+
 		/* A revision takes no edits, and its fields read as fields, not as inputs:
 		   no hover affordance, no caret, and the values still plainly legible. */
 		.markdown-frontmatter[data-disabled="true"]
@@ -942,16 +976,39 @@
 		.markdown-view .ProseMirror .markdown-footnote-backref {
 			border: 0;
 			background: transparent;
-			padding: 0 0.25rem;
+			width: 1.75rem;
+			height: 1.75rem;
+			padding: 0;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
 			color: var(--atelier-fg-subtle);
-			font: inherit;
+			opacity: 0;
+			transition:
+				opacity 120ms ease,
+				color 120ms ease,
+				background-color 120ms ease;
 			cursor: pointer;
-			border-radius: 2px;
+			border-radius: var(--atelier-radius-tag);
 		}
 
-		.markdown-view .ProseMirror .markdown-footnote-backref:hover {
+		.markdown-view
+			.ProseMirror
+			.markdown-footnote-def:hover
+			.markdown-footnote-backref,
+		.markdown-view .ProseMirror .markdown-footnote-backref:focus-visible {
+			opacity: 1;
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-backref:hover,
+		.markdown-view .ProseMirror .markdown-footnote-backref:focus-visible {
 			color: var(--atelier-link);
 			background: var(--atelier-bg-hover);
+		}
+
+		.markdown-view .ProseMirror .markdown-footnote-backref:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 2px;
 		}
 
 		/* The tint arrives fast and leaves slowly. The 400ms fade on the marker
@@ -1904,19 +1961,105 @@
 
 		.markdown-table-grip {
 			border-radius: 5px;
-			box-shadow: var(--atelier-shadow-sm);
+			border-color: transparent;
+			background: transparent;
+			color: transparent;
+			box-shadow: none;
+			cursor: grab;
+			transition:
+				background-color var(--atelier-duration-fast) ease,
+				border-color var(--atelier-duration-fast) ease,
+				color var(--atelier-duration-fast) ease,
+				transform var(--atelier-duration-fast) ease;
+		}
+
+		.markdown-table-grip::before {
+			position: absolute;
+			border-radius: 999px;
+			background: var(--atelier-fg-faint);
+			content: "";
+			transition:
+				opacity var(--atelier-duration-fast) ease,
+				background-color var(--atelier-duration-fast) ease;
+		}
+
+		.markdown-table-grip[data-axis="row"]::before {
+			width: 2px;
+			height: 12px;
+		}
+
+		.markdown-table-grip[data-axis="column"]::before {
+			width: 12px;
+			height: 2px;
 		}
 
 		.markdown-table-grip svg {
 			width: 12px;
 			height: 12px;
 			stroke-width: 2;
+			opacity: 0;
+			transition: opacity var(--atelier-duration-fast) ease;
 		}
 
-		.markdown-table-grip:hover {
+		.markdown-table-grip:hover,
+		.markdown-table-grip:focus-visible,
+		.markdown-table-grip[data-active="true"],
+		.markdown-table-grip[data-dragging="true"] {
 			border-color: var(--atelier-border-strong);
-			background: var(--atelier-bg-hover);
+			background: var(--atelier-panel);
 			color: var(--atelier-fg-muted);
+			box-shadow: var(--atelier-shadow-sm);
+		}
+
+		.markdown-table-grip[data-axis="row"]:is(
+			:hover,
+			:focus-visible,
+			[data-active="true"],
+			[data-dragging="true"]
+		) {
+			transform: scaleX(1.45);
+		}
+
+		.markdown-table-grip[data-axis="column"]:is(
+			:hover,
+			:focus-visible,
+			[data-active="true"],
+			[data-dragging="true"]
+		) {
+			transform: scaleY(1.45);
+		}
+
+		.markdown-table-grip:is(
+			:hover,
+			:focus-visible,
+			[data-active="true"],
+			[data-dragging="true"]
+		)::before {
+			opacity: 0;
+		}
+
+		.markdown-table-grip:is(
+				:hover,
+				:focus-visible,
+				[data-active="true"],
+				[data-dragging="true"]
+			)
+			svg {
+			opacity: 1;
+		}
+
+		.markdown-table-grip[data-dragging="true"] {
+			cursor: grabbing;
+		}
+
+		.markdown-table-drop-indicator {
+			position: fixed;
+			z-index: 41;
+			border-radius: 2px;
+			background: var(--atelier-accent);
+			box-shadow: 0 0 0 1px
+				color-mix(in srgb, var(--atelier-accent) 22%, transparent);
+			pointer-events: none;
 		}
 
 		.markdown-table-grip[data-active="true"] {
@@ -2425,6 +2568,24 @@
 			container-type: inline-size;
 		}
 
+		.markdown-review [data-markdown-document] {
+			position: relative;
+		}
+
+		.markdown-review-loading,
+		.markdown-review-empty-state {
+			position: absolute;
+			inset: 0;
+			z-index: 2;
+			display: grid;
+			place-items: center;
+			padding: 1.5rem;
+			color: var(--atelier-fg-subtle);
+			font-size: 0.875rem;
+			text-align: center;
+			pointer-events: none;
+		}
+
 		.markdown-review-overlay {
 			position: absolute;
 			inset: 0;
@@ -2488,13 +2649,31 @@
 			box-shadow: 0 0 0 1px var(--atelier-ring);
 		}
 
-		/* Empty paragraphs are serialized as an invisible `<span></span>` anchor.
-		   Keep the review metadata for undo/keep and click targeting, but do not
-		   paint the invisible placeholder as if it were visible Markdown content. */
+		/* Empty paragraphs serialize as an invisible `<span></span>` anchor.
+		   Retain the target for undo/keep, and render a paragraph mark so the
+		   structural whitespace is visible during review, as in Word's show-marks. */
 		.markdown-review .ProseMirror [data-review-empty="true"] {
 			background-color: transparent;
 			color: inherit;
 			text-decoration: none;
+		}
+
+		.markdown-review .ProseMirror [data-review-empty-marker="true"] {
+			display: inline-block;
+			min-width: 0.75em;
+			color: var(--atelier-diff-added);
+			font-family:
+				ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+			font-size: 0.85em;
+			font-weight: 600;
+			line-height: 1;
+			user-select: none;
+		}
+
+		.markdown-review
+			.ProseMirror
+			[data-review-empty-marker="true"][data-review-status="removed"] {
+			color: var(--atelier-diff-removed);
 		}
 
 		.markdown-review .ProseMirror [data-review-change-id] {

@@ -12,6 +12,7 @@ import {
 	Code,
 	Database,
 	FunctionSquare,
+	LoaderCircle,
 	PanelLeft,
 	Play,
 	Plus,
@@ -445,13 +446,23 @@ function QueryView({
 					onClick={() => void runQuery(query)}
 					disabled={isRunning}
 					data-attr="sql-run-query"
-					className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3.5 py-1.5 text-ui font-bold text-accent-on shadow-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+					aria-busy={isRunning}
+					className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3.5 py-1.5 text-ui font-bold text-accent-on shadow-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-100"
 				>
-					<Play aria-hidden="true" className="h-2.5 w-2.5 fill-current" />
-					Run
-					<span aria-hidden="true" className="font-semibold opacity-75">
-						⌘⏎
-					</span>
+					{isRunning ? (
+						<LoaderCircle
+							aria-hidden="true"
+							className="h-3.5 w-3.5 animate-spin"
+						/>
+					) : (
+						<Play aria-hidden="true" className="h-2.5 w-2.5 fill-current" />
+					)}
+					{isRunning ? "Running…" : "Run"}
+					{isRunning ? null : (
+						<span aria-hidden="true" className="font-semibold opacity-75">
+							⌘⏎
+						</span>
+					)}
 				</button>
 				{sidebarCollapsed ? (
 					<button
@@ -467,9 +478,7 @@ function QueryView({
 					{run && query !== run.source ? <span> · Previous run</span> : null}
 				</span>
 				<span className="flex-1" />
-				{isRunning ? (
-					<span className="font-mono text-ui-sm text-fg-subtle">Running…</span>
-				) : run === null ? null : (
+				{run === null ? null : (
 					<span
 						data-attr="sql-run-status"
 						className="font-mono text-ui-sm text-fg-subtle"

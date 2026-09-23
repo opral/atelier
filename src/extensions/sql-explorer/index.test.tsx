@@ -252,6 +252,46 @@ describe("SqlExplorerView", () => {
 		expect(screen.getByText("Page 1", { exact: false })).toBeInTheDocument();
 	});
 
+	test("shows a clear pending state on the Run button while SQL executes", async () => {
+		const originalExecute = lix.execute.bind(lix);
+		let finishQuery!: () => void;
+		const queryGate = new Promise<void>((resolve) => {
+			finishQuery = resolve;
+		});
+		const executeSpy = vi
+			.spyOn(lix, "execute")
+			.mockImplementation(async (sql, params, options) => {
+				if (String(sql).includes("SELECT 73 AS answer")) await queryGate;
+				return originalExecute(sql, params, options);
+			});
+
+		try {
+			render(
+				<SqlExplorerView
+					lix={lix}
+					readOnly={false}
+					instanceId="test-run-pending"
+					initialQuery="SELECT 73 AS answer;"
+				/>,
+			);
+
+			const runButton = screen.getByRole("button", { name: /Run/ });
+			expect(runButton).toBeEnabled();
+			fireEvent.click(runButton);
+
+			const runningButton = await screen.findByRole("button", {
+				name: "Running…",
+			});
+			expect(runningButton).toBeDisabled();
+			expect(runningButton).toHaveAttribute("aria-busy", "true");
+			finishQuery();
+			await screen.findByText("73");
+			await waitFor(() => expect(runButton).toBeEnabled());
+		} finally {
+			executeSpy.mockRestore();
+		}
+	});
+
 	test("executed queries join the QUERIES history", async () => {
 		render(
 			<SqlExplorerView

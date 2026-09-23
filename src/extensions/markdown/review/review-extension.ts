@@ -134,6 +134,23 @@ function decorationAttributes(
 	};
 }
 
+/** Give an otherwise invisible empty paragraph a readable review target. */
+function emptyParagraphMarker(metadata: MarkdownReviewMetadata): HTMLElement {
+	const marker = document.createElement("span");
+	marker.className = "markdown-review-empty-paragraph-marker";
+	marker.textContent = "¶";
+	marker.setAttribute("data-review-empty-marker", "true");
+	marker.setAttribute("data-review-change-id", metadata.changeId);
+	marker.setAttribute("data-review-status", metadata.status);
+	marker.setAttribute("contenteditable", "false");
+	marker.setAttribute("role", "img");
+	marker.setAttribute(
+		"aria-label",
+		`Empty paragraph ${metadata.status === "removed" ? "removed" : "added"}`,
+	);
+	return marker;
+}
+
 function buildReviewDecorations(doc: ProseMirrorNode): DecorationSet {
 	const decorations: Decoration[] = [];
 
@@ -175,6 +192,18 @@ function buildReviewDecorations(doc: ProseMirrorNode): DecorationSet {
 				node.type.name === "paragraph" &&
 				node.content.size === 0 &&
 				node.attrs?.data?.["__atelier_empty_paragraph"] === true;
+			if (emptyParagraph && !nodeMetadata.hidden) {
+				decorations.push(
+					Decoration.widget(
+						position + 1,
+						() => emptyParagraphMarker(nodeMetadata),
+						{
+							side: -1,
+							key: `empty-paragraph:${nodeMetadata.changeId}:${position}`,
+						},
+					),
+				);
+			}
 			decorations.push(
 				Decoration.node(
 					position,

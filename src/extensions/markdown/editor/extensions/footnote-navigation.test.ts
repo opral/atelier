@@ -112,9 +112,20 @@ describe("footnote navigation", () => {
 		expect(
 			definition.querySelector(".markdown-footnote-def-body")?.textContent,
 		).toBe("The source.");
-		expect(
-			definition.querySelector("[data-footnote-backref='1']"),
-		).not.toBeNull();
+		const backref = definition.querySelector<HTMLButtonElement>(
+			"[data-footnote-backref='1']",
+		);
+		expect(backref).not.toBeNull();
+		expect(backref).toHaveAttribute(
+			"aria-label",
+			"Back to the text for footnote 1",
+		);
+		expect(backref).toHaveAttribute("title", "Back to reference");
+		expect(backref?.querySelector("svg")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		);
+		expect(backref?.textContent).toBe("");
 		// The body is the editable part; the label and the way back are not.
 		expect(
 			definition.querySelector(".markdown-footnote-def-label"),

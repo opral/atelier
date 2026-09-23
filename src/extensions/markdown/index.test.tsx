@@ -892,6 +892,68 @@ describe("MarkdownView", () => {
 		expect(new TextDecoder().decode(persisted.content)).toBe("# After");
 	});
 
+	test("explains when a selected review file has no content diff", async () => {
+		const lix = await openLix();
+		const activeBranchId = await lix.activeBranchId();
+		const fileId = fakeUuid("file_review_noop");
+		await qb(lix)
+			.insertInto("lix_file")
+			.values({
+				id: fileId,
+				path: "/review-noop.md",
+				content: new TextEncoder().encode("# Unchanged"),
+			})
+			.execute();
+		const checkpoint = await createCheckpoint(lix);
+		let utils: ReturnType<typeof render> | undefined;
+
+		await act(async () => {
+			utils = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<MarkdownView
+							fileId={fileId}
+							filePath="/review-noop.md"
+							activeBranchId={activeBranchId}
+							diffSession={{
+								base: { commitId: checkpoint.commitId },
+								target: { working: true },
+								files: [
+									{
+										id: fileId,
+										path: "/review-noop.md",
+										changeKind: "modified",
+										workingEpoch: {
+											beforeCommitId: checkpoint.commitId,
+											afterCommitId: checkpoint.commitId,
+										},
+										review: { id: "review-noop", status: "pending" },
+									},
+								],
+								activePath: "/review-noop.md",
+								capabilities: {
+									checkpoint: true,
+									undo: true,
+									restore: false,
+								},
+							}}
+							isActiveView
+							isPanelFocused
+						/>
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+
+		expect(
+			await screen.findByText("No visible content changes for this file."),
+		).toHaveAttribute("role", "status");
+		expect(screen.queryByRole("button", { name: /keep change/i })).toBeNull();
+
+		await act(async () => utils?.unmount());
+		await lix.close();
+	});
+
 	test("stepping to another document keeps the toolbar node mounted and visible", async () => {
 		const lix = await openLix();
 		const activeBranchId = await lix.activeBranchId();

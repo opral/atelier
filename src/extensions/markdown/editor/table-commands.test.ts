@@ -215,6 +215,22 @@ describe("rows", () => {
 		expect(grid(editor)).toEqual(["a|b", "1|2", "3|4"]);
 	});
 
+	test("dragging a body row to a new position keeps the header and caret", async () => {
+		const { editor } = await open(TABLE);
+		caretIn(editor, "1", 1);
+		editor.commands.moveTableRowTo(1, {
+			tablePos: 0,
+			row: 2,
+			column: 0,
+		});
+		expect(grid(editor)).toEqual(["a|b", "3|4", "1|2"]);
+		expect(caret(editor)).toMatchObject({ text: "1", offset: 1, row: 2 });
+		expectConsistent(editor);
+		expect(editor.commands.moveTableRowTo(0, { tablePos: 0, row: 1, column: 0 })).toBe(
+			false,
+		);
+	});
+
 	test("the header stays first", async () => {
 		const { editor } = await open(TABLE);
 		caretIn(editor, "a");
@@ -301,6 +317,22 @@ describe("columns", () => {
 		expect(grid(editor)).toEqual(["a|b", "1|2", "3|4"]);
 	});
 
+	test("dragging a column to a new position keeps its alignment and the caret", async () => {
+		const { editor } = await open(
+			"| a | b | c |\n|:--|:-:|---|\n| 1 | 2 | 3 |\n",
+		);
+		caretIn(editor, "b", 1);
+		editor.commands.moveTableColumnTo(2, {
+			tablePos: 0,
+			row: 0,
+			column: 0,
+		});
+		expect(grid(editor)).toEqual(["b|c|a", "2|3|1"]);
+		expect(tableNode(editor).attrs.align).toEqual(["center", null, "left"]);
+		expect(caret(editor)).toMatchObject({ text: "b", offset: 1, column: 0 });
+		expectConsistent(editor);
+	});
+
 	test("align a column, then clear it", async () => {
 		const { editor, saved } = await open(TABLE);
 		caretIn(editor, "2", 1);
@@ -378,6 +410,61 @@ describe("sort", () => {
 });
 
 describe("targets and undo", () => {
+	test("drag reorder of a body row is a single undo step", async () => {
+		const { editor } = await open(TABLE);
+		const before = editor.state.doc;
+		expect(
+			editor.commands.moveTableRowTo(2, {
+				tablePos: 0,
+				row: 1,
+				column: 0,
+			}),
+		).toBe(true);
+		expect(grid(editor)).toEqual(["a|b", "3|4", "1|2"]);
+		expect(undoOnce(editor)).toBe(true);
+		expect(editor.state.doc.eq(before)).toBe(true);
+	});
+
+	test("drag reorder of a column is a single undo step", async () => {
+		const { editor } = await open(TABLE);
+		const before = editor.state.doc;
+		expect(
+			editor.commands.moveTableColumnTo(1, {
+				tablePos: 0,
+				row: 0,
+				column: 0,
+			}),
+		).toBe(true);
+		expect(grid(editor)).toEqual(["b|a", "2|1", "4|3"]);
+		expect(undoOnce(editor)).toBe(true);
+		expect(editor.state.doc.eq(before)).toBe(true);
+	});
+
+	test("Mod-z undoes a dragged column reorder", async () => {
+		const { editor } = await open(TABLE);
+		const before = editor.state.doc;
+		expect(
+			editor.commands.moveTableColumnTo(1, {
+				tablePos: 0,
+				row: 0,
+				column: 0,
+			}),
+		).toBe(true);
+		const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+		const event = new KeyboardEvent("keydown", {
+			key: "z",
+			metaKey: mac,
+			ctrlKey: !mac,
+			bubbles: true,
+			cancelable: true,
+		});
+
+		editor.view.dom.dispatchEvent(event);
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(editor.state.doc.eq(before)).toBe(true);
+	});
+
 	test("a command can act on a cell the caret is not in", async () => {
 		const { editor } = await open(`Before\n\n${TABLE}`);
 		editor.commands.setTextSelection(2);

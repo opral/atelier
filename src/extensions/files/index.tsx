@@ -508,6 +508,8 @@ function FilesViewContent({
 		}
 		return combined;
 	}, [entryDirectorySet, pendingDirectoryPaths]);
+	const existingDirectoryPathsRef = useRef(existingDirectoryPaths);
+	existingDirectoryPathsRef.current = existingDirectoryPaths;
 	const activeFileId =
 		typeof context?.activeFileId === "string" && context.activeFileId.length > 0
 			? context.activeFileId
@@ -651,9 +653,19 @@ function FilesViewContent({
 				});
 			}
 			nextCreateRequestIdRef.current += 1;
+			const initialValue = initialValueForCreateRequest(kind, fileType);
+			const createName =
+				kind === "directory"
+					? availableDirectoryName(
+							initialValue,
+							directoryPath,
+							existingDirectoryPathsRef.current,
+						)
+					: initialValue;
 			const initialInputValue = initialInputValueForCreateRequest(
 				kind,
 				fileType,
+				createName,
 			);
 			const requestId = nextCreateRequestIdRef.current;
 			setCreateRequest({
@@ -662,7 +674,7 @@ function FilesViewContent({
 				id: requestId,
 				initialInputValue,
 				initialSelectionStart: initialInputValue === undefined ? undefined : 0,
-				initialValue: initialValueForCreateRequest(kind, fileType),
+				initialValue: createName,
 				kind,
 			});
 			return requestId;
@@ -833,7 +845,7 @@ function FilesViewContent({
 				const path = deriveDirectoryPathFromStem(
 					value,
 					directoryPath,
-					existingDirectoryPaths,
+					existingDirectoryPathsRef.current,
 				);
 				if (!path) {
 					setSelectionOverride(null);
@@ -846,6 +858,14 @@ function FilesViewContent({
 						.insertInto("lix_directory")
 						.values({ path: normalizeFilePath(path) } as any)
 						.execute();
+					// The query-backed tree may not have observed this insert by
+					// the time another create action runs. Keep the synchronous
+					// name allocator authoritative across that gap.
+					const nextExistingDirectories = new Set(
+						existingDirectoryPathsRef.current,
+					);
+					nextExistingDirectories.add(path);
+					existingDirectoryPathsRef.current = nextExistingDirectories;
 					setPendingDirectoryPaths((prev) => [...prev, path]);
 					setLocalSelection({
 						path,
@@ -867,7 +887,7 @@ function FilesViewContent({
 			}
 			return executeFileCreation();
 		},
-		[existingDirectoryPaths, existingFilePaths, lix, setLocalSelection],
+		[existingFilePaths, lix, setLocalSelection],
 	);
 
 	const handleCreateDirectory = useCallback(() => {
@@ -892,7 +912,7 @@ function FilesViewContent({
 			const path = deriveDirectoryPathFromStem(
 				name,
 				ensureDirectoryPath(parentDirectory),
-				existingDirectoryPaths,
+				existingDirectoryPathsRef.current,
 			);
 			if (!path) return null;
 			try {
@@ -900,6 +920,11 @@ function FilesViewContent({
 					.insertInto("lix_directory")
 					.values({ path: normalizeFilePath(path) } as any)
 					.execute();
+				const nextExistingDirectories = new Set(
+					existingDirectoryPathsRef.current,
+				);
+				nextExistingDirectories.add(path);
+				existingDirectoryPathsRef.current = nextExistingDirectories;
 				setPendingDirectoryPaths((prev) => [...prev, path]);
 				return path;
 			} catch (error) {
@@ -907,7 +932,7 @@ function FilesViewContent({
 				return null;
 			}
 		},
-		[existingDirectoryPaths, lix],
+		[lix],
 	);
 	const hereDirectory = resolveHereDirectory();
 	const folderOptions = useMemo(
@@ -1875,12 +1900,28 @@ function initialValueForCreateRequest(
 function initialInputValueForCreateRequest(
 	kind: "file" | "directory",
 	fileType: FileTreeFileType,
+	initialValue: string,
 ): string | undefined {
-	if (kind !== "file") return undefined;
+	if (kind === "directory") return initialValue;
 	if (fileType === "markdown") return ".md";
 	if (fileType === "csv") return ".csv";
 	if (fileType === "excalidraw") return ".excalidraw";
 	return "";
+}
+
+function availableDirectoryName(
+	stem: string,
+	directory: string,
+	existingPaths: Set<string>,
+): string {
+	const availablePath = deriveDirectoryPathFromStem(
+		stem,
+		directory,
+		existingPaths,
+	);
+	if (!availablePath) return stem;
+	const normalizedPath = normalizeFilePath(availablePath);
+	return normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
 }
 
 function normalizeFilePath(path: string): string {

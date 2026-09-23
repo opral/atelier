@@ -225,6 +225,49 @@ describe("FileTree", () => {
 		expect(queryTreeRenameInput(container)).toHaveValue("work-in-progress");
 	});
 
+	test("chooses the next free visible folder name from current tree paths", async () => {
+		const createRequest = {
+			directoryPath: "/",
+			id: 2,
+			initialInputValue: "new-folder",
+			initialValue: "new-folder",
+			kind: "directory" as const,
+		};
+		const onCreateCommit = vi.fn();
+		const existingFolder: FilesystemTreeNode = {
+			children: [],
+			id: "existing-new-folder",
+			name: "new-folder",
+			path: "/new-folder",
+			type: "directory",
+		};
+		const { container } = render(
+			<FileTree
+				nodes={[existingFolder]}
+				createRequest={createRequest}
+				onCreateCommit={onCreateCommit}
+			/>,
+		);
+
+		const input = await waitFor(() => {
+			const renameInput = queryTreeRenameInput(container);
+			if (!renameInput) throw new Error("create input not found");
+			expect(renameInput).toHaveValue("new-folder-2");
+			return renameInput;
+		});
+		fireEvent.keyDown(input, { key: "Enter" });
+
+		await waitFor(() => {
+			expect(onCreateCommit).toHaveBeenCalledWith(
+				expect.objectContaining({
+					initialInputValue: "new-folder-2",
+					initialValue: "new-folder-2",
+				}),
+				"new-folder-2",
+			);
+		});
+	});
+
 	test("uses the requested inline extension and cursor for create drafts", async () => {
 		const createRequest = {
 			directoryPath: "/",

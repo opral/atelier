@@ -278,6 +278,11 @@ function MarkdownFrame({
 							// meanwhile is the picture the reviewer stepped to.
 							data-review-pending={next ? "true" : undefined}
 						>
+							{review && !shown ? (
+								<div className="markdown-review-loading" role="status">
+									Loading diff…
+								</div>
+							) : null}
 							<DocumentSlots
 								shown={shown}
 								next={next}
@@ -695,9 +700,14 @@ function MarkdownLiveReviewController({
 	readonly onCompletionFailure: () => void;
 }) {
 	// The diff-mode float is shell-owned (one float, workspace scope). A no-op
-	// diff renders no overlay at all: the float alone carries the actions.
+	// diff has no change spans to render, so explain the empty surface instead
+	// of leaving the reviewer with a blank canvas.
 	if (reviewDiff.beforeMarkdown === reviewDiff.afterMarkdown) {
-		return null;
+		return (
+			<div className="markdown-review-empty-state" role="status">
+				No visible content changes for this file.
+			</div>
+		);
 	}
 	const completeReview = createCompleteMarkdownReview({
 		path: sourceFilePath,

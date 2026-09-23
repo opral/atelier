@@ -17,7 +17,9 @@ import {
 	deleteColumn,
 	deleteRow,
 	moveColumn,
+	moveColumnTo,
 	moveRow,
+	moveRowTo,
 	setColumnAlign,
 	sortColumn,
 	TABLE_EDIT_META,
@@ -87,11 +89,16 @@ declare module "@tiptap/core" {
 			deleteTableRow: (target?: TableTarget) => ReturnType;
 			moveTableRowUp: (target?: TableTarget) => ReturnType;
 			moveTableRowDown: (target?: TableTarget) => ReturnType;
+			moveTableRowTo: (destination: number, target?: TableTarget) => ReturnType;
 			addTableColumnBefore: (target?: TableTarget) => ReturnType;
 			addTableColumnAfter: (target?: TableTarget) => ReturnType;
 			deleteTableColumn: (target?: TableTarget) => ReturnType;
 			moveTableColumnLeft: (target?: TableTarget) => ReturnType;
 			moveTableColumnRight: (target?: TableTarget) => ReturnType;
+			moveTableColumnTo: (
+				destination: number,
+				target?: TableTarget,
+			) => ReturnType;
 			setTableColumnAlign: (
 				align: TableAlign,
 				target?: TableTarget,
@@ -276,11 +283,15 @@ export const TableControlsExtension = Extension.create({
 			deleteTableRow: (target) => run(deleteRow(target)),
 			moveTableRowUp: (target) => run(moveRow(-1, target)),
 			moveTableRowDown: (target) => run(moveRow(1, target)),
+			moveTableRowTo: (destination, target) =>
+				run(moveRowTo(destination, target)),
 			addTableColumnBefore: (target) => run(addColumn("before", target)),
 			addTableColumnAfter: (target) => run(addColumn("after", target)),
 			deleteTableColumn: (target) => run(deleteColumn(target)),
 			moveTableColumnLeft: (target) => run(moveColumn(-1, target)),
 			moveTableColumnRight: (target) => run(moveColumn(1, target)),
+			moveTableColumnTo: (destination, target) =>
+				run(moveColumnTo(destination, target)),
 			setTableColumnAlign: (align, target) =>
 				run(setColumnAlign(align, target)),
 			sortTableColumn: (direction, target) =>

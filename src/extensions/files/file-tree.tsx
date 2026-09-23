@@ -131,6 +131,7 @@ type TreePathInfo = {
 };
 
 type TreeInput = {
+	readonly createRequest: FileTreeCreateRequest | null | undefined;
 	readonly paths: string[];
 	readonly pathInfoByTreePath: Map<string, TreePathInfo>;
 	readonly directoryTreePaths: string[];
@@ -414,6 +415,7 @@ export function FileTree({
 		() => buildTreeInput(nodes, createRequest),
 		[nodes, createRequest],
 	);
+	const activeCreateRequest = treeInput.createRequest;
 	const treePathsKey = useMemo(
 		() => treeInput.paths.join("\0"),
 		[treeInput.paths],
@@ -422,16 +424,16 @@ export function FileTree({
 		const next = new Set(
 			[...resolvedOpenDirectories].map(appDirectoryPathToTreePath),
 		);
-		if (createRequest) {
+		if (activeCreateRequest) {
 			const parentTreePath = appDirectoryPathToTreePath(
-				createRequest.directoryPath,
+				activeCreateRequest.directoryPath,
 			);
 			if (parentTreePath) {
 				next.add(parentTreePath);
 			}
 		}
 		return next;
-	}, [createRequest, resolvedOpenDirectories]);
+	}, [activeCreateRequest, resolvedOpenDirectories]);
 	const openDirectoryTreePathsKey = useMemo(
 		() => [...openDirectoryTreePaths].sort().join("\0"),
 		[openDirectoryTreePaths],
@@ -458,7 +460,7 @@ export function FileTree({
 		: null;
 
 	const stateRef = useRef({
-		createRequest,
+		createRequest: activeCreateRequest,
 		openDirectoryTreePaths,
 		openDirectories,
 		openFileView,
@@ -626,7 +628,7 @@ export function FileTree({
 
 	useLayoutEffect(() => {
 		stateRef.current = {
-			createRequest,
+			createRequest: activeCreateRequest,
 			openDirectoryTreePaths,
 			openDirectories,
 			openFileView,
@@ -737,7 +739,7 @@ export function FileTree({
 			});
 		};
 	}, [
-		createRequest,
+		activeCreateRequest,
 		model,
 		onCreateAtDirectory,
 		onCreateCancel,
@@ -848,7 +850,7 @@ export function FileTree({
 	}, [model, selectedTreePath, treePathsKey]);
 
 	useEffect(() => {
-		if (!createRequest) {
+		if (!activeCreateRequest) {
 			startedCreateRequestIdRef.current = null;
 			readyCreateRequestIdRef.current = null;
 			return;
@@ -860,14 +862,14 @@ export function FileTree({
 			.getFileTreeContainer()
 			?.shadowRoot?.querySelector("[data-item-rename-input]");
 		if (
-			startedCreateRequestIdRef.current === createRequest.id &&
-			readyCreateRequestIdRef.current === createRequest.id &&
+			startedCreateRequestIdRef.current === activeCreateRequest.id &&
+			readyCreateRequestIdRef.current === activeCreateRequest.id &&
 			currentInput instanceof HTMLInputElement
 		) {
 			return;
 		}
 		let reportedReady = false;
-		startedCreateRequestIdRef.current = createRequest.id;
+		startedCreateRequestIdRef.current = activeCreateRequest.id;
 		readyCreateRequestIdRef.current = null;
 		if (!(currentInput instanceof HTMLInputElement)) {
 			model.focusPath(treeInput.createPlaceholderTreePath);
@@ -877,7 +879,7 @@ export function FileTree({
 		}
 		const disposeInitialInput = prepareInitialCreateInput(
 			model,
-			createRequest,
+			activeCreateRequest,
 			(request) => {
 				reportedReady = true;
 				readyCreateRequestIdRef.current = request.id;
@@ -888,14 +890,14 @@ export function FileTree({
 			disposeInitialInput();
 			if (
 				!reportedReady &&
-				startedCreateRequestIdRef.current === createRequest.id
+				startedCreateRequestIdRef.current === activeCreateRequest.id
 			) {
 				startedCreateRequestIdRef.current = null;
 			}
 		};
 	}, [
-		createRequest,
-		createRequest?.id,
+		activeCreateRequest,
+		activeCreateRequest?.id,
 		model,
 		onCreateReady,
 		treeInput.createPlaceholderTreePath,
@@ -1375,20 +1377,23 @@ function buildTreeInput(
 	}
 
 	let createPlaceholderTreePath: string | null = null;
+	let resolvedCreateRequest = createRequest;
 	if (createRequest) {
 		const placeholder = uniqueCreatePlaceholderPath(
 			createRequest,
 			pathInfoByTreePath,
 		);
+		resolvedCreateRequest = placeholder.request;
 		createPlaceholderTreePath = placeholder.treePath;
 		addPath(placeholder.treePath, {
 			appPath: placeholder.appPath,
-			createRequestId: createRequest.id,
-			kind: createRequest.kind,
+			createRequestId: resolvedCreateRequest.id,
+			kind: resolvedCreateRequest.kind,
 		});
 	}
 
 	return {
+		createRequest: resolvedCreateRequest,
 		createPlaceholderTreePath,
 		directoryTreePaths,
 		hiddenTreePaths,
@@ -1447,26 +1452,71 @@ function buildReviewGitStatusEntries(
 function uniqueCreatePlaceholderPath(
 	request: FileTreeCreateRequest,
 	pathInfoByTreePath: ReadonlyMap<string, TreePathInfo>,
-): { appPath: string; treePath: string } {
+): {
+	request: FileTreeCreateRequest;
+	appPath: string;
+	treePath: string;
+} {
+	if (request.kind === "directory") {
+		// Resolve against the current rendered tree. The parent's directory set
+		// can lag behind the Lix-backed nodes while a just-created row is still
+		// propagating, so checking only the synthetic placeholder would allow a
+		// duplicate visible destination.
+		for (let suffix = 1; ; suffix += 1) {
+			const value =
+				suffix === 1
+					? request.initialValue
+					: `${request.initialValue}-${suffix}`;
+			const visiblePath = childAppPath(
+				request.directoryPath,
+				value,
+				"directory",
+			);
+			const visibleTreePath = appPathToTreePath(visiblePath, true);
+			const placeholderValue = `${value}__atelier_create_${request.id}`;
+			const appPath = childAppPath(
+				request.directoryPath,
+				placeholderValue,
+				"directory",
+			);
+			const treePath = appPathToTreePath(appPath, true);
+			if (
+				!pathInfoByTreePath.has(visibleTreePath) &&
+				!pathInfoByTreePath.has(treePath)
+			) {
+				const resolvedRequest =
+					value === request.initialValue && request.initialInputValue === value
+						? request
+						: {
+								...request,
+								initialInputValue: value,
+								initialValue: value,
+							};
+				return { request: resolvedRequest, appPath, treePath };
+			}
+		}
+	}
+
 	let suffix = 1;
 	while (suffix < 1000) {
 		const value =
 			suffix === 1 ? request.initialValue : `${request.initialValue}-${suffix}`;
-		const appPath = childAppPath(request.directoryPath, value, request.kind);
-		const treePath = appPathToTreePath(appPath, request.kind === "directory");
+		const appPath = childAppPath(request.directoryPath, value, "file");
+		const treePath = appPathToTreePath(appPath, false);
 		if (!pathInfoByTreePath.has(treePath)) {
-			return { appPath, treePath };
+			return { request, appPath, treePath };
 		}
 		suffix += 1;
 	}
 	const fallback = childAppPath(
 		request.directoryPath,
 		`${request.initialValue}-${request.id}`,
-		request.kind,
+		"file",
 	);
 	return {
+		request,
 		appPath: fallback,
-		treePath: appPathToTreePath(fallback, request.kind === "directory"),
+		treePath: appPathToTreePath(fallback, false),
 	};
 }
 
@@ -1529,6 +1579,8 @@ function treeHostStyle(
 		? "--atelier-bg-hover"
 		: "--atelier-bg-hover-strong";
 	return {
+		// Follow Atelier rather than the tree component's independent OS theme.
+		colorScheme: "inherit",
 		// Must be opaque (not transparent): the truncation ellipsis paints this
 		// over clipped label text to hide half-cut glyphs.
 		"--trees-bg-override": `var(${surface})`,

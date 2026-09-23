@@ -1,5 +1,21 @@
 import { configDefaults, defineConfig } from "vitest/config";
+import { realpathSync } from "node:fs";
 import path from "node:path";
+
+// Vitest resolves this workspace link to its real path before applying
+// dependency externalization. Keep the linked SDK in Node so its import.meta.url
+// continues to locate native bindings and bundled plugin files correctly.
+const linkedSdkExternal = (() => {
+	try {
+		const sdkPath = realpathSync(
+			path.resolve(__dirname, "node_modules/@lix-js/sdk"),
+		).replaceAll("\\", "/");
+		const escapedPath = sdkPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		return new RegExp(`^${escapedPath}(?:/|$)`);
+	} catch {
+		return null;
+	}
+})();
 
 export default defineConfig({
 	ssr: {
@@ -19,7 +35,11 @@ export default defineConfig({
 	test: {
 		server: {
 			deps: {
-				external: ["@lix-js/sdk", /\/vendor\/lix\/packages\/js-sdk\//],
+				external: [
+					"@lix-js/sdk",
+					/\/vendor\/lix\/packages\/js-sdk\//,
+					...(linkedSdkExternal ? [linkedSdkExternal] : []),
+				],
 			},
 		},
 		environment: "happy-dom",

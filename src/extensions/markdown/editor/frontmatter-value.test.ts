@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
 	frontmatterSourceFromInput,
 	parseFrontmatterSource,
+	suggestFrontmatterRecovery,
 	stringifyFrontmatterValue,
 } from "./frontmatter-value";
 
@@ -44,5 +45,28 @@ describe("frontmatter values", () => {
 		const parsed = parseFrontmatterSource("- one\n- two");
 		expect(parsed.value).toBeNull();
 		expect(parsed.error).toMatch(/key-value fields/i);
+	});
+
+	test("suggests a long-dash fence only when valid fields precede Markdown", () => {
+		expect(
+			suggestFrontmatterRecovery(
+				"title: Half-baked ideas\ndate: 2026-07-14\ntags: [ideas, notes]\n--------------------\n\n# Half-baked ideas\n",
+			),
+		).toEqual({
+			yaml: "title: Half-baked ideas\ndate: 2026-07-14\ntags: [ideas, notes]",
+			body: "\n# Half-baked ideas\n",
+			line: 4,
+		});
+	});
+
+	test("does not guess when fields are invalid or the following text is ambiguous", () => {
+		expect(
+			suggestFrontmatterRecovery("tags: [ideas\n--------------------\n# Ideas"),
+		).toBeNull();
+		expect(
+			suggestFrontmatterRecovery(
+				"title: Ideas\n--------------------\nplain text",
+			),
+		).toBeNull();
 	});
 });

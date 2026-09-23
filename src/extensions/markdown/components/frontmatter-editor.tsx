@@ -26,9 +26,15 @@ import {
 } from "lucide-react";
 import {
 	parseFrontmatterSource,
+	suggestFrontmatterRecovery,
 	stringifyFrontmatterValue,
 	type FrontmatterRecord,
 } from "../editor/frontmatter-value";
+import { parseMarkdown, serializeAst } from "../editor/markdown";
+import {
+	astToTiptapDoc,
+	tiptapDocToAst,
+} from "../editor/tiptap-markdown-bridge";
 import {
 	useMarkdownFrontmatterDisabled,
 	useMarkdownFrontmatterEditing,
@@ -684,11 +690,19 @@ export function FrontmatterEditorNodeView({
 	const [writeError, setWriteError] = useState<string | null>(null);
 	const source = String(node.attrs.value ?? "");
 	const parsed = useMemo(() => parseFrontmatterSource(source), [source]);
+	const recovery = useMemo(
+		() => (parsed.error ? suggestFrontmatterRecovery(source) : null),
+		[parsed.error, source],
+	);
 	const entries = parsed.value ? Object.entries(parsed.value) : [];
 	const fieldsSupported = supportsLosslessFieldsSource(source, parsed.value);
 	const [mode, setMode] = useState<FrontmatterMode>(
 		parsed.error || !fieldsSupported ? "yaml" : "fields",
 	);
+	// Raw mode is automatic when source cannot safely be represented as fields.
+	// Remember that distinction so repairing YAML returns to the normal fields
+	// view, while an explicit user choice to inspect valid YAML remains respected.
+	const automaticYamlMode = useRef(parsed.error || !fieldsSupported);
 
 	const [addingField, setAddingField] = useState(
 		Boolean(node.attrs.autofocus && entries.length === 0),
@@ -790,13 +804,63 @@ export function FrontmatterEditorNodeView({
 		focusFirstDocumentBlock();
 	}, [deleteNode, editing.kind, focusFirstDocumentBlock, writeThrough]);
 
+	const repairFrontmatterFence = useCallback(() => {
+		if (
+			!recovery ||
+			disabled ||
+			editing.kind !== "document" ||
+			editor.isDestroyed
+		)
+			return;
+		const current = editor.getJSON();
+		const frontmatter = current.content?.[0];
+		if (frontmatter?.type !== "markdownFrontmatter") return;
+
+		// The parser treated the last `---` in the file as the closing fence, so
+		// it swallowed the Markdown after this likely fence into the YAML node.
+		// Move that text back into the document, and let the old closing fence
+		// become the horizontal rule it was intended to be.
+		const remainingMarkdown = serializeAst(
+			tiptapDocToAst({
+				type: "doc",
+				content: current.content?.slice(1),
+			} as never),
+		);
+		const recoveredBody = astToTiptapDoc(
+			parseMarkdown(`${recovery.body}\n---\n\n${remainingMarkdown}`),
+		);
+		const repaired = {
+			type: "doc",
+			content: [
+				{
+					...frontmatter,
+					attrs: { ...frontmatter.attrs, value: recovery.yaml },
+				},
+				...(recoveredBody.content ?? []),
+			],
+		};
+		editor.commands.setContent(repaired, {
+			emitUpdate: true,
+			errorOnInvalidContent: true,
+		});
+	}, [disabled, editing.kind, editor, recovery]);
+
 	useEffect(() => {
 		if (entries.length > 0) createdEmptyRef.current = false;
 	}, [entries.length]);
 	useEffect(() => {
 		if ((!fieldsSupported || parsed.error) && mode !== "yaml") {
+			automaticYamlMode.current = true;
 			setMode("yaml");
 			setAddingField(false);
+		} else if (
+			fieldsSupported &&
+			!parsed.error &&
+			mode === "yaml" &&
+			automaticYamlMode.current
+		) {
+			automaticYamlMode.current = false;
+			setMode("fields");
 		}
 	}, [fieldsSupported, mode, parsed.error]);
 	useEffect(() => {
@@ -807,6 +871,7 @@ export function FrontmatterEditorNodeView({
 					?.querySelector<HTMLElement>(".markdown-frontmatter-yaml")
 					?.focus();
 			} else {
+				automaticYamlMode.current = false;
 				setMode("fields");
 				setAddingField(true);
 			}
@@ -895,6 +960,7 @@ export function FrontmatterEditorNodeView({
 								removeFrontmatter();
 								return;
 							}
+							automaticYamlMode.current = false;
 							setMode(mode === "fields" ? "yaml" : "fields");
 						}}
 					>
@@ -1003,9 +1069,23 @@ export function FrontmatterEditorNodeView({
 							}}
 						/>
 						{parsed.error ? (
-							<p id={rawErrorId} className="markdown-frontmatter-error">
-								{parsed.error}
-							</p>
+							recovery ? (
+								<div className="markdown-frontmatter-recovery" role="note">
+									<p id={rawErrorId}>
+										It looks like frontmatter should end at the long-dash line{" "}
+										{recovery.line}. The text after it is being treated as YAML.
+									</p>
+									{!disabled && editing.kind === "document" ? (
+										<button type="button" onClick={repairFrontmatterFence}>
+											Use line {recovery.line} as closing fence
+										</button>
+									) : null}
+								</div>
+							) : (
+								<p id={rawErrorId} className="markdown-frontmatter-error">
+									{parsed.error}
+								</p>
+							)
 						) : null}
 					</div>
 				)}

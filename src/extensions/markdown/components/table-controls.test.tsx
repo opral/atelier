@@ -195,6 +195,55 @@ describe("TableControls", () => {
 		expect(screen.getByLabelText("Add a column")).toBeTruthy();
 	});
 
+	test("the column grip drags a column to a new position", async () => {
+		const editor = setup();
+		await hover("a");
+		const handle = grip("column")!;
+		fireEvent.pointerDown(handle, {
+			pointerId: 12,
+			pointerType: "mouse",
+			button: 0,
+			clientX: 90,
+			clientY: 90,
+		});
+		await pointAt(300, 110, 12);
+		expect(handle.dataset.dragging).toBe("true");
+		await act(async () => {
+			fireEvent.pointerUp(document, {
+				pointerId: 12,
+				pointerType: "mouse",
+				button: 0,
+				clientX: 300,
+				clientY: 110,
+			});
+		});
+		expect(grid(editor)).toEqual(["b|c|a", "2|3|1", "5|6|4"]);
+	});
+
+	test("the row grip drags body rows while keeping the header first", async () => {
+		const editor = setup();
+		await hover("1");
+		const handle = grip("row")!;
+		fireEvent.pointerDown(handle, {
+			pointerId: 13,
+			pointerType: "mouse",
+			button: 0,
+			clientX: 35,
+			clientY: 145,
+		});
+		await pointAt(200, 185, 13);
+		await act(async () => {
+			fireEvent.pointerUp(document, {
+				pointerId: 13,
+				pointerType: "mouse",
+				button: 0,
+				clientX: 200,
+				clientY: 185,
+			});
+		});
+		expect(grid(editor)).toEqual(["a|b|c", "4|5|6", "1|2|3"]);
+	});
+
 	test("hovering never moves the caret, and leaving the table puts the grips away", async () => {
 		const editor = setup();
 		editor.commands.setTextSelection(editor.state.doc.content.size - 2);
@@ -469,13 +518,14 @@ describe("TableControls", () => {
 	});
 });
 
-async function pointAt(x: number, y: number) {
+async function pointAt(x: number, y: number, pointerId = 0) {
 	await act(async () => {
 		document.body.dispatchEvent(
 			new PointerEvent("pointermove", {
 				bubbles: true,
 				clientX: x,
 				clientY: y,
+				pointerId,
 				pointerType: "mouse",
 			}),
 		);

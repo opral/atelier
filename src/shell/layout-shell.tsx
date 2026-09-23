@@ -3291,12 +3291,13 @@ function LayoutShellLoadedContentResolved({
 				selected.has(r.fileId),
 			);
 			if (reviews.length === 0) return;
-			if (outcome === "rejected")
+			if (outcome === "rejected") {
 				await undoAppliedFiles(
 					lix,
 					reviews.map((r) => r.fileId),
 					session.range,
 				);
+			}
 			for (const review of reviews) {
 				await runDiffReviewResolution(review, outcome, () =>
 					persistReviewResolution(review, outcome),

@@ -119,7 +119,12 @@ type Range = {
 };
 
 /** Where the selection's ends go: its cells moved by rows and columns. */
-type Shift = { readonly rows: number; readonly columns: number };
+type Shift = {
+	readonly rows?: number;
+	readonly columns?: number;
+	readonly mapRows?: (row: number) => number;
+	readonly mapColumns?: (column: number) => number;
+};
 
 type Edit =
 	| { readonly rows: readonly Row[]; readonly align: readonly TableAlign[] }
@@ -424,8 +429,8 @@ function shiftedSelection(
 		const cellPos = cellPosition(
 			table,
 			tablePos,
-			at.row + shift.rows,
-			at.column + shift.columns,
+			shift.mapRows?.(at.row) ?? at.row + (shift.rows ?? 0),
+			shift.mapColumns?.(at.column) ?? at.column + (shift.columns ?? 0),
 		);
 		if (cellPos === null) return null;
 		const offset = state.doc.resolve(pos).parentOffset;
@@ -513,6 +518,36 @@ export function moveRow(direction: -1 | 1, target?: TableTarget): Command {
 	});
 }
 
+/** Moves one body row to its final position, keeping the Markdown header first. */
+export function moveRowTo(destination: number, target?: TableTarget): Command {
+	return tableCommand(target, (context) => {
+		const source = context.target.row;
+		if (
+			source === 0 ||
+			!Number.isInteger(destination) ||
+			destination < 1 ||
+			destination >= context.rows.length ||
+			destination === source
+		)
+			return false;
+		const rows = [...context.rows];
+		const [row] = rows.splice(source, 1);
+		rows.splice(destination, 0, row!);
+		const mapRow = (index: number) =>
+			index === source
+				? destination
+				: source < destination && index > source && index <= destination
+					? index - 1
+					: destination < source && index >= destination && index < source
+						? index + 1
+						: index;
+		return {
+			edit: { rows, align: context.align },
+			shift: { mapRows: mapRow },
+		};
+	});
+}
+
 /** A new empty column left or right of the target's, with no alignment. */
 export function addColumn(
 	side: "before" | "after",
@@ -593,6 +628,42 @@ export function moveColumn(direction: -1 | 1, target?: TableTarget): Command {
 				offset: context.offset,
 			},
 			shift: { rows: 0, columns: direction },
+		};
+	});
+}
+
+/** Moves one column to its final position, carrying its alignment and cells. */
+export function moveColumnTo(destination: number, target?: TableTarget): Command {
+	return tableCommand(target, (context) => {
+		const source = context.target.column;
+		if (
+			!Number.isInteger(destination) ||
+			destination < 0 ||
+			destination >= context.width ||
+			destination === source
+		)
+			return false;
+		const move = <T>(items: readonly T[]) => {
+			const next = [...items];
+			const [column] = next.splice(source, 1);
+			next.splice(destination, 0, column!);
+			return next;
+		};
+		const mapColumn = (index: number) =>
+			index === source
+				? destination
+				: source < destination && index > source && index <= destination
+					? index - 1
+					: destination < source && index >= destination && index < source
+						? index + 1
+						: index;
+		const rows = paddedRows(context).map((row) => ({
+			node: row.node,
+			cells: move(row.cells),
+		}));
+		return {
+			edit: { rows, align: move(context.align) },
+			shift: { mapColumns: mapColumn },
 		};
 	});
 }

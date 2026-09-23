@@ -7,7 +7,7 @@ import {
 	useState,
 } from "react";
 import { createPortal } from "react-dom";
-import type { Editor } from "@tiptap/core";
+import type { Editor, JSONContent } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
 import { Check, RotateCcw } from "lucide-react";
 import { useLix } from "@/lib/lix-react";
@@ -102,6 +102,8 @@ export function MarkdownReviewEditor({
 		: 0;
 	const [ownedEditor, setOwnedEditor] = useState<Editor | null>(null);
 	const editor = externalEditor ?? ownedEditor;
+	const hasUnrenderableEmptyChange =
+		!hasVisibleMarkdownContent(displayDocument);
 	const completionSucceeded = useRef(false);
 	const reviewDocumentRef = useRef(reviewDocument.doc);
 	const openWorkspaceFileRef = useRef(openWorkspaceFile);
@@ -410,6 +412,11 @@ export function MarkdownReviewEditor({
 					/>
 				</div>
 			)}
+			{hasUnrenderableEmptyChange ? (
+				<div className="markdown-review-empty-state" role="status">
+					This file has no visible Markdown content to compare.
+				</div>
+			) : null}
 			{reviewEnabled && activeChange && activeChangeElement ? (
 				<InlineChangeReviewChip
 					anchor={activeChangeElement}
@@ -444,6 +451,35 @@ function setReviewEditorDocument(
 			errorOnInvalidContent: true,
 		})
 		.run();
+}
+
+function hasVisibleMarkdownContent(node: JSONContent): boolean {
+	if (node.type === "text") return Boolean(node.text?.trim());
+	// The review extension paints this structural paragraph as a ¶ widget.
+	// Count it as visible so the blank-file message does not cover the marker.
+	const data = node.attrs?.data as
+		| { __atelier_empty_paragraph?: unknown; markdownReview?: unknown }
+		| undefined;
+	const review = data?.markdownReview as { hidden?: unknown } | undefined;
+	if (
+		node.type === "paragraph" &&
+		node.content?.length === 0 &&
+		data?.__atelier_empty_paragraph === true &&
+		review &&
+		review.hidden !== true
+	)
+		return true;
+	// Paragraphs and the document wrapper have no visible geometry without
+	// text. A hard break is also empty when it has no neighboring text. Treat
+	// every other node as visible: empty tables, rules, embeds and media still
+	// have a meaningful visual representation in the editor.
+	if (
+		node.type !== "doc" &&
+		node.type !== "paragraph" &&
+		node.type !== "hardBreak"
+	)
+		return true;
+	return node.content?.some(hasVisibleMarkdownContent) ?? false;
 }
 
 /**

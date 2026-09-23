@@ -20,6 +20,7 @@ import { EditorProvider } from "./editor-context";
 import type { Editor } from "@tiptap/core";
 import { parseFrontmatterSource } from "./frontmatter-value";
 import { FormattingToolbar } from "../components/formatting-toolbar";
+import { parseMarkdown } from "./markdown";
 
 function Providers({ lix, children }: { lix: Lix; children: React.ReactNode }) {
 	return (
@@ -529,6 +530,86 @@ test("renders YAML frontmatter as editable fields", async () => {
 	expect(
 		screen.getByRole("checkbox", { name: "published value" }),
 	).toBeChecked();
+});
+
+test("offers a one-click repair when a long dash line swallowed Markdown into frontmatter", async () => {
+	const fileId = fakeUuid("file_frontmatter_recovery");
+	const markdown = `---
+title: Half-baked ideas
+date: 2026-07-14
+tags: [ideas, notes]
+--------------------
+
+# Half-baked ideas
+
+A dumping ground. No structure.
+
+---
+> Most of these will die here, and that's fine.
+`;
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown,
+		persistDebounceMs: 0,
+	});
+
+	const raw = await screen.findByRole("textbox", {
+		name: "Raw YAML frontmatter",
+	});
+	expect((raw as HTMLTextAreaElement).value).toContain("--------------------");
+	expect((raw as HTMLTextAreaElement).value).toContain("# Half-baked ideas");
+	const repair = screen.getByRole("button", {
+		name: "Use line 4 as closing fence",
+	});
+	await act(async () => fireEvent.click(repair));
+
+	await waitFor(() => {
+		expect(editor.view.dom.querySelector("h1")).toHaveTextContent(
+			"Half-baked ideas",
+		);
+		expect(editor.view.dom).toHaveTextContent(
+			"Most of these will die here, and that's fine.",
+		);
+	});
+	// Repairing the swallowed body also makes the frontmatter valid and safe
+	// for structured editing, so the editor should leave its automatic raw mode.
+	expect(
+		await screen.findByRole("textbox", { name: "title value" }),
+	).toHaveValue("Half-baked ideas");
+	expect(screen.getByRole("button", { name: "YAML" })).toBeEnabled();
+	expect(
+		screen.queryByRole("textbox", { name: "Raw YAML frontmatter" }),
+	).toBeNull();
+	await waitFor(async () => {
+		const saved = await decodeFileMarkdown(lix, fileId);
+		const ast = parseMarkdown(saved);
+		expect(ast.children.map((child) => child.type)).toEqual([
+			"yaml",
+			"heading",
+			"paragraph",
+			"thematicBreak",
+			"blockquote",
+		]);
+		expect((ast.children[0] as { value?: string }).value).toContain(
+			"title: Half-baked ideas",
+		);
+	});
+	await act(async () => {
+		expect(editor.commands.undo()).toBe(true);
+	});
+	await waitFor(() => {
+		expect(editor.state.doc.firstChild?.attrs.value).toContain(
+			"--------------------",
+		);
+		expect(
+			screen.getByRole("button", { name: "Use line 4 as closing fence" }),
+		).toBeInTheDocument();
+	});
+	await waitFor(async () => {
+		const saved = await decodeFileMarkdown(lix, fileId);
+		expect(saved).toContain("--------------------");
+		expect(saved).toContain("# Half-baked ideas");
+	});
 });
 
 test("preserves existing empty frontmatter until the user removes it", async () => {
@@ -2267,6 +2348,46 @@ test("applies a queued external update after undo returns the editor to clean co
 			"Queued external update",
 		);
 	});
+});
+
+test("one Mod-z undoes a table reorder after its Markdown save is acknowledged", async () => {
+	const fileId = fakeUuid("file_table_reorder_undo_ack");
+	const initialMarkdown =
+		"| Name | Qty | Note |\n| --- | ---: | --- |\n| apple | 3 | ripe |\n| pear | 5 | green |\n";
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: initialMarkdown,
+		persistDebounceMs: 0,
+	});
+	const before = editor.state.doc;
+	await act(async () => {
+		expect(
+			editor.commands.moveTableColumnTo(1, {
+				tablePos: 0,
+				row: 0,
+				column: 0,
+			}),
+		).toBe(true);
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain(
+			"| Qty | Name | Note |",
+		),
+	);
+	const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+	const undo = new KeyboardEvent("keydown", {
+		key: "z",
+		metaKey: mac,
+		ctrlKey: !mac,
+		bubbles: true,
+		cancelable: true,
+	});
+	await act(async () => {
+		editor.view.dom.dispatchEvent(undo);
+	});
+
+	expect(undo.defaultPrevented).toBe(true);
+	expect(editor.state.doc.eq(before)).toBe(true);
 });
 
 test("preserves main content when switching to a new branch and back", async () => {

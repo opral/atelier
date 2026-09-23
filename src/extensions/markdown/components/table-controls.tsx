@@ -8,6 +8,7 @@ import {
 	useState,
 	type ComponentType,
 	type KeyboardEvent as ReactKeyboardEvent,
+	type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -130,6 +131,30 @@ type Layout = {
 	readonly addColumn: Rect | null;
 };
 
+type DropLocation = {
+	readonly target: TableTarget;
+	/** Final row/column index after removing the dragged item. */
+	readonly destination: number;
+	/** Insertion boundary in the table before removing the dragged item. */
+	readonly insertion: number;
+};
+
+type GripDrag = {
+	readonly pointerId: number;
+	readonly axis: "row" | "column";
+	readonly source: TableTarget;
+	readonly startX: number;
+	readonly startY: number;
+	started: boolean;
+	location: DropLocation | null;
+};
+
+type DragPreview = {
+	readonly axis: "row" | "column";
+	readonly source: TableTarget;
+	readonly location: DropLocation | null;
+};
+
 /**
  * Where the controls for `target` go: the row's grip on the table's left
  * border, the column's on its top border, the "+" bars along the bottom and
@@ -218,6 +243,99 @@ function measure(editor: Editor, target: TableTarget): Layout | null {
 			height: grid.height,
 		}),
 	};
+}
+
+/** Resolves a drag pointer to the insertion boundary on its source table. */
+function dropLocationAt(
+	editor: Editor,
+	source: TableTarget,
+	axis: "row" | "column",
+	x: number,
+	y: number,
+): DropLocation | null {
+	const elements = tableElements(editor, source.tablePos);
+	if (!elements) return null;
+	const { body } = elements;
+	const candidates =
+		axis === "row"
+			? Array.from(body.children)
+			: Array.from(body.children[0]?.children ?? []);
+	if (candidates.length === 0) return null;
+	const coordinate = axis === "row" ? y : x;
+	const bounds = candidates.map((element) => element.getBoundingClientRect());
+	const first = bounds[0]!;
+	const last = bounds.at(-1)!;
+	const start = axis === "row" ? first.top : first.left;
+	const end = axis === "row" ? last.bottom : last.right;
+	if (coordinate < start || coordinate > end) return null;
+	const midpointIndex = bounds.findIndex((box) =>
+		coordinate <
+			(axis === "row" ? box.top + box.height / 2 : box.left + box.width / 2),
+	);
+	const index = midpointIndex < 0 ? bounds.length - 1 : midpointIndex;
+	const box = bounds[index]!;
+	const afterMidpoint =
+		coordinate >=
+		(axis === "row" ? box.top + box.height / 2 : box.left + box.width / 2);
+	let insertion = index + (afterMidpoint ? 1 : 0);
+	const sourceIndex = axis === "row" ? source.row : source.column;
+	const lastIndex = candidates.length - 1;
+	if (axis === "row") {
+		// Markdown's first row is the header and remains pinned at the top.
+		if (sourceIndex === 0) return null;
+		insertion = Math.max(1, insertion);
+	}
+	let destination = insertion > sourceIndex ? insertion - 1 : insertion;
+	destination =
+		axis === "row"
+			? Math.max(1, Math.min(lastIndex, destination))
+			: Math.max(0, Math.min(lastIndex, destination));
+	return {
+		target: {
+			tablePos: source.tablePos,
+			row: axis === "row" ? index : 0,
+			column: axis === "column" ? index : 0,
+		},
+		destination,
+		insertion,
+	};
+}
+
+/** The slim line that previews where a dragged row or column will land. */
+function measureDropIndicator(
+	editor: Editor,
+	drag: DragPreview,
+): Rect | null {
+	if (!drag.location) return null;
+	const elements = tableElements(editor, drag.source.tablePos);
+	if (!elements) return null;
+	const { body } = elements;
+	const grid = body.getBoundingClientRect();
+	const clip = getClipRect(editor.view.dom);
+	if (drag.axis === "column") {
+		const cells = Array.from(body.children[0]?.children ?? []);
+		if (!cells.length) return null;
+		const boundary = drag.location.insertion;
+		const x =
+			boundary >= cells.length
+				? cells.at(-1)!.getBoundingClientRect().right
+				: cells[boundary]!.getBoundingClientRect().left;
+		const left = Math.max(clip.left, Math.min(clip.right - 2, x - 1));
+		const top = Math.max(clip.top, grid.top);
+		const bottom = Math.min(clip.bottom, grid.bottom);
+		return bottom > top ? { left, top, width: 2, height: bottom - top } : null;
+	}
+	const rows = Array.from(body.children);
+	if (!rows.length) return null;
+	const boundary = drag.location.insertion;
+	const y =
+		boundary >= rows.length
+			? rows.at(-1)!.getBoundingClientRect().bottom
+			: rows[boundary]!.getBoundingClientRect().top;
+	const left = Math.max(clip.left, grid.left);
+	const right = Math.min(clip.right, grid.right);
+	const top = Math.max(clip.top, Math.min(clip.bottom - 2, y - 1));
+	return right > left ? { left, top, width: right - left, height: 2 } : null;
 }
 
 /**
@@ -545,8 +663,11 @@ export function TableControls() {
 			equalityFn: sameTarget,
 		}) ?? null;
 	const [hover, setHover] = useState<TableTarget | null>(null);
+	const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
 	const [, setFrame] = useState(0);
 	const overlayRef = useRef<HTMLDivElement>(null);
+	const pendingDrag = useRef<GripDrag | null>(null);
+	const suppressGripClickUntil = useRef(0);
 	const showingRef = useRef(false);
 	const recentlyClosed = useRef<{ key: string; at: number } | null>(null);
 	const pointOrigin = useRef<{
@@ -555,6 +676,70 @@ export function TableControls() {
 		top: number;
 	} | null>(null);
 	const menuId = useId();
+
+	const finishGripDrag = useCallback(
+		(event: PointerEvent) => {
+			const drag = pendingDrag.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			pendingDrag.current = null;
+			setDragPreview(null);
+			if (!drag.started || !editor || editor.isDestroyed) return;
+			event.preventDefault();
+			suppressGripClickUntil.current = Date.now() + 500;
+			const location =
+				dropLocationAt(
+					editor,
+					drag.source,
+					drag.axis,
+					event.clientX,
+					event.clientY,
+				) ?? drag.location;
+			if (!location) return;
+			const sourceIndex =
+				drag.axis === "row" ? drag.source.row : drag.source.column;
+			if (location.destination === sourceIndex) return;
+			if (drag.axis === "row")
+				editor.commands.moveTableRowTo(location.destination, drag.source);
+			else
+				editor.commands.moveTableColumnTo(location.destination, drag.source);
+			setHover(null);
+		},
+		[editor],
+	);
+
+	const startGripDrag = (
+		event: ReactPointerEvent<HTMLButtonElement>,
+		axis: "row" | "column",
+		target: TableTarget,
+	) => {
+		if (
+			event.button !== 0 ||
+			event.pointerType === "touch" ||
+			(axis === "row" && target.row === 0) ||
+			!editor?.isEditable
+		)
+			return;
+		pendingDrag.current = {
+			pointerId: event.pointerId,
+			axis,
+			source: target,
+			startX: event.clientX,
+			startY: event.clientY,
+			started: false,
+			location: null,
+		};
+		event.preventDefault();
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// Document-level pointer listeners remain the fallback.
+		}
+	};
+
+	const onGripClick = (axis: "row" | "column", target: TableTarget) => {
+		if (Date.now() < suppressGripClickUntil.current) return;
+		openMenu(axis, target);
+	};
 
 	// The pointer's cell, kept while the pointer crosses the band around the
 	// table to reach a grip or a bar.
@@ -583,23 +768,54 @@ export function TableControls() {
 		};
 		const onMove = (event: PointerEvent) => {
 			if (event.pointerType === "touch") return;
+			const drag = pendingDrag.current;
+			if (drag?.pointerId === event.pointerId) {
+				if (
+					!drag.started &&
+					Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4
+				)
+					return;
+				drag.started = true;
+				drag.location = dropLocationAt(
+					editor,
+					drag.source,
+					drag.axis,
+					event.clientX,
+					event.clientY,
+				);
+				setDragPreview({
+					axis: drag.axis,
+					source: drag.source,
+					location: drag.location,
+				});
+				return;
+			}
 			last = event;
 			if (!frame) frame = requestAnimationFrame(evaluate);
+		};
+		const onPointerCancel = (event: PointerEvent) => {
+			if (pendingDrag.current?.pointerId !== event.pointerId) return;
+			pendingDrag.current = null;
+			setDragPreview(null);
 		};
 		// Typing puts the controls away until the pointer moves again.
 		const onKeyDown = () => setHover(null);
 		const onLeave = () => setHover(null);
 		document.addEventListener("pointermove", onMove, { passive: true });
+		document.addEventListener("pointerup", finishGripDrag);
+		document.addEventListener("pointercancel", onPointerCancel);
 		document.documentElement.addEventListener("pointerleave", onLeave);
 		const dom = editor.view.dom;
 		dom.addEventListener("keydown", onKeyDown);
 		return () => {
 			if (frame) cancelAnimationFrame(frame);
 			document.removeEventListener("pointermove", onMove);
+			document.removeEventListener("pointerup", finishGripDrag);
+			document.removeEventListener("pointercancel", onPointerCancel);
 			document.documentElement.removeEventListener("pointerleave", onLeave);
 			dom.removeEventListener("keydown", onKeyDown);
 		};
-	}, [editor, mounted, coarse]);
+	}, [editor, mounted, coarse, finishGripDrag]);
 
 	// Edits move tables; scrolling and resizing move everything. The layout
 	// is read again on the next frame after any of them.
@@ -759,9 +975,16 @@ export function TableControls() {
 	// While a menu is open, only the grip it came from stays: the others and
 	// the "+" bars would be clicked through it, or beside it, by mistake.
 	const gripMenu = menu && menu.axis !== "cell" ? menu : null;
-	const active = menu ? menu.target : ((coarse ? caretCell : hover) ?? null);
+	const active = dragPreview
+		? dragPreview.source
+		: menu
+			? menu.target
+			: ((coarse ? caretCell : hover) ?? null);
 	showingRef.current = active !== null || menu !== null;
 	const layout = active ? measure(editor, active) : null;
+	const dropIndicator = dragPreview
+		? measureDropIndicator(editor, dragPreview)
+		: null;
 	const portalTarget =
 		(editor.view.dom.closest(".atelier-root") as HTMLElement | null) ??
 		document.body;
@@ -807,12 +1030,20 @@ export function TableControls() {
 					className="markdown-table-controls"
 					data-testid="markdown-table-controls"
 				>
+					{dropIndicator ? (
+						<div
+							className="markdown-table-drop-indicator"
+							style={dropIndicator}
+							aria-hidden="true"
+						/>
+					) : null}
 					{layout.rowGrip && showGrip("row") ? (
 						<button
 							type="button"
 							className="markdown-table-grip"
 							data-axis="row"
 							data-active={gripMenu?.axis === "row" ? "true" : undefined}
+							data-dragging={dragPreview?.axis === "row" ? "true" : undefined}
 							style={layout.rowGrip}
 							aria-label={
 								active.row === 0
@@ -824,7 +1055,8 @@ export function TableControls() {
 							aria-controls={gripMenu?.axis === "row" ? menuId : undefined}
 							tabIndex={-1}
 							onMouseDown={(event) => event.preventDefault()}
-							onClick={() => openMenu("row", active)}
+							onPointerDown={(event) => startGripDrag(event, "row", active)}
+							onClick={() => onGripClick("row", active)}
 						>
 							<GripVertical aria-hidden="true" />
 						</button>
@@ -835,6 +1067,7 @@ export function TableControls() {
 							className="markdown-table-grip"
 							data-axis="column"
 							data-active={gripMenu?.axis === "column" ? "true" : undefined}
+							data-dragging={dragPreview?.axis === "column" ? "true" : undefined}
 							style={layout.columnGrip}
 							aria-label={`Column ${active.column + 1} options`}
 							aria-haspopup="menu"
@@ -842,7 +1075,8 @@ export function TableControls() {
 							aria-controls={gripMenu?.axis === "column" ? menuId : undefined}
 							tabIndex={-1}
 							onMouseDown={(event) => event.preventDefault()}
-							onClick={() => openMenu("column", active)}
+							onPointerDown={(event) => startGripDrag(event, "column", active)}
+							onClick={() => onGripClick("column", active)}
 						>
 							<GripHorizontal aria-hidden="true" />
 						</button>
