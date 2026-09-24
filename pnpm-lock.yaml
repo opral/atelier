@@ -13,15 +13,6 @@ patchedDependencies:
   '@glideapps/glide-data-grid@6.0.3':
     hash: 4caa186a2f62fb20d155a8c8b8f5a0656d0ec60a3b1d491a03192a29cbb7d56c
     path: patches/@glideapps__glide-data-grid@6.0.3.patch
-  '@opral/zettel-ast@1.1.0':
-    hash: 53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56
-    path: patches/@opral__zettel-ast@1.1.0.patch
-  '@opral/zettel-html@1.1.0':
-    hash: 858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf
-    path: patches/@opral__zettel-html@1.1.0.patch
-  '@opral/zettel-lexical@1.1.0':
-    hash: c5dbc8500d0bb360c4c7a509ebf1b675677bded294baae919538e6e261b334de
-    path: patches/@opral__zettel-lexical@1.1.0.patch
   '@pierre/trees':
     hash: 9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6
     path: patches/@pierre__trees.patch
@@ -91,14 +82,14 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@opral/zettel-ast':
-        specifier: 1.1.0
-        version: 1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)
+        specifier: 1.2.0
+        version: 1.2.0
       '@opral/zettel-html':
-        specifier: 1.1.0
-        version: 1.1.0(patch_hash=858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf)
+        specifier: 1.2.0
+        version: 1.2.0
       '@opral/zettel-lexical':
-        specifier: 1.1.0
-        version: 1.1.0(patch_hash=c5dbc8500d0bb360c4c7a509ebf1b675677bded294baae919538e6e261b334de)(lexical@0.30.0)
+        specifier: 2.0.0
+        version: 2.0.0(lexical@0.51.0(typescript@7.0.2))(typescript@7.0.2)
       '@pierre/trees':
         specifier: 1.0.0-beta.5
         version: 1.0.0-beta.5(patch_hash=9a3905bea63951734689e385108b91ea5d6093f05dc83f782cb5c9be1ba61db6)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
@@ -136,8 +127,8 @@ importers:
         specifier: ^0.29.3
         version: 0.29.3
       lexical:
-        specifier: ^0.30.0
-        version: 0.30.0
+        specifier: ^0.51.0
+        version: 0.51.0(typescript@7.0.2)
       lodash:
         specifier: ^4.18.1
         version: 4.18.1
@@ -1275,26 +1266,45 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@lexical/clipboard@0.30.0':
-    resolution: {integrity: sha512-taWQURtE6xF4Jy4I8teQw3+nVBVNO1r+9N9voXeivgwxSrAM40rjqQ/aZEKxWbwZtfkABDkCEArbVrqP0SkWcQ==}
+  '@lexical/extension@0.51.0':
+    resolution: {integrity: sha512-PR1cKenPgRh8QKeyAlPz5KY60kxnV624UGOVZ2W4GrZjUtvCx4eKgVu/Pw1TuuK/aSLBCY1f6VxMF3hhs+CD+w==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
-  '@lexical/history@0.30.0':
-    resolution: {integrity: sha512-dxudthi94vSLQKXVq3LSwcOVkOmb2lvxoy7sCma513yJbrsn3fPLppR2Ynhl6aB9oPw675wSDrfsE6BG3U3+CA==}
+  '@lexical/history@0.51.0':
+    resolution: {integrity: sha512-dymiLsX003GoXTn06Nt9mZXbJhMRdB9qSvg+PEBtqUDMKCGEJ+qT0w+NsbF+MW1VOV8Qzs9nayk2lwklx0526g==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
-  '@lexical/html@0.30.0':
-    resolution: {integrity: sha512-GdegWO6RjJ7eE+yD3Z0X/OpT88SZjOs3DyQ0rgrZy3z7RPaFCbEEcq0M/NssJbKAB1XOFUsUFrnS7kZs1vJzGg==}
+  '@lexical/internal@0.51.0':
+    resolution: {integrity: sha512-4f0k20V92koqXFpYPiu9MobSQuhTXtSL6RvQSjGKq4QOUMaNl+P5nNtvf2PN732ch/hEkWM7ZBw0WVlAmg9pxg==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
-  '@lexical/list@0.30.0':
-    resolution: {integrity: sha512-WKnwH+Cg+j2I0EbaEyPHo8MPNyrqQV3W1NmH5Mf/iRxCq42z7NJxemhmRUxbqv8vsugACwBkh2RlkhekRXmUQQ==}
+  '@lexical/selection@0.51.0':
+    resolution: {integrity: sha512-nkZH9MkNX2m2DBSBVeKVpau/OV7bkHKeUsSaim22yPYiKRncXlRZFLH/avI6joOh6mDt3gGVVBP2BUnKw+duNA==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
-  '@lexical/selection@0.30.0':
-    resolution: {integrity: sha512-Ys2XfSmIV/Irg6Xo663YtR4jozIv/7sDemArkEGHT0fxZn2py5qftowPF5IBqFYxKTigAdv5vVPwusBvAnLIEg==}
-
-  '@lexical/table@0.30.0':
-    resolution: {integrity: sha512-XPCIMIGnZLKTa5/4cP16bXbmzvMndPR273HNl7ZaF35ky7UjZxdj42HBbE7q9zw2zbRPDiO77EyhYA0p20cbdw==}
-
-  '@lexical/utils@0.30.0':
-    resolution: {integrity: sha512-VJlAUhupCZmnbYYX3zMWovd4viu2guR01sAqKGbbOMbP+4rlaymixFbinvNPaRKDBloOARi+fpiveQFxnyr/Ew==}
+  '@lexical/utils@0.51.0':
+    resolution: {integrity: sha512-x2tGha3n3Slf6tdHXAcbg+vk8zoKK94Y3auVzJ7pE77UEUdxnMd6B4fk953oQgTkJHFwgVFX/bUgThsJEGW4Ew==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@lezer/common@1.5.2':
     resolution: {integrity: sha512-sxQE460fPZyU3sdc8lafxiPwJHBzZRy/udNFynGQky1SePYBdhkBl1kOagA9uT3pxR8K09bOrmTUqA9wb/PjSQ==}
@@ -1436,18 +1446,18 @@ packages:
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
 
-  '@opral/zettel-ast@1.1.0':
-    resolution: {integrity: sha512-xQdtJLAkWyHm0nn2WY89IHyiIizjcoq7xjmRTSNLUMzBllE0cGc400EmGTNr/AI0j5mSRZV/WjDSYvYjiIqB7Q==}
+  '@opral/zettel-ast@1.2.0':
+    resolution: {integrity: sha512-hDSLhog3Uclt3cFTRISY+QcasBqnpf5vf2ECwKgn+G0afcCTS3HXh444E32rYvRCKkk4FgnLQfd36z9/M1xfPQ==}
     engines: {node: '>=20'}
 
-  '@opral/zettel-html@1.1.0':
-    resolution: {integrity: sha512-rYE2m40mzoQjskK9Q7rNeB9gUJ12nD7wDP9UPB8z6jbsRdSTKlW7f+EogIoTv0dLnxsYjVP6o2T7SKRAikGvFQ==}
+  '@opral/zettel-html@1.2.0':
+    resolution: {integrity: sha512-/in3ZlgQtu19edZUNmHbmmN8BNuEi5pxyGSWvRQAD55dAwjXoQEigBnw5GyCJUPBqheApz2o0L/z8k3c5HOYAA==}
     engines: {node: '>=20'}
 
-  '@opral/zettel-lexical@1.1.0':
-    resolution: {integrity: sha512-1CppSoiAhEPbFYuGzgULswnY6i7fSawD4adtliUH8cG/WYncO6iq8Tjen4Rmkl8iPw/DMZbptKaIQje+iCzCGQ==}
+  '@opral/zettel-lexical@2.0.0':
+    resolution: {integrity: sha512-4MNiZIrKyJHe7oJ8gDuLG+JJB8EBxVPXwRp9X4ByllUNnm+02OXotmcOcOBL3J4TbO2yx6d3uNLm1WrY08dbZw==}
     peerDependencies:
-      lexical: ^0.30.0
+      lexical: ^0.51.0
 
   '@oxc-project/types@0.139.0':
     resolution: {integrity: sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw==}
@@ -1821,6 +1831,9 @@ packages:
 
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
+
+  '@preact/signals-core@1.14.4':
+    resolution: {integrity: sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA==}
 
   '@radix-ui/primitive@1.0.0':
     resolution: {integrity: sha512-3e7rn8FDMin4CgeL7Z/49smCA3rFYY3Ha2rUQ7HRWFadS5iCRw08ZgVT1LaNTCNqgvrUiyczLflrVrF0SRQtNA==}
@@ -4009,8 +4022,13 @@ packages:
   layout-base@2.0.1:
     resolution: {integrity: sha512-dp3s92+uNI1hWIpPGH3jK2kxE2lMjdXdr+DH8ynZHpd6PUlH6x6cbuXnoMmiNumznqaNO31xu9e79F0uuZ0JFg==}
 
-  lexical@0.30.0:
-    resolution: {integrity: sha512-6gxYeXaJiAcreJD0whCofvO0MuJmnWoIgIl1w7L5FTigfhnEohuCx2SoI/oywzfzXE9gzZnyr3rVvZrMItPL8A==}
+  lexical@0.51.0:
+    resolution: {integrity: sha512-uwThveE7nnR3ewETt9q7KBgbXVwtx7ZntJXWbonI/IrrdF7VtIbAGgqJcYxPchkQVjIppIzNoWaFolDd9Yph0g==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -6118,47 +6136,41 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@lexical/clipboard@0.30.0':
+  '@lexical/extension@0.51.0(typescript@7.0.2)':
     dependencies:
-      '@lexical/html': 0.30.0
-      '@lexical/list': 0.30.0
-      '@lexical/selection': 0.30.0
-      '@lexical/utils': 0.30.0
-      lexical: 0.30.0
+      '@lexical/internal': 0.51.0(typescript@7.0.2)
+      '@lexical/utils': 0.51.0(typescript@7.0.2)
+      '@preact/signals-core': 1.14.4
+      lexical: 0.51.0(typescript@7.0.2)
+    optionalDependencies:
+      typescript: 7.0.2
 
-  '@lexical/history@0.30.0':
+  '@lexical/history@0.51.0(typescript@7.0.2)':
     dependencies:
-      '@lexical/utils': 0.30.0
-      lexical: 0.30.0
+      '@lexical/extension': 0.51.0(typescript@7.0.2)
+      '@lexical/utils': 0.51.0(typescript@7.0.2)
+      lexical: 0.51.0(typescript@7.0.2)
+    optionalDependencies:
+      typescript: 7.0.2
 
-  '@lexical/html@0.30.0':
-    dependencies:
-      '@lexical/selection': 0.30.0
-      '@lexical/utils': 0.30.0
-      lexical: 0.30.0
+  '@lexical/internal@0.51.0(typescript@7.0.2)':
+    optionalDependencies:
+      typescript: 7.0.2
 
-  '@lexical/list@0.30.0':
+  '@lexical/selection@0.51.0(typescript@7.0.2)':
     dependencies:
-      '@lexical/selection': 0.30.0
-      '@lexical/utils': 0.30.0
-      lexical: 0.30.0
+      '@lexical/internal': 0.51.0(typescript@7.0.2)
+      lexical: 0.51.0(typescript@7.0.2)
+    optionalDependencies:
+      typescript: 7.0.2
 
-  '@lexical/selection@0.30.0':
+  '@lexical/utils@0.51.0(typescript@7.0.2)':
     dependencies:
-      lexical: 0.30.0
-
-  '@lexical/table@0.30.0':
-    dependencies:
-      '@lexical/clipboard': 0.30.0
-      '@lexical/utils': 0.30.0
-      lexical: 0.30.0
-
-  '@lexical/utils@0.30.0':
-    dependencies:
-      '@lexical/list': 0.30.0
-      '@lexical/selection': 0.30.0
-      '@lexical/table': 0.30.0
-      lexical: 0.30.0
+      '@lexical/internal': 0.51.0(typescript@7.0.2)
+      '@lexical/selection': 0.51.0(typescript@7.0.2)
+      lexical: 0.51.0(typescript@7.0.2)
+    optionalDependencies:
+      typescript: 7.0.2
 
   '@lezer/common@1.5.2': {}
 
@@ -6320,22 +6332,25 @@ snapshots:
   '@opentelemetry/api@1.9.0':
     optional: true
 
-  '@opral/zettel-ast@1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)':
+  '@opral/zettel-ast@1.2.0':
     dependencies:
       ajv: 8.20.0
 
-  '@opral/zettel-html@1.1.0(patch_hash=858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf)':
+  '@opral/zettel-html@1.2.0':
     dependencies:
-      '@opral/zettel-ast': 1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)
+      '@opral/zettel-ast': 1.2.0
       parse5: 7.3.0
 
-  '@opral/zettel-lexical@1.1.0(patch_hash=c5dbc8500d0bb360c4c7a509ebf1b675677bded294baae919538e6e261b334de)(lexical@0.30.0)':
+  '@opral/zettel-lexical@2.0.0(lexical@0.51.0(typescript@7.0.2))(typescript@7.0.2)':
     dependencies:
-      '@lexical/history': 0.30.0
-      '@lexical/utils': 0.30.0
-      '@opral/zettel-ast': 1.1.0(patch_hash=53834d93c195bdda77f29d2a5ecf07df05576da0d68a62002cac14c4e36c6d56)
-      '@opral/zettel-html': 1.1.0(patch_hash=858953a426b6137cb6169c0f6922a66ad31054cdc50a69cc220b64d250e7a8bf)
-      lexical: 0.30.0
+      '@lexical/extension': 0.51.0(typescript@7.0.2)
+      '@lexical/history': 0.51.0(typescript@7.0.2)
+      '@lexical/utils': 0.51.0(typescript@7.0.2)
+      '@opral/zettel-ast': 1.2.0
+      '@opral/zettel-html': 1.2.0
+      lexical: 0.51.0(typescript@7.0.2)
+    transitivePeerDependencies:
+      - typescript
 
   '@oxc-project/types@0.139.0': {}
 
@@ -6547,6 +6562,8 @@ snapshots:
       supports-color: 10.2.2
 
   '@poppinss/exception@1.2.3': {}
+
+  '@preact/signals-core@1.14.4': {}
 
   '@radix-ui/primitive@1.0.0':
     dependencies:
@@ -8662,7 +8679,11 @@ snapshots:
 
   layout-base@2.0.1: {}
 
-  lexical@0.30.0: {}
+  lexical@0.51.0(typescript@7.0.2):
+    dependencies:
+      '@lexical/internal': 0.51.0(typescript@7.0.2)
+    optionalDependencies:
+      typescript: 7.0.2
 
   lightningcss-android-arm64@1.32.0:
     optional: true
