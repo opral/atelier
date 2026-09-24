@@ -1981,6 +1981,140 @@ test("applies different-origin markdown update when editor is clean", async () =
 	});
 });
 
+test("an outside write elsewhere keeps the writer's unsaved trailing space, block ids and caret", async () => {
+	const fileId = fakeUuid("file_external_trailing_space");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown:
+			"# Title\n\nAlpha one.\n\nBravo two.\n\nFoxtrot six.\n\nGolf seven.\n",
+		persistDebounceMs: 0,
+	});
+	const blockIds = () => {
+		const list: unknown[] = [];
+		editor.state.doc.forEach((node) => list.push(node.attrs.data?.id));
+		return list;
+	};
+	// The caret at the end of "Foxtrot six.", then " and " typed: the file
+	// cannot keep the trailing space.
+	let foxtrotEnd = 0;
+	editor.state.doc.forEach((node, offset, index) => {
+		if (index === 3) foxtrotEnd = offset + node.nodeSize - 1;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(foxtrotEnd);
+		editor.commands.insertContent(" and ");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain(
+			"Foxtrot six. and\n",
+		),
+	);
+	await settleMarkdownObserver();
+	const ids = blockIds();
+	const caret = editor.state.selection.from;
+
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		file.replace("Alpha one.", "Alpha one (agent)."),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.child(1).textContent).toBe("Alpha one (agent)."),
+	);
+
+	expect(blockIds()).toEqual(ids);
+	expect(editor.state.doc.child(3).textContent).toBe("Foxtrot six. and ");
+	expect(editor.state.selection.from).toBe(caret + " (agent)".length);
+	await act(async () => {
+		editor.commands.insertContent("more");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toBe(
+			"# Title\n\nAlpha one (agent).\n\nBravo two.\n\nFoxtrot six. and more\n\nGolf seven.\n",
+		),
+	);
+});
+
+test("an outside write merged next to an unsaved space saves only what the file says on the next keystroke", async () => {
+	const fileId = fakeUuid("file_review_double_space");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "# Title\n\nAlpha one.\n\nDelta four.\n",
+		persistDebounceMs: 0,
+	});
+	let deltaAt = 0;
+	editor.state.doc.forEach((node, offset, index) => {
+		if (index === 2) deltaAt = offset + 1 + "Delta".length;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(deltaAt);
+		editor.commands.splitBlock();
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("Delta\n\nfour.\n"),
+	);
+	await settleMarkdownObserver();
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		file.replace("\nfour.\n", "\nNow four.\n"),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.child(3).textContent).toContain("Now"),
+	);
+	await settleMarkdownObserver();
+	// The writer types somewhere else entirely.
+	let alphaEnd = 0;
+	editor.state.doc.forEach((node, offset, index) => {
+		if (index === 1) alphaEnd = offset + node.nodeSize - 1;
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(alphaEnd);
+		editor.commands.insertContent("!");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("Alpha one.!"),
+	);
+	expect(await decodeFileMarkdown(lix, fileId)).toBe(
+		"# Title\n\nAlpha one.!\n\nDelta\n\nNow four.\n",
+	);
+});
+
+test("an outside write that prepends a block keeps the writer's caret in the old first block", async () => {
+	const fileId = fakeUuid("file_review_prepend");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "# Title\n\nAlpha one.\n\nDelta four.\n",
+		persistDebounceMs: 0,
+	});
+	await act(async () => {
+		editor.commands.setTextSelection(4);
+	});
+	const file = await decodeFileMarkdown(lix, fileId);
+	await writeMarkdownFileWithOrigin(
+		lix,
+		fileId,
+		"Intro.\n\n" + file.replace("Delta four.", "Delta 4."),
+		"external-origin",
+	);
+	await waitFor(() =>
+		expect(editor.state.doc.child(0).textContent).toBe("Intro."),
+	);
+	await act(async () => {
+		editor.commands.insertContent("X");
+	});
+	await waitFor(async () =>
+		expect(await decodeFileMarkdown(lix, fileId)).toContain("X"),
+	);
+	expect(await decodeFileMarkdown(lix, fileId)).toBe(
+		"Intro.\n\n# TitXle\n\nAlpha one.\n\nDelta 4.\n",
+	);
+});
+
 test("delivers external markdown revisions without origin reads", async () => {
 	const fileId = fakeUuid("file_external_single_delivery");
 	const { lix } = await renderEditorForMarkdownFile({
@@ -2787,4 +2921,30 @@ test("a delayed acknowledgment read cannot replace a newer observed winner", asy
 	expect(screen.getByTestId("tiptap-editor")).toHaveTextContent(
 		"Newest remote winner",
 	);
+});
+
+test("a press on something laid over the surface is its own, not a press on the document", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: fakeUuid("surface-overlay-press"),
+		markdown: "First line\n\nSecond line",
+	});
+	const surface = editor.view.dom.closest(".tiptap-container") as HTMLElement;
+	// A reply field in a comment card, laid over the surface.
+	const overlay = document.createElement("div");
+	const field = document.createElement("div");
+	field.contentEditable = "true";
+	overlay.append(field);
+	surface.append(overlay);
+	await act(async () => {
+		editor.commands.setTextSelection(3);
+	});
+
+	const onOverlay = fireEvent.mouseDown(field);
+	expect(onOverlay).toBe(true); // not prevented
+	expect(editor.state.selection.from).toBe(3);
+
+	// The surface's own background still puts the caret in the document.
+	const onBackground = fireEvent.mouseDown(surface);
+	expect(onBackground).toBe(false);
+	overlay.remove();
 });

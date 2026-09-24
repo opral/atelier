@@ -40,7 +40,11 @@ import {
 	createIncrementalMarkdownSource,
 	type IncrementalMarkdownSource,
 } from "./incremental-markdown-save";
-import { upsertMarkdownFile } from "./upsert-markdown-file";
+import {
+	upsertMarkdownFile,
+	upsertMarkdownFileWith,
+	type MarkdownFileWriteParticipant,
+} from "./upsert-markdown-file";
 import {
 	normalizePersistedMarkdown,
 	serializeTiptapDocToMarkdown,
@@ -98,6 +102,32 @@ type MarkdownPersistenceBaseline = {
 };
 
 const persistenceBaselines = new WeakMap<Editor, MarkdownPersistenceBaseline>();
+
+/**
+ * Something that keeps rows of its own on this file's rows (a block's
+ * conversation on its `markdown_node`) and must move them in the same
+ * transaction as the save that re-derives those rows. Asked per save with
+ * the document being saved; null means this save needs nothing from it.
+ */
+export type MarkdownSaveParticipant = {
+	readonly prepare: (
+		doc: ProseMirrorNode,
+	) => MarkdownFileWriteParticipant | null;
+};
+
+const saveParticipants = new WeakMap<Editor, MarkdownSaveParticipant>();
+
+/** Joins the editor's saves; returns the function that leaves them. */
+export function joinMarkdownEditorSaves(
+	editor: Editor,
+	participant: MarkdownSaveParticipant,
+): () => void {
+	saveParticipants.set(editor, participant);
+	return () => {
+		if (saveParticipants.get(editor) === participant)
+			saveParticipants.delete(editor);
+	};
+}
 
 /**
  * Advances an editor's persistence baseline after authoritative file data
@@ -419,12 +449,13 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		);
 		const markdown = preserved.markdown;
 		const observationGeneration = persistenceBaseline.observationGeneration;
-		const receipt = await upsertMarkdownFile({
-			lix,
-			fileId: fileId!,
-			markdown,
-			originKey,
-		});
+		const participant = editorInstance
+			? saveParticipants.get(editorInstance)?.prepare(doc)
+			: null;
+		const write = { lix, fileId: fileId!, markdown, originKey };
+		const receipt = participant
+			? await upsertMarkdownFileWith({ ...write, participant })
+			: await upsertMarkdownFile(write);
 		if (!receipt.written)
 			throw new Error(
 				"Could not save because the file no longer exists. Your draft is still in this editor.",
@@ -596,9 +627,12 @@ export function createEditor(args: CreateEditorArgs): Editor {
 			// Capture the payload while TipTap is alive. The persistence owner can
 			// then finish independently if the view is destroyed before its save window
 			// or an in-flight write completes.
+			// The editor's document, not the transaction's: what plugins
+			// appended to it (an outside write's content put back after an
+			// undo) is part of what the writer now sees.
 			pendingPersistenceSnapshot = {
 				revision: persistenceBaseline.documentRevision,
-				doc: transaction.doc,
+				doc: editor.state.doc,
 			};
 			if (persistWindowMs <= 0) {
 				void runPersist().catch(() => {});

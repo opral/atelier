@@ -5,6 +5,7 @@ import {
 	PreparedFileSurface,
 } from "../../extension-runtime/prepared-file";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import type { AtelierExtensionPreferences } from "@/extension-api";
 import { PenTool, TriangleAlert } from "lucide-react";
 import { AnimatedZap } from "@/components/animated-zap";
 import type { ExtensionRuntime } from "@/extension-runtime/types";
@@ -26,6 +27,7 @@ import { DiffSides, viewShowsDiff } from "@/extension-runtime/diff-sides";
 import { createReactExtensionDefinition } from "../../extension-runtime/react-extension";
 import { parseExtensionManifest } from "../../extension-runtime/extension-manifest";
 import { parseExcalidrawScene } from "./scene";
+import { useRememberedViewport } from "./viewport";
 import manifestJson from "./manifest.json";
 import "./style.css";
 
@@ -45,6 +47,11 @@ type ExcalidrawViewProps = {
 	readonly isPanelFocused?: boolean;
 	readonly beforeCommitId?: string | null;
 	readonly afterCommitId?: string | null;
+	/**
+	 * The extension's private preferences (`view.preferences`), where the
+	 * viewport of each file is remembered across reloads.
+	 */
+	readonly preferences?: AtelierExtensionPreferences;
 };
 
 export function ExcalidrawView(props: ExcalidrawViewProps) {
@@ -148,9 +155,29 @@ function LiveExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 			.where("id", "=", fileId)
 			.limit(1),
 	);
-	if (fileResult.status === "pending") return <ExcalidrawLoadingState />;
+	// Once the file has been read, a re-read never takes the canvas down: the
+	// last row is held while the query is pending again, so the canvas (and
+	// the viewport it is at) stays mounted. Only the first read shows the
+	// loading state.
+	const [held, setHeld] = useState<{
+		readonly fileId: string;
+		readonly rows: readonly ExcalidrawFileRow[];
+	} | null>(null);
+	if (
+		fileResult.status === "success" &&
+		(held?.fileId !== fileId || held.rows !== fileResult.rows)
+	) {
+		setHeld({ fileId, rows: fileResult.rows });
+	}
 	if (fileResult.status === "error") throw fileResult.error;
-	const fileRow = fileResult.rows[0];
+	const rows =
+		fileResult.status === "success"
+			? fileResult.rows
+			: held?.fileId === fileId
+				? held.rows
+				: undefined;
+	if (!rows) return <ExcalidrawLoadingState />;
+	const fileRow = rows[0];
 
 	if (!fileRow) {
 		if (workingReviewFile(props.atelier.diff.session, fileId)) {
@@ -180,6 +207,7 @@ function EditableExcalidrawView({
 	fileId,
 	filePath,
 	fileRow,
+	preferences,
 }: Omit<ExcalidrawViewProps, "beforeCommitId" | "afterCommitId"> & {
 	readonly fileRow: ExcalidrawFileRow;
 }) {
@@ -203,6 +231,8 @@ function EditableExcalidrawView({
 		originKey,
 	});
 
+	const viewport = useRememberedViewport(fileId, preferences);
+
 	const parsed = useMemo(
 		() => parseExcalidrawScene(documentText),
 		[documentText],
@@ -222,6 +252,8 @@ function EditableExcalidrawView({
 					sceneJson={documentText}
 					readOnly={atelier.readOnly}
 					onSceneChange={persistUserEdit}
+					viewport={viewport.viewport}
+					onViewportChange={viewport.record}
 				/>
 			</Suspense>
 			{saveError ? (
@@ -423,6 +455,7 @@ export const extension = createReactExtensionDefinition({
 						view.state.beforeCommitId as string | null | undefined
 					}
 					afterCommitId={view.state.afterCommitId as string | null | undefined}
+					preferences={view.preferences}
 				/>
 			</PreparedFileSurface>
 		);

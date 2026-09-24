@@ -10,6 +10,7 @@ import {
 import { Popover } from "@base-ui/react/popover";
 import { Check, Link as LinkIcon, Unlink, X } from "lucide-react";
 import type { Editor } from "@tiptap/core";
+import { mountedView } from "../editor/mounted-view";
 import { normalizeUrl } from "../editor/normalize-url";
 import { setLinkTargetRange } from "../editor/extensions/link-target-decoration";
 import { getClipRect, isAnchorClipped } from "./clip-rect";
@@ -29,11 +30,17 @@ type SelectionAnchor = {
  * formatting toolbar and the tab strip.
  */
 export function createSelectionAnchor(editor: Editor): SelectionAnchor {
+	// Read when asked, not when made: the anchor is made on render, and a
+	// toolbar renders with an editor whose view is not mounted yet, or is
+	// already gone (a rebuilt editor).
 	return {
-		contextElement: editor.view.dom,
+		get contextElement() {
+			return mountedView(editor)?.dom ?? document.body;
+		},
 		getBoundingClientRect: () => {
-			const { view, state } = editor;
-			const { from, to } = state.selection;
+			const view = mountedView(editor);
+			if (!view) return new DOMRect();
+			const { from, to } = view.state.selection;
 			const start = view.coordsAtPos(from);
 			const end = to === from ? start : view.coordsAtPos(to);
 			const clip = getClipRect(view.dom);

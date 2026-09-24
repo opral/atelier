@@ -11,6 +11,7 @@ import { extension as excalidrawExtensionDefinition } from "../extensions/excali
 import { extension as videoExtensionDefinition } from "../extensions/video";
 import { extension as sqlExplorerExtensionDefinition } from "../extensions/sql-explorer";
 import { extension as debugExtensionDefinition } from "../extensions/debug";
+import { extension as conversationExtensionDefinition } from "../extensions/conversation";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	filesExtensionDefinition,
@@ -28,6 +29,7 @@ export const BUILTIN_HIDDEN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
 	videoExtensionDefinition,
 	textExtensionDefinition,
 	excalidrawExtensionDefinition,
+	conversationExtensionDefinition,
 ];
 
 export const BUILTIN_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [

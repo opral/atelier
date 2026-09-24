@@ -1,0 +1,344 @@
+@import "../../shell/layers.css";
+@import "@opral/zettel-html/style.css" layer(atelier);
+
+@layer atelier {
+	/*
+	 * A thread's secondary colour, its reply field and its body size are set
+	 * by the surface it sits on. The defaults are the History checkpoint's
+	 * orange (design 4a with the Turn 5 contrast fixes); a white surface
+	 * redeclares them on its own root.
+	 */
+	.comment-surface {
+		--comment-secondary: var(--atelier-history-selected-secondary);
+		--comment-field-edge: var(--atelier-history-input-border);
+		--comment-field-bg: color-mix(
+			in srgb,
+			var(--atelier-panel) 72%,
+			transparent
+		);
+		--comment-fold-bg: color-mix(
+			in srgb,
+			var(--atelier-accent) 6%,
+			transparent
+		);
+		--comment-avatar-ring: var(--atelier-accent-subtle);
+		--comment-body-size: 12.5px;
+		--comment-body-line-height: 18px;
+		/* A comment's "…", drawn as the checkpoint's "Open conversation". */
+		--comment-action-bg: var(--atelier-accent-subtle);
+		--comment-action-hover-bg: color-mix(
+			in srgb,
+			var(--atelier-accent-border) 50%,
+			var(--atelier-accent-subtle)
+		);
+		/* Level with the header's line; in History, in the column of the
+		   checkpoint's own "Open conversation". */
+		--comment-actions-top: -3px;
+		--comment-actions-right: 5px;
+	}
+	/* White surfaces: a document margin card, a host's own app. */
+	.comment-surface[data-tone="neutral"] {
+		--comment-secondary: var(--atelier-history-secondary);
+		--comment-field-edge: var(--atelier-border-strong);
+		--comment-field-bg: var(--atelier-bg-subtle);
+		--comment-fold-bg: var(--atelier-bg-hover);
+		--comment-avatar-ring: var(--atelier-panel);
+		--comment-action-bg: var(--atelier-panel);
+		--comment-action-hover-bg: var(--atelier-bg-hover);
+	}
+	/*
+	 * A card's corner is its conversation's (Open conversation, Resolve): a
+	 * surface with those redeclares `--comment-actions-right` to clear them.
+	 */
+	.comment-surface[data-size="document"] {
+		--comment-actions-right: -4px;
+	}
+	/*
+	 * The conversation view's reading column: a 14px body in the page's text
+	 * colour, and a reply box whose resting edge is the quietest grey that
+	 * still keeps 3:1 against white (the checkpoint flag's), as a field's
+	 * edge must.
+	 */
+	.comment-surface[data-size="view"] {
+		--comment-body-size: 14px;
+		--comment-body-line-height: 21px;
+		--comment-field-edge: var(--atelier-history-flag);
+		--comment-field-bg: var(--atelier-panel);
+		--comment-avatar-ring: var(--atelier-panel);
+		--comment-actions-top: -4px;
+		--comment-actions-right: -4px;
+	}
+	.comment-surface[data-size="view"]
+		li:not([data-comment-grouped])
+		.comment-body {
+		margin-top: 2px;
+	}
+	.comment-surface[data-size="view"] .comment-body.zettel,
+	.comment-surface[data-size="view"] .comment-body .zettel {
+		--zettel-text-color: var(--atelier-fg);
+	}
+	.comment-fold-view:hover {
+		background: var(--atelier-bg-hover);
+	}
+	/* Two classes: the base ring below comes later in the sheet. */
+	.comment-fold-avatar.comment-fold-avatar-view {
+		box-shadow: 0 0 0 2px var(--comment-avatar-ring);
+	}
+
+	.comment-avatar-blue {
+		background: var(--atelier-tag-blue);
+		color: var(--atelier-tag-blue-fg);
+	}
+	.comment-avatar-green {
+		background: var(--atelier-tag-green);
+		color: var(--atelier-tag-green-fg);
+	}
+	.comment-avatar-purple {
+		background: var(--atelier-tag-purple);
+		color: var(--atelier-tag-purple-fg);
+	}
+	.comment-avatar-orange {
+		background: var(--atelier-tag-orange);
+		color: var(--atelier-tag-orange-fg);
+	}
+	.comment-avatar-pink {
+		background: var(--atelier-tag-pink);
+		color: var(--atelier-tag-pink-fg);
+	}
+	.comment-avatar-yellow {
+		background: var(--atelier-tag-yellow);
+		color: var(--atelier-tag-yellow-fg);
+	}
+	.comment-avatar-brown {
+		background: var(--atelier-tag-brown);
+		color: var(--atelier-tag-brown-fg);
+	}
+	.comment-avatar-red {
+		background: var(--atelier-tag-red);
+		color: var(--atelier-tag-red-fg);
+	}
+
+	.comment-body-text {
+		font-size: var(--comment-body-size);
+		line-height: var(--comment-body-line-height);
+	}
+
+	.comment-fold {
+		background: var(--comment-fold-bg);
+	}
+	.comment-fold-avatar {
+		box-shadow: 0 0 0 1.5px var(--comment-avatar-ring);
+	}
+
+	.comment-field {
+		background: var(--comment-field-bg);
+		box-shadow: inset 0 0 0 1px var(--comment-field-edge);
+	}
+	/* Writing: solid white, and the accent edge doubled into a 2px ring. */
+	.comment-field[data-state="writing"] {
+		background: var(--atelier-panel);
+		box-shadow:
+			inset 0 0 0 1px var(--atelier-accent),
+			0 0 0 1px var(--atelier-accent);
+	}
+	.comment-field-placeholder,
+	.comment-secondary {
+		color: var(--comment-secondary);
+	}
+
+	/* Zettel content inside a comment body and inside the composer. */
+	.comment-body.zettel,
+	.comment-body .zettel,
+	.comment-editor.zettel {
+		/* `inherit` here would inherit Zettel's own variable, not the font. */
+		--zettel-font-family: var(--atelier-font-sans);
+		--zettel-font-size: var(--comment-body-size);
+		--zettel-line-height: var(--comment-body-line-height);
+		--zettel-text-color: var(--atelier-fg-muted);
+		--zettel-muted-color: var(--comment-secondary);
+		--zettel-border-color: var(--atelier-accent-border);
+		--zettel-code-background: var(--atelier-bg-subtle);
+		--zettel-code-color: var(--atelier-fg);
+		--zettel-link-color: var(--atelier-accent);
+		text-wrap: pretty;
+		overflow-wrap: anywhere;
+	}
+	.comment-editor.zettel {
+		--zettel-text-color: var(--atelier-fg);
+		caret-color: var(--atelier-accent);
+		outline: none;
+	}
+	.comment-body .zettel_block,
+	.comment-editor .zettel_block,
+	.comment-body .zettel_list,
+	.comment-editor .zettel_list,
+	.comment-body .zettel_quote,
+	.comment-editor .zettel_quote,
+	.comment-body .zettel_code,
+	.comment-editor .zettel_code {
+		margin: 0;
+	}
+	.comment-body .zettel > * + *,
+	.comment-editor.zettel > * + * {
+		margin-top: 6px;
+	}
+	/*
+	 * A posted comment keeps its spaces and line breaks as they were typed:
+	 * the field edits with pre-wrap, and Zettel's read-only default
+	 * (normal) would collapse runs of spaces and indentation.
+	 */
+	.comment-body .zettel_block {
+		white-space: pre-wrap;
+	}
+	.comment-body .zettel_code,
+	.comment-editor .zettel_code {
+		border-radius: var(--atelier-radius-tag);
+		padding: 4px 6px;
+		font-size: 0.92em;
+	}
+	/*
+	 * Inline code: a chip in the line. A tint of the text colour rather than
+	 * a code block's fill, which is near-white and vanishes on the white
+	 * writing field; the tint reads on white and on the checkpoint's orange.
+	 */
+	.comment-body :not(pre) > code,
+	.comment-editor :not(pre) > code {
+		border-radius: var(--atelier-radius-tag);
+		background: color-mix(in srgb, var(--atelier-fg) 7%, transparent);
+		padding: 1px 4px;
+		color: var(--zettel-code-color);
+		font-family: var(--atelier-font-mono);
+		font-size: 0.92em;
+		box-decoration-break: clone;
+		-webkit-box-decoration-break: clone;
+	}
+	.comment-body .zettel_list,
+	.comment-editor .zettel_list {
+		padding-inline-start: 1.4em;
+	}
+	/* The base reset strips list markers; a numbered list needs its numbers. */
+	.comment-body ul.zettel_list,
+	.comment-editor ul.zettel_list {
+		list-style: disc;
+	}
+	.comment-body ol.zettel_list,
+	.comment-editor ol.zettel_list {
+		list-style: decimal;
+	}
+	/* A comment's headings stay in the comment's scale: a step up, no more. */
+	.comment-body :is(h1, h2, h3, h4, h5, h6).zettel_block,
+	.comment-editor :is(h1, h2, h3, h4, h5, h6).zettel_block {
+		font-size: 1.08em;
+		font-weight: 600;
+		line-height: var(--comment-body-line-height);
+	}
+	/* A link the thread will not follow (relative, `#`) reads as text. */
+	.comment-body a:not([href]) {
+		color: inherit;
+	}
+	/* A kept blank paragraph is a visible line, as it was in the field. */
+	.comment-body p.zettel_block:empty {
+		min-height: var(--comment-body-line-height);
+	}
+
+	/*
+	 * A comment's "…" and its menu. It takes no room: the header runs the
+	 * full width, as designed, and the icon shows over its end only while
+	 * the comment is pointed at or has focus, or its menu is open.
+	 */
+	.comment-row {
+		position: relative;
+	}
+	.comment-actions {
+		position: absolute;
+		z-index: 2;
+		top: var(--comment-actions-top);
+		right: var(--comment-actions-right);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--atelier-duration-fast) ease-out;
+	}
+	.comment-row:is(:hover, :focus-within) > .comment-actions,
+	.comment-actions[data-open] {
+		opacity: 1;
+		pointer-events: auto;
+	}
+	/* No pointer to hover with: always there, or it could not be reached. */
+	@media (hover: none) {
+		.comment-actions {
+			opacity: 1;
+			pointer-events: auto;
+		}
+	}
+	.comment-action {
+		display: inline-flex;
+		width: 24px;
+		height: 24px;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--atelier-radius-control);
+		background: var(--comment-action-bg);
+		color: var(--comment-secondary);
+		cursor: pointer;
+	}
+	.comment-action:hover,
+	.comment-actions[data-open] > .comment-action {
+		background: var(--comment-action-hover-bg);
+		color: var(--atelier-fg);
+	}
+	.comment-action:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px var(--atelier-ring);
+	}
+	.comment-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		display: flex;
+		min-width: 148px;
+		flex-direction: column;
+		padding: 4px;
+		border: 1px solid var(--atelier-border);
+		border-radius: var(--atelier-radius-panel);
+		background: var(--atelier-panel);
+		box-shadow: var(--atelier-shadow-lg);
+		font-family: var(--atelier-font-sans);
+	}
+	.comment-menu-item {
+		display: flex;
+		height: 28px;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 8px;
+		padding: 0 8px;
+		border-radius: 5px;
+		color: var(--atelier-fg);
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 16px;
+		text-align: left;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.comment-menu-item[data-tone="danger"] {
+		color: var(--atelier-danger);
+	}
+	.comment-menu-item:is(:hover, :focus-visible) {
+		outline: none;
+		background: var(--atelier-bg-hover);
+	}
+	.comment-menu-item[data-tone="danger"]:is(:hover, :focus-visible) {
+		background: var(--atelier-danger-subtle);
+	}
+	.comment-menu-item[aria-disabled="true"] {
+		cursor: progress;
+		opacity: 0.6;
+	}
+	.comment-menu-error {
+		max-width: 220px;
+		margin: 2px 8px 4px;
+		color: var(--atelier-danger);
+		font-size: 11.5px;
+		line-height: 16px;
+	}
+}

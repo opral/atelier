@@ -156,9 +156,11 @@ export function selectFileCheckpointChanges(
 		])
 		.where("history.id", "=", fileId)
 		.$if(commitIds !== undefined, (query) =>
-			query.where(sql<string>`history.lixcol_to_commit_id`, "in", [
-				...(commitIds ?? []),
-			]),
+			commitIds?.length
+				? query.where(sql<string>`history.lixcol_to_commit_id`, "in", [
+						...commitIds,
+					])
+				: query.where(sql<boolean>`false`),
 		)
 		.where("log.is_checkpoint", "=", true)
 		.orderBy(sql`log.position`, "asc")

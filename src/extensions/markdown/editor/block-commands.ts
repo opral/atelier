@@ -21,6 +21,7 @@ import {
 	Table,
 	TextQuote,
 	Trash2,
+	createLucideIcon,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode, NodeType } from "@tiptap/pm/model";
@@ -833,6 +834,16 @@ export function getSelectionBlockType(editor: Editor): SelectionBlockType {
 }
 
 /**
+ * Text in the selection toolbar (N1): three ragged lines, the design's icon
+ * (Lucide's former `Text`). The slash menu keeps its pilcrow.
+ */
+const TextLines = createLucideIcon("text-lines", [
+	["path", { d: "M17 6.1H3", key: "line-1" }],
+	["path", { d: "M21 12.1H3", key: "line-2" }],
+	["path", { d: "M15.1 18H3", key: "line-3" }],
+]);
+
+/**
  * "Turn into" entries for the selection toolbar. Text, headings, quote and
  * code first leave any list so the block converts as a whole, the way
  * Notion does; the list kinds convert just the selected item(s).
@@ -843,7 +854,7 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 	).map((option) => ({
 		value: option.value,
 		label: option.label,
-		icon: option.icon,
+		icon: option.value === "paragraph" ? TextLines : option.icon,
 		apply: (editor: Editor) => {
 			leaveLists(editor);
 			option.apply(editor);

@@ -7,6 +7,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type ReactNode,
 } from "react";
 import { EditorContent, useEditorState } from "@tiptap/react";
 import type { CommitSpan } from "@lix-js/sdk";
@@ -31,6 +32,7 @@ import {
 import { astToTiptapDoc } from "./tiptap-markdown-bridge";
 import type { EmptyMarkdownDefaultBlock } from "./tiptap-markdown-bridge";
 import { parseMarkdown } from "./markdown";
+import { outsideWriteTransaction } from "./outside-write";
 import { decodeMarkdownData } from "./decode-markdown-data";
 import {
 	buildNormalizedMarkdownFromEditor,
@@ -73,6 +75,11 @@ type TipTapEditorProps = {
 		/** The transition this save produced, for surfaces tracking their own writes. */
 		commit?: CommitSpan | null;
 	}) => void;
+	/**
+	 * Laid out inside the scrolling surface, after the document, so it scrolls
+	 * with it: the block conversations' margin and popovers.
+	 */
+	surfaceOverlay?: ReactNode;
 };
 
 export type MarkdownFileDelivery = {
@@ -153,6 +160,7 @@ export function TipTapEditor({
 	originKey,
 	openWorkspaceFile,
 	onPersist,
+	surfaceOverlay,
 }: TipTapEditorProps) {
 	const resolvedActiveBranchId = useResolvedActiveBranchId(activeBranchId);
 	if (!resolvedActiveBranchId) {
@@ -176,6 +184,7 @@ export function TipTapEditor({
 			originKey={originKey}
 			openWorkspaceFile={openWorkspaceFile}
 			onPersist={onPersist}
+			surfaceOverlay={surfaceOverlay}
 		/>
 	);
 }
@@ -294,6 +303,7 @@ function TipTapEditorLoadedContent({
 	originKey,
 	openWorkspaceFile,
 	onPersist,
+	surfaceOverlay,
 	hasInitialFile,
 	initialMarkdown,
 	sourceFilePath,
@@ -419,13 +429,19 @@ function TipTapEditorLoadedContent({
 
 	const handleSurfacePointerDown = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
-			if (!editor || readOnly) return;
-			const target = event.target as HTMLElement | null;
-			const insideContent = target?.closest(".ProseMirror");
-			const insideFrontmatterDisclosure = target?.closest(
-				".markdown-frontmatter-disclosure",
-			);
-			if (insideContent || insideFrontmatterDisclosure) return;
+			if (!editor || editor.isDestroyed || readOnly) return;
+			// The surface owns presses on its own background only: the scroll
+			// area and the wrappers around the document, which contain it.
+			// ProseMirror owns presses in the document, and whatever is laid
+			// over the surface (the frontmatter panel, block conversations) owns
+			// its own; neither is a press that should move the caret here.
+			const target = event.target;
+			const documentRoot = editor.view.dom;
+			const onBackground =
+				target instanceof Node &&
+				target !== documentRoot &&
+				target.contains(documentRoot);
+			if (!onBackground) return;
 			event.preventDefault();
 			if (editor.isEmpty) {
 				editor.commands.focus("start");
@@ -700,6 +716,42 @@ function TipTapEditorLoadedContent({
 		suspendExternalSync,
 	]);
 
+	// A local save can serialize away a boundary space. Its observer echo can
+	// arrive before the write acknowledgment and leave no deferred external
+	// value, so reconcile the exact accepted source at the save boundary.
+	useEffect(() => {
+		if (
+			!persistenceAcknowledgment ||
+			!editor ||
+			!activeFileId ||
+			!externalSyncState ||
+			externalSyncState.editor !== editor ||
+			externalSyncState.pendingExternalMarkdown !== null ||
+			suspendExternalSync
+		)
+			return;
+		const acknowledged = markdownEditorLastAcknowledgedMarkdown(editor);
+		const expectedFile = markdownEditorExpectedFileMarkdown(editor);
+		if (
+			acknowledged === undefined ||
+			expectedFile === undefined ||
+			markdownEditorHasUnacknowledgedChanges(editor) ||
+			buildNormalizedMarkdownFromEditor(editor) !== acknowledged
+		)
+			return;
+		if (!editorTextMatchesMarkdown(editor, expectedFile, defaultBlock))
+			setEditorMarkdown(editor, expectedFile, defaultBlock, {
+				preserveFileEquivalentEditorState: false,
+			});
+	}, [
+		persistenceAcknowledgment,
+		editor,
+		activeFileId,
+		externalSyncState,
+		suspendExternalSync,
+		defaultBlock,
+	]);
+
 	// A save acknowledgment changes the clean baseline without a TipTap update.
 	// Re-read a deferred winner after that boundary rather than leaving it queued
 	// forever, or applying an observation that predates the successful save.
@@ -860,6 +912,7 @@ function TipTapEditorLoadedContent({
 					editor={editor}
 					surfaceRef={scrollContainerRef}
 				/>
+				{surfaceOverlay}
 			</div>
 			<div
 				ref={scrollThumbRef}
@@ -956,17 +1009,49 @@ function editorTextMatchesMarkdown(
 	);
 	const text = (doc: typeof canonical) =>
 		doc.textBetween(0, doc.content.size, "\n");
-	return text(editor.state.doc) === text(canonical);
+	// A trailing space at a line boundary is an in-progress edit even though
+	// Markdown does not serialize it. Keep it in the live editor for the next
+	// keystroke; leading whitespace that cannot round-trip is reconciled.
+	const editorText = text(editor.state.doc).replace(/[ \t]+(?=\n|$)/g, "");
+	return editorText === text(canonical);
 }
 
 function setEditorMarkdown(
 	editor: Editor,
 	markdown: string,
 	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
+	{
+		preserveFileEquivalentEditorState = true,
+	}: {
+		readonly preserveFileEquivalentEditorState?: boolean;
+	} = {},
 ): void {
 	const ast = parseMarkdown(markdown) as any;
-	editor.commands.setContent(astToTiptapDoc(ast, { defaultBlock }), {
-		emitUpdate: false,
-	});
+	const content = astToTiptapDoc(ast, { defaultBlock });
+	// Apply authoritative file content as the smallest change to the document
+	// and keep it out of undo history. External delivery preserves editor-only
+	// formatting that serializes to the same file; local save reconciliation
+	// opts out after serialization removes that formatting.
+	let transaction: ReturnType<typeof outsideWriteTransaction> | undefined;
+	try {
+		const next = editor.schema.nodeFromJSON(content);
+		next.check();
+		transaction = outsideWriteTransaction(editor.state, next, {
+			preserveFileEquivalentEditorState,
+		});
+	} catch {
+		transaction = undefined;
+	}
+	if (transaction) {
+		editor.view.dispatch(transaction);
+	} else if (transaction === undefined) {
+		// Not expressible as a change to this document: replaced whole, and
+		// the writer's undo history cannot reach past it.
+		editor
+			.chain()
+			.setMeta("addToHistory", false)
+			.setContent(content, { emitUpdate: false })
+			.run();
+	}
 	acknowledgeMarkdownEditorPersistence(editor, markdown);
 }

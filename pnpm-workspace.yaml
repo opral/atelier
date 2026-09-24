@@ -17,6 +17,15 @@ minimumReleaseAgeExclude:
   - "@lix-js/sdk-linux-x64"
   - "@lix-js/sdk-win32-x64"
   - "@lix-js/sdk"
+  - "@opral/zettel-ast"
+  - "@opral/zettel-html"
+  - "@opral/zettel-lexical"
+  - "@lexical/extension@0.51.0"
+  - "@lexical/history@0.51.0"
+  - "@lexical/internal@0.51.0"
+  - "@lexical/selection@0.51.0"
+  - "@lexical/utils@0.51.0"
+  - "lexical@0.51.0"
 
 onlyBuiltDependencies:
   - "@parcel/watcher"

@@ -37,6 +37,7 @@ import { decodeFileDataToBytes } from "@/lib/decode-file-data";
 import { fileIconUrl } from "@/extensions/files/file-icons";
 import { fileExtensionFromPath } from "@/extension-runtime/file-handlers";
 import { useMenuDismissal } from "./menu-dismissal";
+import { mountedView } from "../editor/mounted-view";
 
 const INACTIVE_EMBED_FILE_STATE: EmbedFileCommandState = {
 	active: false,
@@ -176,15 +177,17 @@ export function EmbedFilePickerMenu({
 		}
 		const anchor = embedState.pos;
 		const updatePosition = () => {
-			const coords = editor.view.coordsAtPos(
+			const view = mountedView(editor);
+			if (!view) return;
+			const coords = view.coordsAtPos(
 				Math.min(anchor, editor.state.doc.content.size),
 			);
-			const editorRect = editor.view.dom.getBoundingClientRect();
+			const editorRect = view.dom.getBoundingClientRect();
 			const gap = 8;
 			const menuWidth = 304;
 			// Clipped to the editor's scroll viewport, so the picker cannot
 			// come to rest on top of the toolbar or the tab strip.
-			const clip = getClipRect(editor.view.dom);
+			const clip = getClipRect(view.dom);
 			const placed = clampToClipRect({
 				coords,
 				clip,
@@ -228,7 +231,7 @@ export function EmbedFilePickerMenu({
 	}
 
 	const portalTarget =
-		editor.view.dom.closest(".atelier-root") ?? document.body;
+		mountedView(editor)?.dom.closest(".atelier-root") ?? document.body;
 
 	return createPortal(
 		<div

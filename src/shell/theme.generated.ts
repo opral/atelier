@@ -67,6 +67,10 @@ rgb(41 37 34)
 rgb(214 211 209),
 rgb(87 83 78)
 );
+--atelier-border-lifted: light-dark(
+rgb(231 226 218),
+rgb(64 59 55)
+);
 --atelier-ring: var(--atelier-accent);
 --atelier-accent: light-dark(
 rgb(194 65 12),
@@ -84,6 +88,22 @@ rgb(58 38 24)
 --atelier-accent-border: light-dark(
 rgb(243 216 190),
 rgb(120 66 30)
+);
+--atelier-history-secondary: light-dark(
+rgb(111 104 98),
+rgb(190 183 175)
+);
+--atelier-history-flag: light-dark(
+rgb(143 137 131),
+rgb(150 143 136)
+);
+--atelier-history-selected-secondary: light-dark(
+rgb(133 87 58),
+rgb(220 176 140)
+);
+--atelier-history-input-border: light-dark(
+rgb(184 126 82),
+rgb(190 140 100)
 );
 --atelier-link: light-dark(
 rgb(234 88 12),
@@ -228,6 +248,7 @@ ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 --atelier-shadow-sm: 0 1px 2px rgb(28 25 23 / 0.05);
 --atelier-shadow-md:
 0 4px 16px -2px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.08);
+--atelier-shadow-lift: 0 6px 20px -4px rgb(0 0 0 / 0.12);
 --atelier-shadow-lg:
 0 12px 32px -4px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.08);
 --atelier-duration-fast: 100ms;

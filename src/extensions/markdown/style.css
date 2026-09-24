@@ -2741,7 +2741,7 @@
 			height: 32px;
 			align-items: center;
 			gap: 6px;
-			padding: 0 6px 0 8px;
+			padding: 0 8px;
 			border-radius: 7px;
 			color: var(--atelier-fg);
 			font-size: 12.5px;
@@ -2783,7 +2783,8 @@
 		.markdown-selection-toolbar-trigger-chevron {
 			display: inline-flex;
 			flex: 0 0 auto;
-			color: var(--atelier-fg-subtle);
+			/* N1: a step darker than fg-subtle, as the comment metadata. */
+			color: var(--atelier-history-secondary);
 		}
 
 		.markdown-selection-toolbar-divider {
@@ -2796,6 +2797,331 @@
 			display: flex;
 			align-items: center;
 			gap: 2px;
+		}
+
+		/* The Comment row (Turn 7, N1) is a "Turn into" row with its shortcut
+		   where the chevron would be. */
+		.markdown-selection-toolbar-shortcut {
+			flex: 0 0 auto;
+			color: var(--atelier-history-secondary);
+			font-size: 11.5px;
+			font-weight: 500;
+		}
+
+		/* Block conversations (Turn 7). A commented block's text keeps a faint
+		   wash and underline at rest; it deepens while its conversation is open
+		   or being written, and sits in between while its card is pointed at. */
+		.ProseMirror .markdown-block-comment {
+			--markdown-comment-wash: 7%;
+			--markdown-comment-line: 32%;
+			padding: 1px 0;
+			background: color-mix(
+				in srgb,
+				var(--atelier-link) var(--markdown-comment-wash),
+				transparent
+			);
+			box-shadow: inset 0 -2px 0
+				color-mix(
+					in srgb,
+					var(--atelier-link) var(--markdown-comment-line),
+					transparent
+				);
+			-webkit-box-decoration-break: clone;
+			box-decoration-break: clone;
+			transition:
+				background-color var(--atelier-duration) ease-out,
+				box-shadow var(--atelier-duration) ease-out;
+		}
+
+		.ProseMirror .markdown-block-comment[data-block-comment="hover"] {
+			--markdown-comment-wash: 11%;
+			--markdown-comment-line: 55%;
+		}
+
+		.ProseMirror .markdown-block-comment[data-block-comment="active"] {
+			--markdown-comment-wash: 15%;
+			--markdown-comment-line: 75%;
+		}
+
+		/* A block with no text to wash (a rule, an image, an empty line) takes
+		   the wash on the block itself. */
+		.ProseMirror > [data-block-comment]:not(:has(.markdown-block-comment)) {
+			--markdown-comment-wash: 7%;
+			--markdown-comment-line: 32%;
+			border-radius: var(--atelier-radius-tag);
+			background: color-mix(
+				in srgb,
+				var(--atelier-link) var(--markdown-comment-wash),
+				transparent
+			);
+			box-shadow: inset 0 -2px 0
+				color-mix(
+					in srgb,
+					var(--atelier-link) var(--markdown-comment-line),
+					transparent
+				);
+		}
+
+		.ProseMirror
+			> [data-block-comment="hover"]:not(:has(.markdown-block-comment)) {
+			--markdown-comment-wash: 11%;
+			--markdown-comment-line: 55%;
+		}
+
+		.ProseMirror
+			> [data-block-comment="active"]:not(:has(.markdown-block-comment)) {
+			--markdown-comment-wash: 15%;
+			--markdown-comment-line: 75%;
+		}
+
+		/* On a wide panel a margin beside the column holds the cards (design
+		   N3): the column, a 40px gap, the 280px margin, and at least 32px
+		   after it. The column stays centred while that fits and moves left
+		   only as far as it must, to a 64px gutter (`marginColumnLeft`, set
+		   by the layer on the surface). */
+		.markdown-view
+			.tiptap-container:has(
+				> .markdown-block-comments[data-layout="margin"][data-has-threads]
+			)
+			.ProseMirror {
+			--atelier-doc-gutter: 0px;
+			padding-left: var(--markdown-margin-column-left, 64px);
+			padding-right: calc(
+				100% - var(--markdown-margin-column-left, 64px) -
+					var(--markdown-content-width)
+			);
+		}
+
+		/* Narrow: the counts sit in the right gutter. It keeps room for them in
+		   every document that takes comments, so the first comment does not
+		   reflow the text. */
+		.markdown-view
+			.tiptap-container:has(> .markdown-block-comments[data-layout="narrow"])
+			.ProseMirror {
+			padding-left: max(40px, calc((100% - var(--markdown-content-width)) / 2));
+			padding-right: max(
+				56px,
+				calc((100% - var(--markdown-content-width)) / 2)
+			);
+		}
+
+		/* Laid out over the scrolling surface, so everything in it scrolls with
+		   the document; only its children take the pointer. */
+		.markdown-block-comments {
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 4;
+			width: 100%;
+			height: 0;
+			pointer-events: none;
+			cursor: auto;
+		}
+
+		.markdown-block-comments > * {
+			position: absolute;
+			pointer-events: auto;
+		}
+
+		/* A thread in a document reads a step larger than in History. */
+		.markdown-comment-card .comment-surface[data-tone],
+		.markdown-comment-popover .comment-surface[data-tone] {
+			--comment-body-size: 13px;
+			--comment-body-line-height: 19px;
+			--comment-field-edge: var(--atelier-border);
+		}
+
+		/* Writing: the accent ring outside, the accent edge's tint inside. */
+		.markdown-comment-card
+			.comment-surface
+			.comment-field[data-state="writing"],
+		.markdown-comment-popover
+			.comment-surface
+			.comment-field[data-state="writing"] {
+			box-shadow:
+				inset 0 0 0 1px var(--atelier-accent-border),
+				0 0 0 1px var(--atelier-accent);
+		}
+
+		.markdown-comment-card {
+			box-sizing: border-box;
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+			padding: 10px;
+			border-radius: 10px;
+			background: var(--atelier-panel);
+			box-shadow: 0 0 0 1px var(--atelier-border);
+			cursor: pointer;
+			transition:
+				top var(--atelier-duration-slow) ease-out,
+				background-color var(--atelier-duration) ease-out,
+				box-shadow var(--atelier-duration) ease-out;
+		}
+
+		.markdown-comment-card[data-state="hover"] {
+			background: color-mix(
+				in srgb,
+				var(--atelier-accent-subtle) 45%,
+				var(--atelier-panel)
+			);
+		}
+
+		/* Open: the card lifts; no coloured edge. */
+		.markdown-comment-card[data-state="active"] {
+			z-index: 1;
+			background: var(--atelier-panel);
+			box-shadow:
+				0 0 0 1px var(--atelier-border-lifted),
+				var(--atelier-shadow-lift);
+			cursor: auto;
+		}
+
+		.markdown-comment-card-preview {
+			display: -webkit-box;
+			margin: 0;
+			overflow: hidden;
+			color: var(--atelier-fg-muted);
+			font-size: 13px;
+			line-height: 19px;
+			text-wrap: pretty;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 2;
+			line-clamp: 2;
+		}
+
+		/* A comment being written, and the narrow panel's conversation: under
+		   their block, built like the link popover. */
+		.markdown-comment-popover {
+			z-index: 2;
+			box-sizing: border-box;
+			display: flex;
+			width: 360px;
+			flex-direction: column;
+			gap: 12px;
+			padding: 10px;
+			border: 1px solid var(--atelier-border);
+			border-radius: 10px;
+			background: var(--atelier-panel);
+			box-shadow: var(--atelier-shadow-lg);
+			animation: markdown-selection-toolbar-in 140ms ease;
+		}
+
+		/* One conversation in an open card or popover: its thread, its own
+		   reply field, and its own "Open conversation". */
+		.markdown-comment-section {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			gap: inherit;
+		}
+		/* A comment's "…" keeps clear of the section's corner. */
+		.markdown-comment-section > .comment-surface[data-size="document"] {
+			--comment-actions-right: 20px;
+		}
+
+		/* "Open conversation": the thread in its own tab, top right of its
+		   section, where the card's corner is for the first one. It takes no
+		   room: the comments run the full width, as designed, and it shows
+		   over them only while its section is pointed at or has focus, Tab
+		   reaching it first. */
+		.markdown-comment-open,
+		.markdown-comment-resolve {
+			position: absolute;
+			top: -4px;
+			right: -4px;
+			background: var(--atelier-panel);
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity var(--atelier-duration-fast) ease-out;
+		}
+		.markdown-comment-thread-next
+			> :is(.markdown-comment-open, .markdown-comment-resolve) {
+			top: 6px;
+		}
+		.markdown-comment-section:is(:hover, :focus-within)
+			> :is(.markdown-comment-open, .markdown-comment-resolve) {
+			opacity: 1;
+			pointer-events: auto;
+		}
+		/* Resolve (where the Lix has it) sits just before Open conversation,
+		   and a comment's "…" before both. */
+		.markdown-comment-open ~ .markdown-comment-resolve {
+			right: 20px;
+		}
+		.markdown-comment-open
+			~ .markdown-comment-resolve
+			~ .comment-surface[data-size="document"] {
+			--comment-actions-right: 44px;
+		}
+
+		.markdown-comment-notice-action {
+			margin-left: 6px;
+			color: var(--atelier-accent-hover);
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.markdown-comment-notice-action:hover {
+			text-decoration: underline;
+		}
+
+		/* Two conversations on one block (their blocks were merged): each its
+		   own section, one under the other. */
+		.markdown-comment-thread-next {
+			padding-top: 10px;
+			border-top: 1px solid var(--atelier-border-subtle);
+		}
+
+		/* Said when a save could not keep the comments on their blocks. */
+		.markdown-comment-notice {
+			top: 8px;
+			right: 32px;
+			margin: 0;
+			padding: 4px 8px;
+			border-radius: var(--atelier-radius-control);
+			background: var(--atelier-warning-subtle);
+			color: var(--atelier-fg-muted);
+			font-size: 11.5px;
+			line-height: 16px;
+		}
+
+		/* The narrow panel's count, just outside a commented block. */
+		.markdown-comment-badge {
+			display: inline-flex;
+			height: 22px;
+			align-items: center;
+			gap: 3px;
+			padding: 0 6px;
+			border-radius: 6px;
+			background: var(--atelier-accent-subtle);
+			color: var(--atelier-accent-hover);
+			font-size: 11.5px;
+			font-weight: 600;
+			line-height: 1;
+			cursor: pointer;
+			transition: background-color var(--atelier-duration-fast) ease-out;
+		}
+
+		/* Pointed at, or its block is (the block's tint, answered here). */
+		.markdown-comment-badge:hover,
+		.markdown-comment-badge[data-state="hover"] {
+			background: color-mix(
+				in srgb,
+				var(--atelier-accent-border) 60%,
+				var(--atelier-accent-subtle)
+			);
+		}
+
+		.markdown-comment-badge:focus-visible {
+			outline: none;
+			box-shadow: 0 0 0 2px var(--atelier-ring);
+		}
+
+		.markdown-comment-badge svg {
+			width: 12px;
+			height: 12px;
+			stroke-width: 2.2;
 		}
 
 		/* Pending link target: the native selection paint disappears once the

@@ -226,9 +226,9 @@ describe("rows", () => {
 		expect(grid(editor)).toEqual(["a|b", "3|4", "1|2"]);
 		expect(caret(editor)).toMatchObject({ text: "1", offset: 1, row: 2 });
 		expectConsistent(editor);
-		expect(editor.commands.moveTableRowTo(0, { tablePos: 0, row: 1, column: 0 })).toBe(
-			false,
-		);
+		expect(
+			editor.commands.moveTableRowTo(0, { tablePos: 0, row: 1, column: 0 }),
+		).toBe(false);
 	});
 
 	test("the header stays first", async () => {

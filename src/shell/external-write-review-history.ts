@@ -150,7 +150,8 @@ export function workingReviewFile(
 	session: AtelierDiffSession | null | undefined,
 	fileId: string,
 ): AtelierDiffFile | undefined {
-	return session && ("working" in session.target || session.intent === "review-applied")
+	return session &&
+		("working" in session.target || session.intent === "review-applied")
 		? session.files.find((file) => file.id === fileId)
 		: undefined;
 }

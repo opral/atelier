@@ -40,3 +40,41 @@ test("trailing whitespace does not add a phantom line and wider columns need few
 		csvWrappedRowHeight(wrapCsvText("one two three", 5, measure).length),
 	).toBe(80);
 });
+
+test("the space between two words counts toward the line they share", () => {
+	// "ab cd" is five wide: at width 4 "cd" cannot join "ab " — measuring
+	// "ab" + "cd" without the space let the canvas keep a word the editor's
+	// textarea pushed down, and the text jumped on click.
+	expect(wrapCsvText("ab cd", 4, measure).map((line) => line.text)).toEqual([
+		"ab ",
+		"cd",
+	]);
+	expect(wrapCsvText("ab cd", 5, measure).map((line) => line.text)).toEqual([
+		"ab cd",
+	]);
+});
+
+test("breaks where the browser breaks: after an inner hyphen and before a letter after ? or !", () => {
+	expect(
+		wrapCsvText("control for non-engineers", 16, measure).map(
+			(line) => line.text,
+		),
+	).toEqual(["control for non-", "engineers"]);
+	expect(
+		wrapCsvText("dates 2026-09-10", 14, measure).map((line) => line.text),
+	).toEqual(["dates 2026-09-", "10"]);
+	// A leading hyphen belongs to its word.
+	expect(wrapCsvText("x -5", 3, measure).map((line) => line.text)).toEqual([
+		"x ",
+		"-5",
+	]);
+	expect(
+		wrapCsvText("path?query=1", 8, measure).map((line) => line.text),
+	).toEqual(["path?", "query=1"]);
+});
+
+test("a word wider than the cell starts its own line before it breaks", () => {
+	expect(
+		wrapCsvText("see abcdefghij", 6, measure).map((line) => line.text),
+	).toEqual(["see ", "abcdef", "ghij"]);
+});

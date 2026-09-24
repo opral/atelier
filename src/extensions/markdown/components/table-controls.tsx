@@ -61,6 +61,7 @@ import {
 	getClipRect,
 	isAnchorClipped,
 } from "./clip-rect";
+import { mountedView, useEditorViewMounted } from "../editor/mounted-view";
 import { useMenuDismissal } from "./menu-dismissal";
 import { ariaKeyShortcuts, formatKeyBinding } from "./shortcut-label";
 
@@ -268,8 +269,9 @@ function dropLocationAt(
 	const start = axis === "row" ? first.top : first.left;
 	const end = axis === "row" ? last.bottom : last.right;
 	if (coordinate < start || coordinate > end) return null;
-	const midpointIndex = bounds.findIndex((box) =>
-		coordinate <
+	const midpointIndex = bounds.findIndex(
+		(box) =>
+			coordinate <
 			(axis === "row" ? box.top + box.height / 2 : box.left + box.width / 2),
 	);
 	const index = midpointIndex < 0 ? bounds.length - 1 : midpointIndex;
@@ -302,10 +304,7 @@ function dropLocationAt(
 }
 
 /** The slim line that previews where a dragged row or column will land. */
-function measureDropIndicator(
-	editor: Editor,
-	drag: DragPreview,
-): Rect | null {
+function measureDropIndicator(editor: Editor, drag: DragPreview): Rect | null {
 	if (!drag.location) return null;
 	const elements = tableElements(editor, drag.source.tablePos);
 	if (!elements) return null;
@@ -355,33 +354,6 @@ function nearTable(editor: Editor, target: TableTarget, x: number, y: number) {
 		y >= Math.min(room.top, grid.top - reach) &&
 		y <= Math.max(room.bottom, grid.bottom)
 	);
-}
-
-/** The editor's DOM once it is mounted, or null before. */
-function mountedDom(editor: Editor | null): HTMLElement | null {
-	if (!editor || editor.isDestroyed) return null;
-	try {
-		return editor.view.dom;
-	} catch {
-		return null;
-	}
-}
-
-/** Whether the editor's view is in the page, updated when it gets there. */
-function useMounted(editor: Editor | null): boolean {
-	const [mounted, setMounted] = useState(() => mountedDom(editor) !== null);
-	useEffect(() => {
-		if (!editor) return;
-		const update = () => setMounted(mountedDom(editor) !== null);
-		update();
-		editor.on("mount", update);
-		editor.on("create", update);
-		return () => {
-			editor.off("mount", update);
-			editor.off("create", update);
-		};
-	}, [editor]);
-	return mounted && mountedDom(editor) !== null;
 }
 
 function useCoarsePointer(): boolean {
@@ -652,7 +624,7 @@ export function TableControls() {
 					sameTarget(a.target, b.target)),
 		}) ?? null;
 	const coarse = useCoarsePointer();
-	const mounted = useMounted(editor);
+	const mounted = useEditorViewMounted(editor);
 	const caretCell =
 		useEditorState<TableTarget | null>({
 			editor,
@@ -700,8 +672,7 @@ export function TableControls() {
 			if (location.destination === sourceIndex) return;
 			if (drag.axis === "row")
 				editor.commands.moveTableRowTo(location.destination, drag.source);
-			else
-				editor.commands.moveTableColumnTo(location.destination, drag.source);
+			else editor.commands.moveTableColumnTo(location.destination, drag.source);
 			setHover(null);
 		},
 		[editor],
@@ -744,7 +715,7 @@ export function TableControls() {
 	// The pointer's cell, kept while the pointer crosses the band around the
 	// table to reach a grip or a bar.
 	useEffect(() => {
-		if (!editor || !mounted || coarse) return;
+		if (!editor || !mounted || coarse || !mountedView(editor)) return;
 		let frame = 0;
 		let last: PointerEvent | null = null;
 		const evaluate = () => {
@@ -772,7 +743,8 @@ export function TableControls() {
 			if (drag?.pointerId === event.pointerId) {
 				if (
 					!drag.started &&
-					Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4
+					Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <
+						4
 				)
 					return;
 				drag.started = true;
@@ -866,7 +838,7 @@ export function TableControls() {
 	// keyboard's menu key (sent to the focused editor, not to a cell), and
 	// opens the menu at the caret's cell.
 	useEffect(() => {
-		if (!editor || !mounted) return;
+		if (!editor || !mounted || !mountedView(editor)) return;
 		let pressed = false;
 		let hadSelection = false;
 		const onPress = () => {
@@ -879,6 +851,7 @@ export function TableControls() {
 			pressed = false;
 			hadSelection = false;
 			if (!editor.isEditable || event.shiftKey) return;
+			if (editor.isDestroyed) return;
 			if (!fromPointer && event.target === editor.view.dom) {
 				if (editor.commands.openTableMenuAtCaret()) event.preventDefault();
 				return;
@@ -969,8 +942,8 @@ export function TableControls() {
 		}
 	});
 
-	if (!editor || !mounted || editor.isDestroyed || !editor.isEditable)
-		return null;
+	const view = mountedView(editor);
+	if (!editor || !mounted || !view || !editor.isEditable) return null;
 
 	// While a menu is open, only the grip it came from stays: the others and
 	// the "+" bars would be clicked through it, or beside it, by mistake.
@@ -986,8 +959,7 @@ export function TableControls() {
 		? measureDropIndicator(editor, dragPreview)
 		: null;
 	const portalTarget =
-		(editor.view.dom.closest(".atelier-root") as HTMLElement | null) ??
-		document.body;
+		(view.dom.closest(".atelier-root") as HTMLElement | null) ?? document.body;
 
 	const table = active ? editor.state.doc.nodeAt(active.tablePos) : null;
 	const lastRow = table ? table.childCount - 1 : 0;
@@ -1067,7 +1039,9 @@ export function TableControls() {
 							className="markdown-table-grip"
 							data-axis="column"
 							data-active={gripMenu?.axis === "column" ? "true" : undefined}
-							data-dragging={dragPreview?.axis === "column" ? "true" : undefined}
+							data-dragging={
+								dragPreview?.axis === "column" ? "true" : undefined
+							}
 							style={layout.columnGrip}
 							aria-label={`Column ${active.column + 1} options`}
 							aria-haspopup="menu"

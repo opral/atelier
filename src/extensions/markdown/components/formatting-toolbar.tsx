@@ -104,10 +104,12 @@ export function FormattingToolbar({
 		event.preventDefault();
 	}, []);
 
+	// A destroyed editor (a rebuilt one, still held for a render) has no
+	// schema or commands left to read.
 	const hasTaskListCommand = useMemo(
 		() =>
 			Boolean(
-				editor &&
+				editor?.schema &&
 				typeof (editor.commands as any)?.toggleTaskList === "function",
 			),
 		[editor],
@@ -118,7 +120,7 @@ export function FormattingToolbar({
 			// Read the context value rather than the snapshot editor so a provider
 			// transition from null to an editor has the right initial toolbar state.
 			selector: () => {
-				if (!editor) return initialFormatState;
+				if (!editor?.schema) return initialFormatState;
 				const isTaskList = computeTaskListActive(editor, hasTaskListCommand);
 				return {
 					block: getActiveBlock(editor),

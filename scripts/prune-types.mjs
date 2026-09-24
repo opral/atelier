@@ -15,6 +15,12 @@ const publicDeclarations = new Set([
 	"render/types.d.ts",
 	"components/diff-glyph.d.ts",
 	"components/diff-glyph-geometry.d.ts",
+	// The comment field and thread, and the conversation view's host API.
+	"components/comments/comment-composer.d.ts",
+	"components/comments/comment-thread.d.ts",
+	"extensions/conversation/conversation-location.d.ts",
+	"extensions/conversation/conversation-queries.d.ts",
+	"extensions/conversation/open-conversation.d.ts",
 	"file-icons.d.ts",
 	"atelier.d.ts",
 	"atelier-file.d.ts",

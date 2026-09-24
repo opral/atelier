@@ -19,6 +19,7 @@ import {
 	isAnchorClipped,
 } from "./clip-rect";
 import { useMenuDismissal } from "./menu-dismissal";
+import { mountedView } from "../editor/mounted-view";
 
 const INACTIVE_EMOJI_STATE: EmojiCommandState = {
 	active: false,
@@ -81,13 +82,15 @@ export function EmojiPickerMenu() {
 		}
 		const range = emojiState.range;
 		const updatePosition = () => {
-			const coords = editor.view.coordsAtPos(range.from);
-			const editorRect = editor.view.dom.getBoundingClientRect();
+			const view = mountedView(editor);
+			if (!view) return;
+			const coords = view.coordsAtPos(range.from);
+			const editorRect = view.dom.getBoundingClientRect();
 			const gap = 8;
 			const menuWidth = 304;
 			// Clipped to the editor's scroll viewport, so the picker cannot
 			// come to rest on top of the toolbar or the tab strip.
-			const clip = getClipRect(editor.view.dom);
+			const clip = getClipRect(view.dom);
 			const placed = clampToClipRect({
 				coords,
 				clip,
@@ -159,7 +162,8 @@ export function EmojiPickerMenu() {
 			}
 		};
 
-		const editorElement = editor.view.dom;
+		const editorElement = mountedView(editor)?.dom;
+		if (!editorElement) return;
 		editorElement.addEventListener("keydown", handleKeyDown, true);
 		return () =>
 			editorElement.removeEventListener("keydown", handleKeyDown, true);
@@ -194,7 +198,7 @@ export function EmojiPickerMenu() {
 		? `markdown-emoji-option-${selectedEmoji.slug}`
 		: undefined;
 	const portalTarget =
-		editor?.view.dom.closest(".atelier-root") ?? document.body;
+		mountedView(editor)?.dom.closest(".atelier-root") ?? document.body;
 
 	return createPortal(
 		<div

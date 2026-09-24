@@ -1951,6 +1951,9 @@ function LayoutShellLoadedContentResolved({
 		if (!isReviewMode) return;
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented) return;
+			// An input method's Esc cancels what it is composing, nothing more.
+			// (Safari ends a composition with keyCode 229 and isComposing false.)
+			if (event.isComposing || event.keyCode === 229) return;
 			if (reviewFloatHandlesEscape()) return;
 			exitDiffReview();
 		};
@@ -3465,7 +3468,20 @@ function LayoutShellLoadedContentResolved({
 		const statePath =
 			typeof entry.state?.path === "string" ? entry.state.path : "";
 		const filePath = documentPathFromView(entry) ?? "";
-		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}`;
+		// A view that names itself once it has read its data (a conversation
+		// titles its tab) re-announces itself, so a host's URL can follow.
+		// Documents are named by their path, which is already in the key.
+		const label =
+			!filePath && typeof entry.state?.atelier?.label === "string"
+				? entry.state.atelier.label
+				: "";
+		// A title in the state (a conversation's) is part of its name too: one
+		// cleared to equal the fallback label changes nothing else.
+		const title =
+			!filePath && entry.state && "title" in entry.state
+				? JSON.stringify(entry.state.title ?? null)
+				: "";
+		const signature = `${entry.kind}::${entry.instance}::${statePath}::${filePath}::${label}::${title}`;
 		if (lastActivatedCentralViewRef.current === signature) return;
 		lastActivatedCentralViewRef.current = signature;
 		emitEvent({
@@ -3873,6 +3889,30 @@ function LayoutShellLoadedContentResolved({
 			}
 			const area = options.area ?? "main";
 			if (area !== "main") {
+				if (options.activate === false) {
+					// A state update for a side view that stays where it is;
+					// nothing opens when there is no such instance.
+					const instanceId = options.instanceId;
+					if (
+						instanceId &&
+						panelStatesRef.current[area].views.some(
+							(entry) => entry.instance === instanceId,
+						)
+					)
+						setAreaState(
+							area,
+							(current) => ({
+								views: current.views.map((entry) =>
+									entry.instance === instanceId
+										? { ...entry, state: { ...entry.state, ...options.state } }
+										: entry,
+								),
+								activeInstance: current.activeInstance,
+							}),
+							{ focus: false },
+						);
+					return undefined;
+				}
 				handleAddView(area, extensionId, options.state);
 				return undefined;
 			}
@@ -3885,9 +3925,31 @@ function LayoutShellLoadedContentResolved({
 			const instanceId = isHome
 				? CENTRAL_HOME_INSTANCE
 				: (options.instanceId ??
+					definition.instanceIdForState?.(options.state) ??
 					(definition.multiInstance
 						? createExtensionInstanceId(extensionId)
 						: extensionId));
+			if (options.activate === false) {
+				// A state update for a tab that stays where it is.
+				if (
+					panelStatesRef.current.main.views.some(
+						(entry) => entry.instance === instanceId,
+					)
+				)
+					setAreaState(
+						"main",
+						(current) => ({
+							views: current.views.map((entry) =>
+								entry.instance === instanceId
+									? { ...entry, state: { ...entry.state, ...options.state } }
+									: entry,
+							),
+							activeInstance: current.activeInstance,
+						}),
+						{ focus: false },
+					);
+				return undefined;
+			}
 			const view: ExtensionInstance = {
 				instance: instanceId,
 				kind: extensionId,

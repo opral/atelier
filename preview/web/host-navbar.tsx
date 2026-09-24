@@ -38,6 +38,9 @@ export function HostBrandMark() {
 
 const REPOSITORIES = ["peter-parker", "daily-bugle"] as const;
 
+/** The chip's first name, which the preview's own account goes by. */
+export const PREVIEW_ACCOUNT_NAME = REPOSITORIES[0];
+
 const initialsOf = (name: string): string =>
 	name
 		.split(/[-_\s]+/)

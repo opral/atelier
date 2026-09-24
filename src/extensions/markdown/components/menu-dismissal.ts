@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { Editor } from "@tiptap/core";
+import { mountedView } from "../editor/mounted-view";
 
 export type MenuDismissalOptions = {
 	/** Whether the menu is on screen. Nothing is watched while it is not. */
@@ -51,15 +52,17 @@ export function useMenuDismissal({
 
 		const inTheDocumentText = (node: EventTarget | null) => {
 			if (!(node instanceof Node)) return false;
-			const editorDom = editor.view.dom;
-			if (!editorDom.contains(node)) return false;
+			const editorDom = mountedView(editor)?.dom;
+			if (!editorDom?.contains(node)) return false;
 			if (node === editorDom) return true;
 			const element =
 				node instanceof HTMLElement ? node : (node.parentElement ?? null);
 			return element?.isContentEditable === true;
 		};
 
+		// A menu over an editor that has gone has nothing left to close.
 		const dismissOnPointer = (event: Event) => {
+			if (!mountedView(editor)) return;
 			if (inTheMenu(event.target)) return;
 			if (editorKeepsThePointer && inTheDocumentText(event.target)) return;
 			closeRef.current();
@@ -72,8 +75,8 @@ export function useMenuDismissal({
 			// mounting the element around it, and until that element is there
 			// there is nothing to recognise it by.
 			queueMicrotask(() => {
-				if (disposed) return;
-				const focused = editor.view.dom.ownerDocument.activeElement;
+				if (disposed || !mountedView(editor)) return;
+				const focused = document.activeElement;
 				if (inTheMenu(focused) || inTheDocumentText(focused)) return;
 				closeRef.current();
 			});

@@ -1,0 +1,24 @@
+.history-comment-editor,
+.history-comment-content .zettel {
+	--zettel-font-family: inherit;
+	--zettel-font-size: 12.5px;
+	--zettel-line-height: 1.55;
+	--zettel-text-color: var(--atelier-fg-muted);
+	--zettel-muted-color: var(--atelier-history-selected-secondary);
+	--zettel-border-color: var(--atelier-accent-border);
+	--zettel-link-color: var(--atelier-accent);
+}
+
+.history-comment-editor .zettel_block,
+.history-comment-content .zettel_block {
+	margin: 0;
+}
+
+.history-comment-editor .zettel_block + .zettel_block,
+.history-comment-content .zettel_block + .zettel_block {
+	margin-top: 0.55em;
+}
+
+.history-comment-editor:focus {
+	outline: none;
+}

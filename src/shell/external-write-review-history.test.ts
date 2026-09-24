@@ -3,7 +3,10 @@ import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { fakeUuid } from "@/test-utils/fake-uuid";
 import { qb } from "@/lib/lix-kysely";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
-import { getFileDataAtCommit, workingReviewFile } from "./external-write-review-history";
+import {
+	getFileDataAtCommit,
+	workingReviewFile,
+} from "./external-write-review-history";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -77,13 +80,23 @@ async function activeCommitId(lix: Lix): Promise<string> {
 	return commitId;
 }
 
-
 test("applied reviews expose their file epoch to document views", () => {
-	const file = { id: "file", path: "/note.md", changeKind: "modified" as const,
-		workingEpoch: { beforeCommitId: "before", afterCommitId: "after" } };
-	const session = { base: { commitId: "before" }, target: { commitId: "after" },
-		intent: "review-applied" as const, files: [file], activePath: "/note.md",
-		capabilities: { checkpoint: false, undo: true, restore: false } };
+	const file = {
+		id: "file",
+		path: "/note.md",
+		changeKind: "modified" as const,
+		workingEpoch: { beforeCommitId: "before", afterCommitId: "after" },
+	};
+	const session = {
+		base: { commitId: "before" },
+		target: { commitId: "after" },
+		intent: "review-applied" as const,
+		files: [file],
+		activePath: "/note.md",
+		capabilities: { checkpoint: false, undo: true, restore: false },
+	};
 	expect(workingReviewFile(session, "file")).toBe(file);
-	expect(workingReviewFile({ ...session, intent: undefined }, "file")).toBeUndefined();
+	expect(
+		workingReviewFile({ ...session, intent: undefined }, "file"),
+	).toBeUndefined();
 });

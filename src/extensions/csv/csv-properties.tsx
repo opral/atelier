@@ -6,7 +6,14 @@ import {
 } from "./csv-text-wrap";
 import { createPortal } from "react-dom";
 import { useEditorClosesOnGridScroll } from "./csv-editor-overlay";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type CSSProperties,
+} from "react";
 import {
 	CaseSensitive,
 	CalendarDays,
@@ -22,6 +29,8 @@ import {
 import {
 	GridCellKind,
 	TextCellEntry,
+	drawTextCell,
+	getMiddleCenterBias,
 	type GridCell,
 	type TextCell,
 	type DrawCellCallback,
@@ -33,6 +42,7 @@ import {
 	drawCsvSearchHighlights,
 } from "./csv-search-highlight";
 import type { CsvColumnInfo } from "./csv-metadata";
+import { csvLinkBoxes, csvLinkHit, type CsvLinkBox } from "./csv-links";
 import "./properties.css";
 
 import {
@@ -88,7 +98,85 @@ export type PropertyCell = TextCell & {
 	csvInferred?: boolean;
 	csvNewOption?: string;
 	csvWrappedLines?: CsvTextLine[];
+	/**
+	 * Where the value leads (`csvCellLinkUrl`). Notion's way: the text keeps
+	 * the cell's ink and weight over a quiet underline, and takes the link
+	 * colour only under the pointer; a press on it opens the link.
+	 */
+	csvLink?: string;
 };
+
+/**
+ * The link cell's text boxes, measured with the font the canvas draws it in.
+ * The same boxes answer the hover underline and the click (index.tsx).
+ */
+export function propertyCellLinkBoxes(
+	cell: PropertyCell,
+	size: { readonly width: number; readonly height: number },
+	measure: (text: string) => number,
+): CsvLinkBox[] {
+	return csvLinkBoxes(
+		{
+			text: (cell.displayData ?? cell.data).split(/\r\n|\r|\n/, 1)[0] ?? "",
+			wrappedLines:
+				cell.allowWrapping && cell.csvWrappedLines
+					? cell.csvWrappedLines
+					: undefined,
+		},
+		size,
+		measure,
+	);
+}
+
+/** Underlines a link's text, a hair under its baseline. */
+function drawLinkUnderline(
+	ctx: CanvasRenderingContext2D,
+	rect: { readonly x: number; readonly y: number },
+	boxes: readonly CsvLinkBox[],
+	color: string,
+) {
+	ctx.save();
+	ctx.textBaseline = "alphabetic";
+	const cap = ctx.measureText("H").actualBoundingBoxAscent;
+	ctx.strokeStyle = color;
+	ctx.lineWidth = 1;
+	ctx.beginPath();
+	for (const box of boxes) {
+		const y =
+			Math.round(rect.y + box.y + CSV_TEXT_LINE_HEIGHT / 2 + cap / 2 + 2) + 0.5;
+		ctx.moveTo(rect.x + box.x, y);
+		ctx.lineTo(rect.x + box.x + box.width, y);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+/**
+ * A link cell's text boxes, and whether the pointer is on them. On the text
+ * the pointer becomes a hand; beside it the cell is just a cell. Glide hands
+ * the hover position to a link cell only (`csvCellRenderers`). Reads the
+ * font the caller has set on the context.
+ */
+function linkState(
+	args: Parameters<DrawCellCallback>[0],
+	cell: PropertyCell,
+): { boxes: CsvLinkBox[]; hovered: boolean } {
+	const { ctx, rect, hoverX, hoverY } = args;
+	const boxes = propertyCellLinkBoxes(
+		cell,
+		rect,
+		(text) => ctx.measureText(text).width,
+	);
+	const hovered = csvLinkHit(boxes, hoverX, hoverY);
+	// Glide hands its cell renderers' arguments to drawCell as they are; the
+	// callback's type leaves the cursor hook out.
+	if (hovered)
+		(
+			args as { overrideCursor?: (cursor: CSSProperties["cursor"]) => void }
+		).overrideCursor?.("pointer");
+	return { boxes, hovered };
+}
+
 /** Select pills mirror the shell's tags: 20px tall with a 6px text inset. */
 const PILL_HEIGHT = 20;
 const PILL_INSET = 6;
@@ -98,6 +186,7 @@ export function drawPropertyCell(
 	search = "",
 	palette: CsvPalette = CSV_COLOR_FALLBACKS,
 	searchColor = "#fef08a", // token-literal: canvas fallback for --atelier-highlight
+	linkUnderlineColor = "rgb(214, 211, 209)", // token-literal: canvas fallback for --atelier-border-strong
 ) {
 	const cell = args.cell as PropertyCell;
 	const info = cell.csvInfo;
@@ -110,6 +199,11 @@ export function drawPropertyCell(
 		ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
 		ctx.textBaseline = "middle";
 		ctx.textAlign = "left";
+		// Glide centres a single line's capitals on the row; wrapped lines sit
+		// on their 20px lines the same way, so a wrapped cell and a plain one
+		// in the same row share a baseline, and the editor can match both.
+		const bias = getMiddleCenterBias(ctx, ctx.font);
+		const link = cell.csvLink ? linkState(args, cell) : null;
 		const matches = csvSearchMatches(cell.data, search);
 		for (const [index, line] of cell.csvWrappedLines.entries()) {
 			const x = rect.x + CSV_TEXT_HORIZONTAL_PADDING;
@@ -131,13 +225,20 @@ export function drawPropertyCell(
 				const right = ctx.measureText(line.text.slice(0, end)).width;
 				ctx.fillRect(x + left, y - 9, right - left, 18);
 			}
-			ctx.fillStyle = theme.textDark;
-			ctx.fillText(line.text, x, y);
+			ctx.fillStyle = link?.hovered ? theme.linkColor : theme.textDark;
+			ctx.fillText(line.text, x, y + bias);
 		}
+		if (link)
+			drawLinkUnderline(
+				ctx,
+				rect,
+				link.boxes,
+				link.hovered ? theme.linkColor : linkUnderlineColor,
+			);
 		ctx.restore();
 		return;
 	}
-	const drawText = () => {
+	const drawText = (draw: () => void = drawContent) => {
 		if (
 			search &&
 			(args.cell.kind === GridCellKind.Text ||
@@ -159,8 +260,47 @@ export function drawPropertyCell(
 			);
 			ctx.restore();
 		}
-		drawContent();
+		draw();
 	};
+	if (cell.csvLink && cell.kind === GridCellKind.Text) {
+		ctx.save();
+		ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
+		const link = linkState(args, cell);
+		ctx.restore();
+		// The cell's own text at rest; under the pointer, the same drawing in
+		// the link colour. Glide prepares the context's fill once for a run of
+		// text cells and trusts it after, so the link colour is restored away
+		// — left behind, it painted the next cell's text in the link colour.
+		drawText(
+			link.hovered
+				? () => {
+						ctx.save();
+						drawTextCell(
+							{
+								...args,
+								theme: { ...theme, textDark: theme.linkColor },
+							} as Parameters<typeof drawTextCell>[0],
+							cell.displayData ?? cell.data,
+							cell.contentAlign,
+						);
+						ctx.restore();
+					}
+				: drawContent,
+		);
+		ctx.save();
+		ctx.beginPath();
+		ctx.rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
+		ctx.clip();
+		ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
+		drawLinkUnderline(
+			ctx,
+			rect,
+			link.boxes,
+			link.hovered ? theme.linkColor : linkUnderlineColor,
+		);
+		ctx.restore();
+		return;
+	}
 	if (!info || cell.kind !== GridCellKind.Text) {
 		drawText();
 		return;
@@ -593,33 +733,108 @@ const PropertyEditor: ProvideEditorComponent<GridCell> = ({
 		document.body,
 	);
 };
+/**
+ * Where the text editor puts its text: exactly where the canvas drew it.
+ * Glide's bounds carry the cell's trailing grid line (one pixel more than
+ * the row and the column); the editor covers the cell the canvas painted,
+ * without that line, so its ring lands on the selected cell's ring. A wrapped cell's lines start where `drawPropertyCell`
+ * starts them; a single line sits in the middle of the row, as Glide draws
+ * it. The bottom inset takes the rest of the row, so the editor is the cell's
+ * size until the text outgrows it, and then it grows downward over the rows
+ * below — the row itself never changes height while it is edited.
+ *
+ * `baseline` is how far the canvas's baseline sits below the textarea's on
+ * the same 20px line (`csvEditorBaselineShift`).
+ */
+export function csvTextEditorInsets(
+	target: { readonly height: number },
+	lines: number,
+	baseline = 0,
+): { top: number; bottom: number; right: number } {
+	const rowHeight = Math.max(0, target.height - 1);
+	const textHeight = Math.max(1, lines) * CSV_TEXT_LINE_HEIGHT;
+	const top =
+		(lines > 1
+			? Math.max(CSV_TEXT_VERTICAL_PADDING, (rowHeight - textHeight) / 2)
+			: Math.max(0, (rowHeight - CSV_TEXT_LINE_HEIGHT) / 2)) + baseline;
+	return {
+		top,
+		bottom: Math.max(0, rowHeight - top - textHeight),
+		right: CSV_TEXT_HORIZONTAL_PADDING,
+	};
+}
+
+let metricsContext: CanvasRenderingContext2D | null | undefined;
+/**
+ * The canvas puts a line's baseline half a capital below the line's middle
+ * (Glide's middle-centre bias); a textarea puts it where the font's rounded
+ * ascent and descent, centred in the line box, leave it. The difference,
+ * a fraction of a pixel that depends on the font, is what the editor shifts
+ * its text by so that the glyphs do not move when the cell opens.
+ */
+export function csvEditorBaselineShift(font: string): number {
+	if (metricsContext === undefined)
+		metricsContext =
+			typeof document === "undefined"
+				? null
+				: document.createElement("canvas").getContext("2d");
+	const ctx = metricsContext;
+	if (!ctx) return 0;
+	ctx.font = font;
+	ctx.textBaseline = "alphabetic";
+	const metrics = ctx.measureText("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+	if (!Number.isFinite(metrics.fontBoundingBoxAscent)) return 0;
+	const ascent = Math.round(metrics.fontBoundingBoxAscent);
+	const descent = Math.round(metrics.fontBoundingBoxDescent);
+	return (metrics.actualBoundingBoxAscent - ascent + descent) / 2;
+}
+
 const TextEditor: ProvideEditorComponent<GridCell> = ({
 	value,
 	onChange,
 	onFinishedEditing,
 	validatedSelection,
 	target,
+	theme,
 }) => {
 	const typed = useRef(value);
 	typed.current = value;
 	// Scrolling the table moves the cell out from under the editor; keep what
 	// was typed and close, rather than leaving a value floating over the grid.
 	useEditorClosesOnGridScroll(() => onFinishedEditing(typed.current));
-	if (value.kind !== GridCellKind.Text) return null;
-	const entry = (
-		<TextCellEntry
-			className={value.allowWrapping ? "csv-wrapped-text-entry" : undefined}
-			highlight={false}
-			altNewline
-			value={value.data}
-			validatedSelection={validatedSelection}
-			onChange={(event) => onChange({ ...value, data: event.target.value })}
-		/>
+	// Fixed when the editor opens: typing a line more grows the editor below
+	// the cell, and the lines already there stay where they were.
+	const [insets] = useState(() =>
+		csvTextEditorInsets(
+			target,
+			(value as PropertyCell).allowWrapping
+				? ((value as PropertyCell).csvWrappedLines?.length ?? 1)
+				: 1,
+			csvEditorBaselineShift(`${theme.baseFontStyle} ${theme.fontFamily}`),
+		),
 	);
-	return value.allowWrapping ? (
-		<div style={{ width: Math.max(40, target.width) }}>{entry}</div>
-	) : (
-		entry
+	if (value.kind !== GridCellKind.Text) return null;
+	return (
+		<div
+			className="csv-text-editor"
+			style={
+				{
+					width: Math.max(40, target.width - 1),
+					"--csv-editor-inset-top": `${insets.top}px`,
+					"--csv-editor-inset-bottom": `${insets.bottom}px`,
+					"--csv-editor-inset-right": `${insets.right}px`,
+				} as CSSProperties
+			}
+		>
+			<TextCellEntry
+				className="csv-text-entry"
+				highlight={false}
+				altNewline
+				value={value.data}
+				validatedSelection={validatedSelection}
+				onChange={(event) => onChange({ ...value, data: event.target.value })}
+			/>
+		</div>
 	);
 };
 
@@ -640,7 +855,7 @@ export const providePropertyEditor: ProvideEditorCallback<GridCell> = (
 		};
 	}
 	if (cell.kind === GridCellKind.Text) {
-		return { editor: TextEditor, disablePadding: cell.allowWrapping === true };
+		return { editor: TextEditor, disablePadding: true };
 	}
 	return undefined;
 };

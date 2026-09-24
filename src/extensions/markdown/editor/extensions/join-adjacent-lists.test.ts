@@ -68,4 +68,29 @@ describe("adjacent lists join into one", () => {
 		);
 		expect(editor.state.doc.firstChild?.firstChild?.childCount).toBe(2);
 	});
+
+	test("lists the file keeps apart stay apart: loaded from it, or with an edit elsewhere", () => {
+		const editor = editorFor("Intro.\n");
+		const apart = astToTiptapDoc(
+			parseMarkdown("Intro.\n\n- a\n- b\n\n* c\n* d\n"),
+		) as JSONContent;
+		// An outside write: loaded from the file.
+		editor.view.dispatch(
+			editor.state.tr
+				.replaceWith(
+					0,
+					editor.state.doc.content.size,
+					editor.schema.nodeFromJSON(apart).content,
+				)
+				.setMeta("preventUpdate", true),
+		);
+		expect(editor.state.doc.childCount).toBe(3);
+		// The writer types in the paragraph above.
+		editor.commands.setTextSelection(3);
+		editor.commands.insertContent("x");
+		expect(editor.state.doc.childCount).toBe(3);
+		expect(buildMarkdownFromEditor(editor)).toBe(
+			"Inxtro.\n\n- a\n- b\n\n* c\n* d\n",
+		);
+	});
 });
