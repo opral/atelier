@@ -1755,3 +1755,62 @@ describe("deleting a comment on a block", () => {
 		}
 	});
 });
+
+describe("resolving a block's conversation", () => {
+	const popover = () => document.querySelector(".markdown-comment-popover");
+
+	test("Resolve posts the written reply, and the block loses its mark and count; reopened, they come back", async () => {
+		const view = await setup(
+			"# Title\n\nFirst para.\n\nSecond para.\n",
+			"Second para.",
+		);
+		try {
+			const { lix, conversationId, editor } = view;
+			const field = await openConversationFromCount();
+			await typeAtEnd(field, "Fixed in the next save");
+			await act(async () => {
+				fireEvent.click(
+					within(popover() as HTMLElement).getByRole("button", {
+						name: "Resolve conversation",
+					}),
+				);
+			});
+			await waitFor(() => {
+				expect(popover()).toBeNull();
+				expect(document.querySelector(".markdown-comment-badge")).toBeNull();
+				expect(
+					document.querySelector(".ProseMirror > [data-block-comment]"),
+				).toBeNull();
+			});
+			const row = await lix.execute(
+				"SELECT resolved FROM lix_conversation WHERE id = $1",
+				[conversationId],
+			);
+			expect(row.rows[0]?.resolved).toBe(true);
+			const comments = await lix.execute(
+				"SELECT id FROM lix_comment WHERE conversation_id = $1",
+				[conversationId],
+			);
+			expect(comments.rows).toHaveLength(2);
+			await waitFor(() => expect(editor.view.hasFocus()).toBe(true));
+			// Nothing to announce: it was resolved, not removed.
+			expect(document.querySelector(".markdown-comment-notice")).toBeNull();
+
+			await act(async () => {
+				await lix.execute(
+					"UPDATE lix_conversation SET resolved = false WHERE id = $1",
+					[conversationId],
+				);
+			});
+			await waitFor(() =>
+				expect(
+					document
+						.querySelector(".markdown-comment-badge")
+						?.getAttribute("aria-label"),
+				).toBe("2 comments"),
+			);
+		} finally {
+			await view.close();
+		}
+	});
+});

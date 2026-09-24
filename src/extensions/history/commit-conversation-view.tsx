@@ -53,6 +53,7 @@ export function CommitConversationView({
 	conversations,
 	resolved = [],
 	onReopen,
+	fieldKey = 0,
 	status,
 	onRefresh,
 	readOnly,
@@ -75,6 +76,8 @@ export function CommitConversationView({
 		readonly commentCount: number;
 	}[];
 	readonly onReopen?: (conversationId: string) => void;
+	/** A new value gives a new, empty field (after a Resolve took its text). */
+	readonly fieldKey?: number;
 	readonly status: "pending" | "success" | "error";
 	/** Retry after a failed read. Writes need no refresh: reads are live. */
 	readonly onRefresh: () => void;
@@ -214,6 +217,7 @@ export function CommitConversationView({
 			) : null}
 			{!readOnly && !loadFailed ? (
 				<Composer
+					key={fieldKey}
 					label={replying ? "Reply" : "Comment on this checkpoint"}
 					placeholder={replying ? "Reply" : "Comment"}
 					value={draft}

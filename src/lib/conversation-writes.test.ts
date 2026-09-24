@@ -5,15 +5,16 @@ import {
 	commentBody,
 	createCommitConversation,
 	replyToConversation,
+	selectCheckpointConversations,
 	selectCommitConversations,
 	selectConversationComments,
 	selectConversationCounts,
 	setCommitConversationTitle,
 } from "@/extensions/history/commit-conversations";
 import {
-	conversationsResolvable,
 	deleteComment,
 	selectActiveAccountId,
+	setConversationResolved,
 } from "./conversation-writes";
 
 /** A comment written by someone else: their own account, their session. */
@@ -193,16 +194,87 @@ describe("deleteComment", () => {
 	});
 });
 
-describe("conversationsResolvable", () => {
-	test("is false until lix_conversation has a resolved column", async () => {
+describe("setConversationResolved", () => {
+	async function checkpointConversation(lix: Lix) {
+		const { commitId } = await createCheckpoint(lix);
+		await createCommitConversation(lix, commitId, commentBody("Ship it?"));
+		const conversation = (
+			await selectCommitConversations(lix, commitId).execute()
+		)[0]!;
+		return { commitId, conversationId: conversation.id };
+	}
+
+	test("resolves and reopens; a conversation starts unresolved", async () => {
 		const lix = await openLix();
 		try {
-			const columns = (
-				await lix.execute("SELECT * FROM lix_conversation LIMIT 0")
-			).columns.map((column) => column.name);
-			expect(await conversationsResolvable(lix)).toBe(
-				columns.includes("resolved"),
+			const { commitId, conversationId } = await checkpointConversation(lix);
+			const resolvedOf = async () =>
+				(await selectCheckpointConversations(lix, [commitId]).execute())[0]
+					?.resolved;
+			expect(await resolvedOf()).toBe(false);
+			await setConversationResolved(lix, conversationId, true);
+			expect(await resolvedOf()).toBe(true);
+			await setConversationResolved(lix, conversationId, false);
+			expect(await resolvedOf()).toBe(false);
+			// Nothing was posted.
+			expect(
+				await selectConversationComments(lix, conversationId).execute(),
+			).toHaveLength(1);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("a note is posted with the Resolve, in the same commit; a blank one is not", async () => {
+		const lix = await openLix();
+		try {
+			const { conversationId } = await checkpointConversation(lix);
+			await setConversationResolved(
+				lix,
+				conversationId,
+				true,
+				commentBody("Shipped in 0.7."),
 			);
+			const comments = await lix.execute(
+				"SELECT id, lixcol_commit_id FROM lix_comment WHERE conversation_id = $1 ORDER BY lixcol_created_at",
+				[conversationId],
+			);
+			expect(comments.rows).toHaveLength(2);
+			const conversation = await lix.execute(
+				"SELECT resolved, lixcol_commit_id FROM lix_conversation WHERE id = $1",
+				[conversationId],
+			);
+			expect(conversation.rows[0]?.resolved).toBe(true);
+			expect(conversation.rows[0]?.lixcol_commit_id).toBe(
+				comments.rows[1]?.lixcol_commit_id,
+			);
+			await setConversationResolved(lix, conversationId, false);
+			await setConversationResolved(
+				lix,
+				conversationId,
+				true,
+				commentBody("   "),
+			);
+			expect(
+				await selectConversationComments(lix, conversationId).execute(),
+			).toHaveLength(2);
+		} finally {
+			await lix.close();
+		}
+	});
+
+	test("a missing conversation is refused, and no note is left behind", async () => {
+		const lix = await openLix();
+		try {
+			const missing = crypto.randomUUID();
+			await expect(
+				setConversationResolved(lix, missing, true, commentBody("Note")),
+			).rejects.toThrow("no longer exists");
+			const orphans = await lix.execute(
+				"SELECT id FROM lix_comment WHERE conversation_id = $1",
+				[missing],
+			);
+			expect(orphans.rows).toHaveLength(0);
 		} finally {
 			await lix.close();
 		}

@@ -29,8 +29,8 @@ import {
 	setConversationResolved,
 } from "@/lib/conversation-writes";
 import {
+	ResolveButton,
 	ResolvedChip,
-	useConversationsResolvable,
 } from "@/components/comments/resolve-controls";
 import type {
 	ExtensionRuntime,
@@ -42,7 +42,7 @@ import {
 	csvRowAnchor,
 	markdownBlockAnchor,
 	readCheckpointAnchor,
-	readRemovedConversation,
+	readAnchorRemoval,
 	replyInConversation,
 	resolveConversationTarget,
 	selectConversation,
@@ -57,7 +57,6 @@ import {
 	type ConversationTarget,
 	type CsvRowAnchor,
 	type MarkdownBlockAnchor,
-	type RemovedConversation,
 } from "./conversation-queries";
 import {
 	ATELIER_CONVERSATION_VIEW_ID,
@@ -249,69 +248,28 @@ function ConversationReader({
 	readonly view: Pick<ExtensionView, "state" | "instanceId" | "isActive">;
 	readonly conversationId: string;
 }) {
-	const lix = useLix();
-	const resolvable = useConversationsResolvable();
 	const result = useQueryResult((session) =>
-		selectConversation(session, conversationId, resolvable),
+		selectConversation(session, conversationId),
 	);
 	// The reply being typed outlives the conversation: if it disappears
 	// mid-sentence, the text stays on screen instead of vanishing with it.
 	const [draft, setDraft] = useState<Document>(emptyCommentDocument);
 	const conversation = result.rows[0] ?? null;
 	const missing = result.status === "success" && conversation === null;
-	// The removal is read from history, which is costly, so it is read
-	// again only when what it says can change: a checkpoint is made (the
-	// removal is checkpointed) or the anchor's file changes (the anchor
-	// comes back). An undo that restores the conversation shows through the
-	// live query above. A tab in the background reads nothing.
-	const reading = missing && view.isActive;
-	const base = useQueryResult(selectBranchBase, { enabled: reading });
-	const [anchorFileId, setAnchorFileId] = useState<string | null>(null);
-	const anchorFile = useQueryResult(
-		(session) => selectFileChange(session, anchorFileId ?? ""),
-		{ enabled: reading && anchorFileId !== null },
-	);
-	const removed = useAsyncRead(
-		reading && base.status === "success"
-			? `${conversationId}:${base.rows[0]?.working_base_commit_id ?? ""}:${
-					anchorFile.rows[0]?.lixcol_change_id ?? ""
-				}`
-			: null,
-		() => readRemovedConversation(lix, conversationId),
-		{ hold: true },
-	);
-	const removedTarget =
-		removed.status === "success" ? removed.value?.target : undefined;
-	const removedFileId =
-		removedTarget && "fileId" in removedTarget ? removedTarget.fileId : null;
-	useEffect(() => {
-		if (removedFileId) setAnchorFileId(removedFileId);
-	}, [removedFileId]);
 	const lostDraft = hasCommentText(draft) ? (
 		<LostDraft draft={draft} onChange={setDraft} />
 	) : null;
-	if (result.status === "error")
-		return lostDraft ? <Column>{lostDraft}</Column> : <NotAvailable />;
-	if (missing) {
-		if (removed.status === "pending") return null;
-		if (removed.status === "error" || removed.value === null)
-			return lostDraft ? (
-				<Column>
-					<NotAvailable inline />
-					{lostDraft}
-				</Column>
-			) : (
-				<NotAvailable />
-			);
-		return (
-			<RemovedConversationPage
-				atelier={atelier}
-				view={view}
-				removed={removed.value}
-				footer={lostDraft}
-			/>
+	// Deleted (a conversation whose anchor was deleted is detached, not
+	// deleted, and still reads), never created, or not in this repository.
+	if (result.status === "error" || missing)
+		return lostDraft ? (
+			<Column>
+				<NotAvailable inline />
+				{lostDraft}
+			</Column>
+		) : (
+			<NotAvailable />
 		);
-	}
 	if (!conversation) return null;
 	return (
 		<LiveConversation
@@ -379,6 +337,33 @@ function LiveConversation({
 	const resolved: ConversationTarget | null =
 		target.status === "success" ? target.value : null;
 	const anchor = useAnchor(lix, resolved);
+	// Its block (or row) was deleted: the conversation lives on, detached,
+	// and shows what it was on as it was, from history. Read again when
+	// the file changes (an undo can bring the block back) or a checkpoint
+	// is made (the removal moves into it).
+	const detached =
+		anchor.settled &&
+		anchor.value === null &&
+		(resolved?.kind === "markdown_block" || resolved?.kind === "csv_row");
+	const detachedFileId =
+		detached && resolved && "fileId" in resolved ? resolved.fileId : null;
+	const base = useQueryResult(selectBranchBase, { enabled: detached });
+	const fileChange = useQueryResult(
+		(session) => selectFileChange(session, detachedFileId ?? ""),
+		{ enabled: detachedFileId !== null },
+	);
+	const removal = useAsyncRead(
+		detached && base.status === "success"
+			? `${conversation.target}:${base.rows[0]?.working_base_commit_id ?? ""}:${
+					fileChange.rows[0]?.lixcol_change_id ?? ""
+				}`
+			: null,
+		() => readAnchorRemoval(lix, resolved!),
+		{ hold: true },
+	);
+	const removed =
+		detached && removal.status === "success" ? removal.value : null;
+	const shown: Anchor | null = anchor.value ?? removed?.anchor ?? null;
 	const threadResult = useQueryResult((session) =>
 		selectConversationThread(
 			session,
@@ -386,15 +371,11 @@ function LiveConversation({
 			conversation.lixcol_global,
 		),
 	);
-	const comments = useThreadComments(threadResult.rows);
-	const account = useQueryResult(selectActiveAccountId, {
-		enabled: !atelier.readOnly,
-	});
 	const title = conversation.title?.trim() || null;
 	const label =
 		title ??
 		anchorLabel(
-			anchor.value ??
+			shown ??
 				(resolved?.kind === "row" || resolved?.kind === "none"
 					? resolved
 					: null),
@@ -404,7 +385,16 @@ function LiveConversation({
 
 	// Hold the page until what it is attached to has been read, so the
 	// context line and the anchor never arrive after the comments below them.
-	if (!anchor.settled || threadResult.status === "pending") return null;
+	if (
+		!anchor.settled ||
+		threadResult.status === "pending" ||
+		(detached && removal.status === "pending")
+	)
+		return null;
+	const openRemovedFile = () => {
+		if (shown && "filePath" in shown && shown.filePath)
+			void atelier.documents.open(shown.filePath, { newTab: true });
+	};
 	return (
 		<Column>
 			<div className="flex flex-col gap-2.5">
@@ -413,25 +403,29 @@ function LiveConversation({
 					readOnly={atelier.readOnly}
 					onSave={(next) => setConversationTitle(lix, conversation, next)}
 				/>
-				{conversation.resolved ? (
-					<ResolvedChip
-						onReopen={
-							atelier.readOnly
-								? undefined
-								: () =>
-										void setConversationResolved(
-											lix,
-											conversation.id,
-											false,
-										).catch((error: unknown) => console.error(error))
-						}
-					/>
-				) : null}
+				<ResolvedState atelier={atelier} conversation={conversation} />
 				{anchor.value ? (
 					<ContextLine
 						anchor={anchor.value}
 						now={now}
 						onOpen={() => openAnchor(atelier, anchor.value!, conversation.id)}
+					/>
+				) : removed?.anchor ? (
+					<ContextLine
+						anchor={removed.anchor}
+						now={now}
+						onOpen={openRemovedFile}
+						removal={{
+							at: removed.removedAt,
+							inCheckpoint: removed.removedInCheckpoint,
+							onOpenCheckpoint: () =>
+								void openReviewBeside(
+									atelier,
+									removed.removedInParentCommitId,
+									removed.removedInCommitId,
+									removed.anchor?.filePath ?? null,
+								),
+						}}
 					/>
 				) : resolved?.kind === "row" ? (
 					<p className="text-[13px] text-history-secondary">
@@ -449,7 +443,79 @@ function LiveConversation({
 					/>
 					<Hairline />
 				</>
+			) : removed?.anchor ? (
+				<>
+					<AnchorDetail
+						anchor={removed.anchor}
+						onOpen={openRemovedFile}
+						removed
+					/>
+					<Hairline />
+				</>
 			) : null}
+			<LiveThread
+				atelier={atelier}
+				conversation={conversation}
+				rows={threadResult.rows}
+				draft={draft}
+				onDraftChange={onDraftChange}
+			/>
+		</Column>
+	);
+}
+
+/** "Resolved · Reopen" under the title, while the conversation is resolved. */
+function ResolvedState({
+	atelier,
+	conversation,
+}: {
+	readonly atelier: Runtime;
+	readonly conversation: ConversationRow;
+}) {
+	const lix = useLix();
+	if (!conversation.resolved) return null;
+	return (
+		<ResolvedChip
+			onReopen={
+				atelier.readOnly
+					? undefined
+					: () =>
+							void setConversationResolved(lix, conversation.id, false).catch(
+								(error: unknown) => console.error(error),
+							)
+			}
+		/>
+	);
+}
+
+/**
+ * A live conversation's comments, its reply box and Resolve: the reader's
+ * own comments can be deleted, and what the reply box holds when Resolve
+ * is pressed goes with it as its note.
+ */
+function LiveThread({
+	atelier,
+	conversation,
+	rows,
+	draft,
+	onDraftChange,
+}: {
+	readonly atelier: Runtime;
+	readonly conversation: ConversationRow;
+	readonly rows: readonly ConversationCommentRow[];
+	readonly draft: Document;
+	readonly onDraftChange: (draft: Document) => void;
+}) {
+	const lix = useLix();
+	const comments = useThreadComments(rows);
+	// A field reads its text once; a Resolve that took the text as its note
+	// hands the reader a new, empty one.
+	const [fieldKey, setFieldKey] = useState(0);
+	const account = useQueryResult(selectActiveAccountId, {
+		enabled: !atelier.readOnly,
+	});
+	return (
+		<>
 			<Thread
 				comments={comments}
 				accountId={account.rows[0]?.id ?? null}
@@ -463,12 +529,29 @@ function LiveConversation({
 			/>
 			{atelier.readOnly ? null : (
 				<ReplyBox
+					key={fieldKey}
 					draft={draft}
 					onDraftChange={onDraftChange}
 					onSubmit={(body) => replyInConversation(lix, conversation, body)}
 				/>
 			)}
-		</Column>
+			{atelier.readOnly ||
+			conversation.resolved ||
+			comments.length === 0 ? null : (
+				<ResolveButton
+					labelled
+					className="-mt-3 self-end"
+					onResolve={() =>
+						void setConversationResolved(lix, conversation.id, true, draft)
+							.then(() => {
+								onDraftChange(emptyCommentDocument());
+								setFieldKey((key) => key + 1);
+							})
+							.catch((error: unknown) => console.error(error))
+					}
+				/>
+			)}
+		</>
 	);
 }
 
@@ -1054,72 +1137,6 @@ function ReplyBox({
 			tone="neutral"
 			size="view"
 		/>
-	);
-}
-
-/* ── Removed with its anchor ────────────────────────────────────────── */
-
-function RemovedConversationPage({
-	atelier,
-	view,
-	removed,
-	footer = null,
-}: {
-	readonly atelier: Runtime;
-	readonly view: Pick<ExtensionView, "state" | "instanceId" | "isActive">;
-	readonly removed: RemovedConversation;
-	/** A reply that was being written when the conversation went. */
-	readonly footer?: ReactNode;
-}) {
-	const now = useMinuteClock();
-	const comments = useThreadComments(removed.comments);
-	const title = removed.conversation.title?.trim() || null;
-	useTabLabel(
-		atelier,
-		view,
-		title ?? anchorLabel(removed.anchor) ?? "Conversation",
-		title,
-	);
-	const anchor = removed.anchor;
-	const openFile = () => {
-		if (anchor && "filePath" in anchor && anchor.filePath)
-			void atelier.documents.open(anchor.filePath, { newTab: true });
-	};
-	const openRemoval = () => {
-		void openReviewBeside(
-			atelier,
-			removed.removedInParentCommitId,
-			removed.removedInCommitId,
-			anchor && "filePath" in anchor ? anchor.filePath : null,
-		);
-	};
-	return (
-		<Column>
-			<div className="flex flex-col gap-2.5">
-				{/* The conversation is gone; its title can no longer change. */}
-				<ConversationTitle title={title} readOnly />
-				{anchor ? (
-					<ContextLine
-						anchor={anchor}
-						now={now}
-						onOpen={openFile}
-						removal={{
-							at: removed.removedAt,
-							inCheckpoint: removed.removedInCheckpoint,
-							onOpenCheckpoint: openRemoval,
-						}}
-					/>
-				) : null}
-			</div>
-			{anchor ? (
-				<>
-					<AnchorDetail anchor={anchor} onOpen={openFile} removed />
-					<Hairline />
-				</>
-			) : null}
-			<Thread comments={comments} />
-			{footer}
-		</Column>
 	);
 }
 

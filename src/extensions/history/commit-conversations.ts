@@ -2,14 +2,12 @@ import type { Lix } from "@lix-js/sdk";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { toPlainText } from "@opral/zettel-lexical";
 import { qb, sql } from "@/lib/lix-kysely";
-import { resolvedColumn, unresolved } from "@/lib/conversation-writes";
 
 export type CommitConversation = {
 	id: string;
 	title: string | null;
 	lixcol_created_at: string | null;
-	/** Always false on a Lix without the `resolved` column. */
-	resolved?: boolean;
+	resolved: boolean;
 };
 
 export type CheckpointConversation = CommitConversation & { commit_id: string };
@@ -60,7 +58,6 @@ export function selectCommitConversations(lix: Lix, commitId: string) {
 export function selectCheckpointConversations(
 	lix: Lix,
 	commitIds: readonly string[],
-	resolvable = false,
 ) {
 	const refs = commitIds.map(
 		(id) => sql<string>`lix_row_ref('lix_commit', NULL, ${id})`,
@@ -71,8 +68,7 @@ export function selectCheckpointConversations(
 	);
 	return qb(lix)
 		.selectFrom("lix_conversation")
-		.select(["id", "title", "lixcol_created_at"])
-		.select(resolvedColumn("lix_conversation", resolvable))
+		.select(["id", "title", "lixcol_created_at", "resolved"])
 		.select(
 			sql<string>`CASE ${sql.join(cases, sql.raw(" "))} END`.as("commit_id"),
 		)
@@ -254,7 +250,6 @@ export function selectCheckpointFileConversationCounts(
 	beforeCommitId: string | null,
 	afterCommitId: string,
 	relations: readonly string[],
-	resolvable = false,
 ) {
 	const perRelation = relations.map((relation) => {
 		// The relation must be a literal, not a parameter (opral/lix#1889).
@@ -274,7 +269,7 @@ export function selectCheckpointFileConversationCounts(
 			)
 			.select([fileId.as("file_id"), "conversation.id as conversation_id"])
 			.where("conversation.lixcol_global", "=", false)
-			.$if(resolvable, (query) => query.where(unresolved("conversation")));
+			.where("conversation.resolved", "=", false);
 	});
 	const [first, ...rest] = perRelation;
 	const changedRows = first

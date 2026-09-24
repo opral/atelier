@@ -3,7 +3,6 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { toPlainText } from "@opral/zettel-lexical";
 import { qb, sql } from "@/lib/lix-kysely";
-import { unresolved } from "@/lib/conversation-writes";
 
 /*
  * Block conversations: a comment on a Markdown document belongs to one
@@ -69,15 +68,11 @@ export function selectMarkdownBlocks(lix: Lix, fileId: string) {
 /**
  * Every comment on a block of this file, oldest first. One live query for
  * the whole document; it names the change that wrote each comment rather
- * than joining `lix_change`, which a live query must not observe. With
- * `resolvable` (the Lix has the column), resolved conversations are left
- * out: their blocks are not marked and not counted.
+ * than joining `lix_change`, which a live query must not observe.
+ * Resolved conversations are left out: their blocks are not marked and not
+ * counted.
  */
-export function selectBlockComments(
-	lix: Lix,
-	fileId: string,
-	resolvable = false,
-) {
+export function selectBlockComments(lix: Lix, fileId: string) {
 	return qb(lix)
 		.selectFrom("lix_comment as comment")
 		.innerJoin(
@@ -101,7 +96,7 @@ export function selectBlockComments(
 		.where("block.lixcol_file_id", "=", fileId)
 		.where("conversation.lixcol_global", "=", false)
 		.where("comment.lixcol_global", "=", false)
-		.$if(resolvable, (query) => query.where(unresolved("conversation")))
+		.where("conversation.resolved", "=", false)
 		.orderBy("comment.lixcol_created_at", "asc")
 		.orderBy("comment.id", "asc")
 		.$castTo<BlockCommentRow>();

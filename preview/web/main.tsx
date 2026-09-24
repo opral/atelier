@@ -40,7 +40,9 @@ async function namePreviewAccount(lix: Lix) {
 
 async function start() {
 	const lix = await openLix({
-		storage: new OpfsStorage({ name: "atelier-preview-lix-opfs-0.12" }),
+		// A new name when the vendored Lix cannot open what an earlier one
+		// stored (0.13: row_ref targets and detached conversations).
+		storage: new OpfsStorage({ name: "atelier-preview-lix-opfs-0.13" }),
 	});
 	// Before seeding: the plugin projects files as they are written.
 	await installMarkdownPlugin(lix);
