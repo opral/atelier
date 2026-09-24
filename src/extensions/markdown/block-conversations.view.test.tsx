@@ -640,7 +640,9 @@ describe("block conversations follow their block through edits", () => {
 			lix.execute = (async (...args: Parameters<Lix["execute"]>) => {
 				if (
 					typeof args[0] === "string" &&
-					args[0].startsWith("SELECT id FROM lix_conversation WHERE id IN")
+					args[0].startsWith(
+						"SELECT id, resolved FROM lix_conversation WHERE id IN",
+					)
 				) {
 					lookups++;
 					await held;
@@ -699,7 +701,9 @@ describe("block conversations follow their block through edits", () => {
 				const result = await execute(...args);
 				if (
 					typeof args[0] === "string" &&
-					args[0].startsWith("SELECT id FROM lix_conversation WHERE id IN") &&
+					args[0].startsWith(
+						"SELECT id, resolved FROM lix_conversation WHERE id IN",
+					) &&
 					++lookups === 1
 				)
 					await held;
