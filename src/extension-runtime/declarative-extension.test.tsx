@@ -45,7 +45,10 @@ describe("declarative extension hydration", () => {
 				<DeclarativeExtension
 					definition={definition}
 					atelier={atelier}
-					view={{ ...view, state: { filePath: "/private/document.csv" } }}
+					view={{
+						...view,
+						state: { fileId: "file-1", filePath: "/private/document.csv" },
+					}}
 				/>
 			</AtelierRenderContext.Provider>,
 		);
@@ -70,6 +73,7 @@ describe("declarative extension hydration", () => {
 			expect(emit).toHaveBeenCalledWith(
 				expect.objectContaining({
 					type: "document_loaded",
+					fileId: "file-1",
 					viewKind: "custom",
 					durationMs: expect.any(Number),
 				}),

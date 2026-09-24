@@ -268,7 +268,9 @@ describe("open file lifecycle", () => {
 		});
 		expect(onEvent).toHaveBeenCalledWith({
 			type: "document_open_attempted",
+			fileId: expect.any(String),
 			filePath: "/one.md",
+			navigationCause: "foreground",
 			documentOrigin: "existing",
 			viewKind: "atelier_file",
 			supported: true,
@@ -307,9 +309,20 @@ describe("open file lifecycle", () => {
 		});
 
 		// newTab appends instead of replacing.
+		onEvent.mockClear();
 		await act(async () => {
-			await atelier.documents.open("/one.md", { newTab: true });
+			await atelier.documents.open("/one.md", {
+				newTab: true,
+				navigationCause: "route",
+			});
 		});
+		expect(onEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "document_open_attempted",
+				fileId: fakeUuid("one"),
+				navigationCause: "route",
+			}),
+		);
 		await waitFor(() => {
 			expect(sessionStateStore.getSnapshot()?.areas?.main?.views).toHaveLength(
 				2,

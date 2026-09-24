@@ -651,28 +651,38 @@ function mergeNode(
 /**
  * The transaction that merges the file `next` into `state.doc`, touching only
  * what the write changed, marked as not the writer's (`addToHistory: false`)
- * and as loaded from the file (`preventUpdate`). Null when the file holds
- * what the editor does.
+ * and as loaded from the file (`preventUpdate`). By default, editor-only
+ * formatting that serializes to the same file is retained. Turn that off at a
+ * local-save boundary when the editor must match the exact parsed file text.
  */
 export function outsideWriteTransaction(
 	state: EditorState,
 	next: ProseMirrorNode,
+	{
+		preserveFileEquivalentEditorState = true,
+	}: {
+		readonly preserveFileEquivalentEditorState?: boolean;
+	} = {},
 ): Transaction | null {
 	const current = state.doc;
 	const currentChildren = childrenOf(current);
 	const nextChildren = childrenOf(next);
 	const currentOffsets = childOffsets(current);
 	const nextOffsets = childOffsets(next);
+	const sameRequestedContent = preserveFileEquivalentEditorState
+		? sameInFile
+		: sameBlock;
 	const segments = alignNodes(
 		currentChildren,
 		nextChildren,
-		sameInFile,
+		sameRequestedContent,
 		(a, b) => {
 			// Keyed by structure, which is cheap; only a block with no
 			// structural twin on the other side is serialized, to find the
 			// one the file holds alike (a trailing space, an empty paragraph).
 			const keysA = a.map(structure);
 			const keysB = b.map(structure);
+			if (!preserveFileEquivalentEditorState) return [keysA, keysB];
 			const inA = new Set(keysA);
 			const inB = new Set(keysB);
 			const byFile = new Map<string, string>();
@@ -738,7 +748,7 @@ export function outsideWriteTransaction(
 		for (const index of touched.sort((x, y) => y - x)) {
 			const merged = tr.doc.child(index);
 			const expected = nextChildren[index]!;
-			if (sameInFile(merged, expected)) continue;
+			if (sameRequestedContent(merged, expected)) continue;
 			const from = offsets[index]!;
 			tr.replaceWith(from, from + merged.nodeSize, standIn(merged, expected));
 		}

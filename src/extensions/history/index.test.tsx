@@ -1244,7 +1244,9 @@ describe("checkpoint conversation flows", () => {
 				fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
 			});
 			const thread = await screen.findByRole("list", { name: "Comments" });
-			expect(await within(thread).findByText("Yes, shipped")).toBeInTheDocument();
+			expect(
+				await within(thread).findByText("Yes, shipped"),
+			).toBeInTheDocument();
 			expect(screen.queryByText(/Resolved ·/)).toBeNull();
 		} finally {
 			view.unmount();

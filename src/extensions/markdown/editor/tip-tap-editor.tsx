@@ -24,6 +24,7 @@ import {
 import {
 	acknowledgeMarkdownEditorPersistence,
 	markdownEditorExpectedFileMarkdown,
+	markdownEditorHasUnacknowledgedChanges,
 	createEditor,
 	createMarkdownEditorOriginKey,
 	markdownEditorLastAcknowledgedMarkdown,
@@ -668,8 +669,14 @@ function TipTapEditorLoadedContent({
 		if (
 			!readOnly &&
 			sourceMarkdown === markdownEditorExpectedFileMarkdown(editor)
-		)
+		) {
+			if (
+				!markdownEditorHasUnacknowledgedChanges(editor) &&
+				!editorTextMatchesMarkdown(editor, sourceMarkdown, defaultBlock)
+			)
+				setEditorMarkdown(editor, sourceMarkdown, defaultBlock);
 			return;
+		}
 
 		const nextMarkdown = normalizePersistedMarkdown(sourceMarkdown);
 		const currentMarkdown = buildNormalizedMarkdownFromEditor(editor);
@@ -707,6 +714,42 @@ function TipTapEditorLoadedContent({
 		sourceFile,
 		externalSyncState,
 		suspendExternalSync,
+	]);
+
+	// A local save can serialize away a boundary space. Its observer echo can
+	// arrive before the write acknowledgment and leave no deferred external
+	// value, so reconcile the exact accepted source at the save boundary.
+	useEffect(() => {
+		if (
+			!persistenceAcknowledgment ||
+			!editor ||
+			!activeFileId ||
+			!externalSyncState ||
+			externalSyncState.editor !== editor ||
+			externalSyncState.pendingExternalMarkdown !== null ||
+			suspendExternalSync
+		)
+			return;
+		const acknowledged = markdownEditorLastAcknowledgedMarkdown(editor);
+		const expectedFile = markdownEditorExpectedFileMarkdown(editor);
+		if (
+			acknowledged === undefined ||
+			expectedFile === undefined ||
+			markdownEditorHasUnacknowledgedChanges(editor) ||
+			buildNormalizedMarkdownFromEditor(editor) !== acknowledged
+		)
+			return;
+		if (!editorTextMatchesMarkdown(editor, expectedFile, defaultBlock))
+			setEditorMarkdown(editor, expectedFile, defaultBlock, {
+				preserveFileEquivalentEditorState: false,
+			});
+	}, [
+		persistenceAcknowledgment,
+		editor,
+		activeFileId,
+		externalSyncState,
+		suspendExternalSync,
+		defaultBlock,
 	]);
 
 	// A save acknowledgment changes the clean baseline without a TipTap update.
@@ -747,7 +790,9 @@ function TipTapEditorLoadedContent({
 					buildNormalizedMarkdownFromEditor(editor) ===
 					normalizePersistedMarkdown(markdown)
 				) {
-					acknowledgeMarkdownEditorPersistence(editor, markdown);
+					if (editorTextMatchesMarkdown(editor, markdown, defaultBlock))
+						acknowledgeMarkdownEditorPersistence(editor, markdown);
+					else setEditorMarkdown(editor, markdown, defaultBlock);
 					return;
 				}
 				setEditorMarkdown(editor, markdown, defaultBlock);
@@ -953,22 +998,47 @@ function TipTapEditorLoadingState({
 	);
 }
 
+function editorTextMatchesMarkdown(
+	editor: Editor,
+	markdown: string,
+	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
+): boolean {
+	const ast = parseMarkdown(markdown) as any;
+	const canonical = editor.schema.nodeFromJSON(
+		astToTiptapDoc(ast, { defaultBlock }),
+	);
+	const text = (doc: typeof canonical) =>
+		doc.textBetween(0, doc.content.size, "\n");
+	// A trailing space at a line boundary is an in-progress edit even though
+	// Markdown does not serialize it. Keep it in the live editor for the next
+	// keystroke; leading whitespace that cannot round-trip is reconciled.
+	const editorText = text(editor.state.doc).replace(/[ \t]+(?=\n|$)/g, "");
+	return editorText === text(canonical);
+}
+
 function setEditorMarkdown(
 	editor: Editor,
 	markdown: string,
 	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
+	{
+		preserveFileEquivalentEditorState = true,
+	}: {
+		readonly preserveFileEquivalentEditorState?: boolean;
+	} = {},
 ): void {
 	const ast = parseMarkdown(markdown) as any;
 	const content = astToTiptapDoc(ast, { defaultBlock });
-	// What the file holds is not the writer's edit. It is applied as the
-	// smallest change to the document on screen and kept out of their undo
-	// history, so ⌘Z keeps undoing their own edits (mapped through it) and
-	// never takes back someone else's write.
+	// Apply authoritative file content as the smallest change to the document
+	// and keep it out of undo history. External delivery preserves editor-only
+	// formatting that serializes to the same file; local save reconciliation
+	// opts out after serialization removes that formatting.
 	let transaction: ReturnType<typeof outsideWriteTransaction> | undefined;
 	try {
 		const next = editor.schema.nodeFromJSON(content);
 		next.check();
-		transaction = outsideWriteTransaction(editor.state, next);
+		transaction = outsideWriteTransaction(editor.state, next, {
+			preserveFileEquivalentEditorState,
+		});
 	} catch {
 		transaction = undefined;
 	}

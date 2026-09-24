@@ -44,7 +44,7 @@ test("StrictMode effect reconnect does not dispose the mounted runtime", async (
 		</StrictMode>,
 	);
 	await act(async () => {
-		await Promise.resolve();
+		await new Promise((resolve) => setTimeout(resolve, 0));
 	});
 	const rejected = vi.fn();
 	const pending = handle.documents.open("/pending.md").catch(rejected);
@@ -53,6 +53,29 @@ test("StrictMode effect reconnect does not dispose the mounted runtime", async (
 	});
 	expect(rejected).not.toHaveBeenCalled();
 	view.unmount();
+	await pending;
+	expect(rejected).toHaveBeenCalledWith(
+		expect.objectContaining({ name: "AbortError" }),
+	);
+});
+
+test("unmount keeps the runtime alive through the current microtask checkpoint", async () => {
+	let handle!: AtelierHandle;
+	const view = render(
+		<Atelier
+			lix={{} as Lix}
+			branchSession={branchSession}
+			onReady={(value) => {
+				if (value) handle = value;
+			}}
+		/>,
+	);
+	const rejected = vi.fn();
+	const pending = handle.documents.open("/pending.md").catch(rejected);
+	view.unmount();
+	await Promise.resolve();
+	await Promise.resolve();
+	expect(rejected).not.toHaveBeenCalled();
 	await pending;
 	expect(rejected).toHaveBeenCalledWith(
 		expect.objectContaining({ name: "AbortError" }),
