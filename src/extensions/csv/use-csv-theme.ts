@@ -59,6 +59,8 @@ const DEFAULT_APPEARANCE = {
 	titleColor: "#1c1917", // token-literal: canvas fallback for --atelier-fg
 	/** The hovered row's ground. */
 	hoverColor: "#f5f2ed", // token-literal: canvas fallback for --atelier-bg-hover
+	/** A link's quiet underline at rest; it takes the link colour on hover. */
+	linkUnderlineColor: "rgb(214, 211, 209)", // token-literal: canvas fallback for --atelier-border-strong
 };
 
 /** Canvas cannot consume var(). Resolve the owning table's inherited Atelier tokens. */
@@ -109,6 +111,10 @@ export function useCsvTheme(ref: RefObject<HTMLElement | null>) {
 					),
 					titleColor: read("--atelier-fg", DEFAULT_APPEARANCE.titleColor),
 					hoverColor: read("--atelier-bg-hover", DEFAULT_APPEARANCE.hoverColor),
+					linkUnderlineColor: read(
+						"--atelier-border-strong",
+						DEFAULT_APPEARANCE.linkUnderlineColor,
+					),
 				};
 				return JSON.stringify(next) === JSON.stringify(previous)
 					? previous

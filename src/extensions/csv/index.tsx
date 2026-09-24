@@ -88,7 +88,6 @@ import {
 	type Item,
 	type Rectangle,
 } from "@glideapps/glide-data-grid";
-import "@glideapps/glide-data-grid/dist/index.css";
 import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
 import {
@@ -116,6 +115,7 @@ import {
 	CSV_TYPES,
 	CSV_COLORS,
 	drawPropertyCell,
+	propertyCellLinkBoxes,
 	providePropertyEditor,
 	type PropertyCell,
 } from "./csv-properties";
@@ -124,6 +124,7 @@ import { CsvToolbarSelect } from "./csv-toolbar-select";
 import { CsvDismissiblePopover } from "./csv-dismissible-popover";
 import { CsvRowActions } from "./csv-row-actions";
 import { csvCellRenderers } from "./csv-grid-renderers";
+import { csvCellLinkUrl, csvLinkHit, openCsvLink } from "./csv-links";
 import { Search, ListFilter, ArrowUpDown, X } from "lucide-react";
 import { CheckpointAbsentFile } from "@/extension-runtime/checkpoint-absent-file";
 import {
@@ -1245,6 +1246,7 @@ function CsvTable({
 		searchColor,
 		titleColor,
 		hoverColor,
+		linkUnderlineColor,
 	} = useCsvTheme(containerRef);
 	// What each column renders as: metadata first, values otherwise. Only
 	// presentation, wrapping, and checkbox toggling read this; editing,
@@ -1283,8 +1285,15 @@ function CsvTable({
 	const [search, setSearch] = useState(retained?.search ?? "");
 	const drawCell = useCallback<DrawCellCallback>(
 		(args, drawContent) =>
-			drawPropertyCell(args, drawContent, search, palette, searchColor),
-		[search, palette, searchColor],
+			drawPropertyCell(
+				args,
+				drawContent,
+				search,
+				palette,
+				searchColor,
+				linkUnderlineColor,
+			),
+		[search, palette, searchColor, linkUnderlineColor],
 	);
 	const [sort, setSort] = useState<{
 		column: number;
@@ -1693,36 +1702,14 @@ function CsvTable({
 			const value = parsed.rows[rowIndex]?.cells[columnIndex] ?? "";
 			const info = displayInfo[columnIndex];
 			const propertyType = info?.type ?? "text";
-			// Read-only email and URL properties render as links, as do
-			// link-shaped values in columns without a configured property.
-			// Everything else, including inferred kinds, keeps its renderer.
-			const linkShaped =
-				propertyType === "email" ||
-				propertyType === "url" ||
-				(info?.inferred === true && propertyType === "text");
-			const linkUrl =
-				!editable && linkShaped
-					? propertyType === "email" && /^[^\s@]+@[^\s@]+$/.test(value.trim())
-						? `mailto:${value.trim()}`
-						: toExternalLinkUrl(value)
-					: null;
-			if (linkUrl) {
-				return {
-					kind: GridCellKind.Uri,
-					data: linkUrl,
-					displayData: value,
-					hoverEffect: true,
-					allowOverlay: false,
-					readonly: true,
-					copyData: value,
-					onClickUri: (event) => {
-						event.preventDefault();
-						window.open(linkUrl, "_blank", "noopener,noreferrer");
-					},
-				};
-			}
-			// Editable cells are plain text so the overlay edits the raw
-			// value; URL/email link affordances stay in read-only views.
+			// A value that leads somewhere draws as a link in every mode —
+			// editable, read-only, a historical view — and stays a text cell,
+			// so the editor still edits the raw value. A press on the link's
+			// text opens it (onCellClicked); beside it the cell selects and
+			// edits as any other.
+			const csvLink =
+				csvCellLinkUrl(value, propertyType, info?.inferred === true) ??
+				undefined;
 			// A value with a newline draws only its first line in an unwrapped
 			// column, and drew it as if that were all there was. The ellipsis
 			// says the rest is there; the cell's own data keeps every line, so
@@ -1754,6 +1741,7 @@ function CsvTable({
 				csvInfo: info,
 				csvInferred: info?.inferred === true,
 				csvOptionValues: optionValuesByColumn.get(columnIndex),
+				csvLink,
 				copyData: value,
 				// The first column is the record's title: semibold in primary
 				// ink, so a row has somewhere for the eye to land.
@@ -1778,6 +1766,32 @@ function CsvTable({
 			titleColor,
 		],
 	);
+	// The link under a click, if the click is on a link's text: measured the
+	// way the canvas drew it (drawPropertyCell), in the cell's own font.
+	const linkAt = (
+		cell: Item,
+		event: {
+			readonly localEventX: number;
+			readonly localEventY: number;
+			readonly bounds: Rectangle;
+		},
+	): string | null => {
+		const content = getCellContent(cell) as PropertyCell;
+		if (!content.csvLink) return null;
+		const context = measureContext;
+		if (context)
+			context.font = `${content.themeOverride?.baseFontStyle ?? gridTheme.baseFontStyle} ${gridTheme.fontFamily}`;
+		const boxes = propertyCellLinkBoxes(
+			content,
+			// Glide's bounds carry the trailing grid line; the canvas drew the
+			// cell without it.
+			{ width: event.bounds.width - 1, height: event.bounds.height - 1 },
+			(text) => context?.measureText(text).width ?? text.length * 7,
+		);
+		return csvLinkHit(boxes, event.localEventX, event.localEventY)
+			? content.csvLink
+			: null;
+	};
 	// A press on the header of the open menu closes the menu (Radix sees an
 	// outside press) and then reaches Glide as a header click; without this
 	// the click would reopen what it just closed and the menu could never be
@@ -2701,6 +2715,26 @@ function CsvTable({
 							provideEditor={providePropertyEditor}
 							onKeyDown={(event) => {
 								const current = gridSelection.current;
+								// ⌘/Ctrl+Enter follows the selected cell's link, where
+								// Enter alone edits it.
+								if (
+									event.key === "Enter" &&
+									(event.metaKey || event.ctrlKey) &&
+									!event.shiftKey &&
+									!event.altKey &&
+									current &&
+									current.range.width === 1 &&
+									current.range.height === 1
+								) {
+									const link = (getCellContent(current.cell) as PropertyCell)
+										.csvLink;
+									if (link) {
+										event.cancel();
+										event.preventDefault();
+										openCsvLink(link);
+										return;
+									}
+								}
 								// Enter or Space on a checkbox flips it instead of opening
 								// the yes/no picker.
 								if (
@@ -2775,6 +2809,22 @@ function CsvTable({
 								// Glide calls this only when the press began and ended on
 								// the same cell, which is exactly what a click is.
 								activatesCellRef.current = true;
+								const modified =
+									event.shiftKey ||
+									event.ctrlKey ||
+									event.metaKey ||
+									("altKey" in event && event.altKey);
+								// A press on a link's text follows the link, in a new tab,
+								// and opens no editor; the second press of a double-click
+								// edits instead of opening the link twice.
+								if (!modified && !event.isDoubleClick) {
+									const link = linkAt(cell, event);
+									if (link) {
+										event.preventDefault();
+										openCsvLink(link);
+										return;
+									}
+								}
 								if (
 									!editing ||
 									(!event.isTouch &&
@@ -3283,17 +3333,6 @@ function textWidthEstimate(value: string, isHeader: boolean): number {
 		}
 	}
 	return width;
-}
-
-function toExternalLinkUrl(value: string): string | null {
-	const text = value.trim();
-	if (/^https?:\/\/\S+$/i.test(text)) {
-		return text;
-	}
-	if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
-		return `mailto:${text}`;
-	}
-	return null;
 }
 
 function clamp(value: number, min: number, max: number): number {

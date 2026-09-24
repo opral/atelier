@@ -84,10 +84,28 @@ export async function seedCsvDemo(lix: Lix) {
 			"",
 		].join("\n"),
 	);
+	// A blank CSV shaped like an export of X comments: a URL column, prose
+	// that wraps to two or three lines, a short signal, a select-shaped
+	// region, and a number.
+	const commentsContent = new TextEncoder().encode(
+		[
+			"comment_url,comment,signal,region,likes",
+			'https://x.com/ada_builds/status/1834000000000000001,"This is exactly what we needed for our agent repos. Version control for non-engineers has been the missing piece for months and nobody else is solving it.",strong interest,unverified,42',
+			"https://x.com/mkessler/status/1834000000000000002,Does it work with Postgres?,question,unverified,3",
+			'https://x.com/joanna_dev/status/1834000000000000003,"We tried building this ourselves on top of git and it fell apart the moment the marketing team started editing CSVs. Would love to try this.",pain,EU,17',
+			"https://x.com/rtorres/status/1834000000000000004,Looks neat,neutral,US,1",
+			'https://x.com/lin_data/status/1834000000000000005,"How does merging work when two agents edit the same row at the same time? That is the part every tool gets wrong, and it is what decides whether we can use it in production.",question,EU,28',
+			"https://x.com/pvolkov/status/1834000000000000006,Following,neutral,unverified,0",
+			'https://x.com/sara_ops/status/1834000000000000007,"Our ops team lives in spreadsheets. If this gives them history and review without learning git, I am in.",strong interest,US,35',
+			"https://x.com/theo_k/status/1834000000000000008,What is the pricing?,question,US,6",
+			"",
+		].join("\n"),
+	);
 	for (const [path, bytes, info] of [
 		["/csv-extension/pipeline.csv", content, metadata],
 		["/csv-extension/plain-pipeline.csv", content, null],
 		["/csv-extension/leads-blank.csv", leadsContent, null],
+		["/csv-extension/x-comments.csv", commentsContent, null],
 		// A file with no table in it yet: the view draws the table it is about
 		// to be, and writes nothing until something is typed into it.
 		["/csv-extension/untitled.csv", new TextEncoder().encode(""), null],

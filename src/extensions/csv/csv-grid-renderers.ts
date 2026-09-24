@@ -1,5 +1,6 @@
 import {
 	AllCellRenderers,
+	GridCellKind,
 	markerCellRenderer,
 } from "@glideapps/glide-data-grid";
 
@@ -45,17 +46,27 @@ const compactMarker: typeof markerCellRenderer = {
 };
 export const csvCellRenderers: typeof AllCellRenderers = AllCellRenderers.map(
 	(renderer) =>
-		renderer.kind === compactMarker.kind
-			? {
+		renderer.kind === GridCellKind.Text
+			? ({
 					...renderer,
-					draw(
-						args: Parameters<typeof renderer.draw>[0],
-						cell: Parameters<typeof renderer.draw>[1],
-					) {
-						if (args.cell.kind === compactMarker.kind) {
-							compactMarker.draw({ ...args, cell: args.cell }, args.cell);
-						} else renderer.draw(args, cell);
-					},
-				}
-			: renderer,
+					// A link cell underlines its text and shows a hand only while the
+					// pointer is on the text, so Glide has to say where the pointer is
+					// (drawPropertyCell reads hoverX/hoverY). Other text needs neither.
+					needsHover: (cell: { readonly kind: unknown }) =>
+						typeof (cell as { csvLink?: unknown }).csvLink === "string",
+					needsHoverPosition: true,
+				} as (typeof AllCellRenderers)[number])
+			: renderer.kind === compactMarker.kind
+				? {
+						...renderer,
+						draw(
+							args: Parameters<typeof renderer.draw>[0],
+							cell: Parameters<typeof renderer.draw>[1],
+						) {
+							if (args.cell.kind === compactMarker.kind) {
+								compactMarker.draw({ ...args, cell: args.cell }, args.cell);
+							} else renderer.draw(args, cell);
+						},
+					}
+				: renderer,
 );

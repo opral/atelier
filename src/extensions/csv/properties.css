@@ -1050,15 +1050,21 @@
 		}
 	}
 
-	/* Match the canvas's wrapped text metrics in both the textarea and its measuring copy. */
-	.gdg-growing-entry:has(> .csv-wrapped-text-entry) {
+	/* The cell editor sets its text the way the canvas painted it: the cell's
+	   font (the title column's weight included, from Glide's theme), 20px
+	   lines, and the insets `csvTextEditorInsets` measured from the cell. The
+	   textarea and Glide's measuring copy both carry the class, so the box
+	   grows exactly as the text does, and both wrap as `wrapCsvText` does. */
+	.csv-text-editor .gdg-growing-entry {
 		margin-top: 0;
 	}
-	.gdg-growing-entry > .csv-wrapped-text-entry {
-		/* The padding belongs inside the cell's width, as it does on the canvas;
-		   without this the editor wraps 17px wider and the lines break elsewhere. */
+	.gdg-growing-entry > .csv-text-entry {
 		box-sizing: border-box;
-		padding: 10px 8.5px;
+		margin: 0;
+		padding: var(--csv-editor-inset-top, 10px)
+			var(--csv-editor-inset-right, 9.5px) var(--csv-editor-inset-bottom, 10px)
+			8.5px;
+		font: var(--gdg-base-font-style) var(--gdg-font-family);
 		line-height: 20px;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;

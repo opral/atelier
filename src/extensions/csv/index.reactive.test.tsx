@@ -3310,3 +3310,158 @@ test("a structural edit keeps the axis it did not touch", async () => {
 		await fixture.close();
 	}
 });
+
+test("a press on a link's text opens it in a new tab and opens no editor; beside it the cell edits", async () => {
+	const url = "https://x.com/ada/status/1";
+	const source = `comment_url,comment\r\n${url},Short\r\n${url}2,Also short\r\n`;
+	const fixture = await renderMetadataCsv(source);
+	const open = vi.spyOn(window, "open").mockReturnValue(null);
+	const click = (localEventX: number, extra: Record<string, unknown> = {}) => {
+		const preventDefault = vi.fn();
+		act(() => {
+			document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+		});
+		act(() =>
+			latestDataEditorProps.current?.onCellClicked?.([0, 0], {
+				preventDefault,
+				localEventX,
+				localEventY: 20,
+				bounds: { x: 0, y: 40, width: 401, height: 41 },
+				...extra,
+			} as never),
+		);
+		return preventDefault;
+	};
+	try {
+		expect(latestDataEditorProps.current?.getCellContent([0, 0])).toMatchObject(
+			{ kind: "text", data: url, csvLink: url },
+		);
+		// Only values that are links draw as links.
+		expect(
+			latestDataEditorProps.current!.getCellContent([1, 0]),
+		).not.toHaveProperty("csvLink", expect.anything());
+
+		// On the text: the link opens, and the press is taken from the editor.
+		const onText = click(12);
+		expect(open).toHaveBeenCalledWith(url, "_blank", "noopener,noreferrer");
+		expect(onText).toHaveBeenCalled();
+
+		// Beside the text: an ordinary press on the cell, which edits it.
+		open.mockClear();
+		const beside = click(390);
+		expect(open).not.toHaveBeenCalled();
+		expect(beside).not.toHaveBeenCalled();
+
+		// A modified press selects; the second press of a double-click edits.
+		open.mockClear();
+		click(12, { metaKey: true });
+		click(12, { isDoubleClick: true });
+		expect(open).not.toHaveBeenCalled();
+
+		// ⌘/Ctrl+Enter on the selected link cell opens it; Enter stays editing.
+		act(() =>
+			latestDataEditorProps.current?.onGridSelectionChange?.({
+				columns: CompactSelection.empty(),
+				rows: CompactSelection.empty(),
+				current: {
+					cell: [0, 1],
+					range: { x: 0, y: 1, width: 1, height: 1 },
+					rangeStack: [],
+				},
+			} as unknown as GridSelection),
+		);
+		const key = (init: Record<string, unknown>) => {
+			const cancel = vi.fn();
+			act(() =>
+				(
+					latestDataEditorProps.current as unknown as {
+						onKeyDown: (event: unknown) => void;
+					}
+				).onKeyDown({
+					key: "Enter",
+					shiftKey: false,
+					altKey: false,
+					metaKey: false,
+					ctrlKey: false,
+					cancel,
+					preventDefault: () => {},
+					stopPropagation: () => {},
+					...init,
+				}),
+			);
+			return cancel;
+		};
+		expect(key({})).not.toHaveBeenCalled();
+		expect(open).not.toHaveBeenCalled();
+		expect(key({ metaKey: true })).toHaveBeenCalled();
+		expect(open).toHaveBeenCalledWith(
+			`${url}2`,
+			"_blank",
+			"noopener,noreferrer",
+		);
+	} finally {
+		open.mockRestore();
+		await fixture.close();
+	}
+});
+
+test("selecting and opening a cell leaves every row's height as it was", async () => {
+	const long =
+		"A note long enough that the column's typical value runs past sixty characters, and wraps.";
+	const source = `name,notes\r\nAlice,${long}\r\nBob,Short\r\nCara,${long} ${long}\r\n`;
+	const fixture = await renderMetadataCsv(source);
+	const heights = () => {
+		const height = latestDataEditorProps.current!.rowHeight;
+		return [0, 1, 2].map((row) =>
+			typeof height === "number" ? height : height(row),
+		);
+	};
+	try {
+		act(() =>
+			latestDataEditorProps.current?.onColumnResizeEnd?.(
+				{ title: "notes" },
+				240,
+				1,
+			),
+		);
+		await waitFor(() =>
+			expect(
+				latestDataEditorProps.current?.getCellContent([1, 0]).allowWrapping,
+			).toBe(true),
+		);
+		const before = heights();
+		expect(before[0]).toBeGreaterThan(40);
+		for (const row of [0, 1, 2]) {
+			act(() =>
+				latestDataEditorProps.current?.onGridSelectionChange?.({
+					columns: CompactSelection.empty(),
+					rows: CompactSelection.empty(),
+					current: {
+						cell: [1, row],
+						range: { x: 1, y: row, width: 1, height: 1 },
+						rangeStack: [],
+					},
+				} as unknown as GridSelection),
+			);
+			expect(heights()).toEqual(before);
+			act(() => {
+				document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+			});
+			act(() =>
+				latestDataEditorProps.current?.onCellClicked?.([1, row], {
+					preventDefault: () => {},
+					localEventX: 20,
+					localEventY: 12,
+					bounds: { x: 0, y: 0, width: 241, height: before[row]! + 1 },
+				} as never),
+			);
+			// The cell now offers its editor, and the rows stand as they were.
+			expect(
+				latestDataEditorProps.current?.getCellContent([1, row]),
+			).toMatchObject({ allowOverlay: true });
+			expect(heights()).toEqual(before);
+		}
+	} finally {
+		await fixture.close();
+	}
+});

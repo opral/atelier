@@ -195,6 +195,18 @@
 			align-items: center;
 			height: calc(var(--csv-review-cell-height) - 1px);
 		}
+		/* A value that is a URL follows it, as the live grid's link cells do:
+		   the cell's own ink over a quiet underline, the link colour on hover. */
+		.csv-review-link {
+			color: inherit;
+			text-decoration: underline 1px var(--atelier-border-strong);
+			text-underline-offset: 2px;
+			cursor: pointer;
+		}
+		.csv-review-link:hover {
+			color: var(--atelier-link);
+			text-decoration-color: var(--atelier-link);
+		}
 		.csv-review-pill {
 			display: inline-block;
 			max-width: 100%;

@@ -131,9 +131,11 @@ describe("providePropertyEditor", () => {
 			},
 			csvInferred: true,
 		} as PropertyCell;
-		expect(providePropertyEditor(cell)).toMatchObject({
-			disablePadding: false,
-		});
+		// The text editor, which sets its own insets from the cell, not the
+		// unstyled picker.
+		const editor = providePropertyEditor(cell);
+		expect(editor).toMatchObject({ disablePadding: true });
+		expect(editor).not.toHaveProperty("disableStyling");
 		expect(
 			providePropertyEditor({ ...cell, csvInferred: false } as PropertyCell),
 		).toMatchObject({ disableStyling: true });

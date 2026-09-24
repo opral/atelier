@@ -1,3 +1,4 @@
+import { csvCellLinkUrl } from "./csv-links";
 import {
 	useCallback,
 	useLayoutEffect,
@@ -530,6 +531,9 @@ export function CsvReviewGrid({
 												value={cell.value}
 												info={info}
 												search={search}
+												// A changed cell is the details popover's button,
+												// and a link cannot sit inside a button.
+												linkable={cell.status !== "modified"}
 											/>
 											<ChangeMark
 												status={
@@ -850,12 +854,26 @@ function CsvReviewValue({
 	value,
 	info,
 	search,
+	linkable = false,
 }: {
 	value: string;
 	info?: CsvColumnInfo;
 	search: string;
+	linkable?: boolean;
 }) {
 	const highlighted = <HighlightedValue value={value} search={search} />;
+	const link = linkable ? csvCellLinkUrl(value, info?.type) : null;
+	if (link)
+		return (
+			<a
+				className="csv-review-link"
+				href={link}
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				{highlighted}
+			</a>
+		);
 	if (info?.type === "select" && value) {
 		const color =
 			info.options?.find((option) => option.value === value)?.color ?? "gray";
