@@ -21,8 +21,14 @@ export const BlockCommentsContext = createContext<BlockCommentsApi | null>(
 	null,
 );
 
+export const MissingMarkdownPluginContext = createContext(false);
+
 export function useBlockComments(): BlockCommentsApi | null {
 	return useContext(BlockCommentsContext);
+}
+
+export function useMissingMarkdownPlugin(): boolean {
+	return useContext(MissingMarkdownPluginContext);
 }
 
 /**

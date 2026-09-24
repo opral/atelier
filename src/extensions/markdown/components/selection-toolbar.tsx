@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Toolbar } from "@base-ui/react/toolbar";
 import { Select } from "@base-ui/react/select";
+import { Popover } from "@base-ui/react/popover";
 import { Tooltip } from "@base-ui/react/tooltip";
 import clsx from "clsx";
 import {
@@ -31,6 +32,7 @@ import {
 	blockCommentShortcutLabel,
 	selectedTopLevelBlock,
 	useBlockComments,
+	useMissingMarkdownPlugin,
 } from "./block-comments-context";
 import {
 	TOOLBAR_TOOLTIP_DELAY,
@@ -200,6 +202,7 @@ const SELECTION_TOOLBAR_HOVER_CLOSE_MS = 160;
 export function SelectionToolbar() {
 	const { editor } = useEditorCtx();
 	const blockComments = useBlockComments();
+	const missingMarkdownPlugin = useMissingMarkdownPlugin();
 	const state =
 		useEditorState<SelectionToolbarState>({
 			editor,
@@ -212,6 +215,7 @@ export function SelectionToolbar() {
 	const [dismissedRange, setDismissedRange] = useState<string | null>(null);
 	const [blockMenuOpen, setBlockMenuOpen] = useState(false);
 	const [linkOpen, setLinkOpen] = useState(false);
+	const [missingPluginOpen, setMissingPluginOpen] = useState(false);
 	const [position, setPosition] = useState<PanelPosition | null>(null);
 	// The panel fades out from where it last stood before it unmounts.
 	const [closing, setClosing] = useState(false);
@@ -221,8 +225,10 @@ export function SelectionToolbar() {
 
 	const rangeKey = `${state.from}:${state.to}`;
 	const editable = Boolean(editor && editor.isEditable);
-	const popupOpen = blockMenuOpen || linkOpen;
-	const showsComment = Boolean(blockComments && state.singleBlock);
+	const popupOpen = blockMenuOpen || linkOpen || missingPluginOpen;
+	const showsComment = Boolean(
+		(blockComments || missingMarkdownPlugin) && state.singleBlock,
+	);
 	const shouldShow =
 		editable &&
 		state.eligible &&
@@ -269,6 +275,7 @@ export function SelectionToolbar() {
 		if (shouldShow) return;
 		setBlockMenuOpen(false);
 		setLinkOpen(false);
+		setMissingPluginOpen(false);
 	}, [shouldShow]);
 
 	const { commentOnly } = state;
@@ -547,32 +554,72 @@ export function SelectionToolbar() {
 					</>
 				)}
 
-				{showsComment && blockComments ? (
+				{showsComment ? (
 					<>
 						{commentOnly ? null : (
 							<Toolbar.Separator className="markdown-selection-toolbar-divider" />
 						)}
-						<Toolbar.Button
-							className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment"
-							onClick={() => blockComments.startComment()}
-							aria-keyshortcuts={
-								blockCommentShortcutLabel() === "⌘⌥M"
-									? "Meta+Alt+M"
-									: "Control+Alt+M"
-							}
-							data-attr="markdown-selection-comment"
-						>
-							<CommentBubbleText
-								className="markdown-selection-toolbar-trigger-icon"
-								aria-hidden
-							/>
-							<span className="markdown-selection-toolbar-trigger-label">
-								Comment
-							</span>
-							<span className="markdown-selection-toolbar-shortcut" aria-hidden>
-								{blockCommentShortcutLabel()}
-							</span>
-						</Toolbar.Button>
+						{blockComments ? (
+							<Toolbar.Button
+								className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment"
+								onClick={() => blockComments.startComment()}
+								aria-keyshortcuts={
+									blockCommentShortcutLabel() === "⌘⌥M"
+										? "Meta+Alt+M"
+										: "Control+Alt+M"
+								}
+								data-attr="markdown-selection-comment"
+							>
+								<CommentBubbleText
+									className="markdown-selection-toolbar-trigger-icon"
+									aria-hidden
+								/>
+								<span className="markdown-selection-toolbar-trigger-label">
+									Comment
+								</span>
+								<span
+									className="markdown-selection-toolbar-shortcut"
+									aria-hidden
+								>
+									{blockCommentShortcutLabel()}
+								</span>
+							</Toolbar.Button>
+						) : (
+							<Popover.Root
+								open={missingPluginOpen}
+								onOpenChange={setMissingPluginOpen}
+							>
+								<Toolbar.Button
+									render={<Popover.Trigger />}
+									className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment opacity-50"
+									aria-disabled="true"
+									data-attr="markdown-selection-comment"
+								>
+									<CommentBubbleText
+										className="markdown-selection-toolbar-trigger-icon"
+										aria-hidden
+									/>
+									<span className="markdown-selection-toolbar-trigger-label">
+										Comment
+									</span>
+								</Toolbar.Button>
+								<Popover.Portal container={portalContainer}>
+									<Popover.Positioner
+										className="z-50 outline-none"
+										side="bottom"
+										align="start"
+										sideOffset={6}
+									>
+										<Popover.Popup
+											className="max-w-[16rem] rounded-[8px] border border-border bg-panel p-3 text-[12.5px] leading-5 text-fg-muted shadow-lg"
+											data-attr="markdown-comment-plugin-missing"
+										>
+											Install the Markdown plugin to comment on this file.
+										</Popover.Popup>
+									</Popover.Positioner>
+								</Popover.Portal>
+							</Popover.Root>
+						)}
 					</>
 				) : null}
 			</Toolbar.Root>

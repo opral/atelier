@@ -9,6 +9,7 @@ import {
 import { SelectionToolbar } from "./selection-toolbar";
 import {
 	BlockCommentsContext,
+	MissingMarkdownPluginContext,
 	type BlockCommentsApi,
 } from "./block-comments-context";
 import { EditorProvider, useEditorCtx } from "../editor/editor-context";
@@ -46,6 +47,7 @@ function InjectEditor({ editor }: { editor: Editor }) {
 function createEditor(
 	content: JSONContent,
 	blockComments: BlockCommentsApi | null = null,
+	missingMarkdownPlugin = false,
 ): EditorSetup {
 	const element = document.createElement("div");
 	element.className = "atelier-root";
@@ -65,8 +67,10 @@ function createEditor(
 	const utils = render(
 		<EditorProvider>
 			<BlockCommentsContext.Provider value={blockComments}>
-				<InjectEditor editor={editor} />
-				<SelectionToolbar />
+				<MissingMarkdownPluginContext.Provider value={missingMarkdownPlugin}>
+					<InjectEditor editor={editor} />
+					<SelectionToolbar />
+				</MissingMarkdownPluginContext.Provider>
 			</BlockCommentsContext.Provider>
 		</EditorProvider>,
 	);
@@ -314,6 +318,21 @@ describe("SelectionToolbar", () => {
 			await select(editor, "paragraph here");
 			await screen.findByRole("toolbar");
 			expect(commentRow()).toBeNull();
+		});
+
+		test("explains the missing Markdown plugin from a disabled Comment action", async () => {
+			const { editor } = createEditor(twoParagraphs, null, true);
+			await select(editor, "paragraph here");
+			const row = await screen.findByRole("button", { name: "Comment" });
+			expect(row).toHaveAttribute("aria-disabled", "true");
+			await act(async () => {
+				fireEvent.click(row);
+			});
+			expect(
+				await screen.findByText(
+					"Install the Markdown plugin to comment on this file.",
+				),
+			).toBeInTheDocument();
 		});
 
 		const codeDoc = astToTiptapDoc(

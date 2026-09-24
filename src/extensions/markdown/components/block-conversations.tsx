@@ -84,6 +84,7 @@ import {
 import { useBlockCommentDrafts } from "./block-comment-drafts";
 import {
 	BlockCommentsContext,
+	MissingMarkdownPluginContext,
 	isBlockCommentShortcut,
 	selectedTopLevelBlock,
 	type BlockCommentsApi,
@@ -404,26 +405,40 @@ export function BlockConversations({
 	const live = enabled && editor !== null && !editor.isDestroyed;
 	// The controller is headless and publishes up, so the document under
 	// these providers keeps its place in the tree whether or not it is on.
-	const [published, setPublished] = useState<{
-		readonly api: BlockCommentsApi;
-		readonly state: BlockConversationsState;
-	} | null>(null);
+	const [published, setPublished] = useState<PublishedBlockComments>(null);
 	return (
-		<BlockCommentsContext.Provider value={published?.api ?? null}>
-			<BlockConversationsStateContext.Provider value={published?.state ?? null}>
-				{live && editor ? (
-					<BlockConversationsController
-						key={`${fileId}:${editor.instanceId}`}
-						fileId={fileId}
-						editor={editor}
-						onPublish={setPublished}
-					/>
-				) : null}
-				{children}
-			</BlockConversationsStateContext.Provider>
+		<BlockCommentsContext.Provider
+			value={published?.kind === "available" ? published.api : null}
+		>
+			<MissingMarkdownPluginContext.Provider
+				value={live && published?.kind === "plugin-missing"}
+			>
+				<BlockConversationsStateContext.Provider
+					value={published?.kind === "available" ? published.state : null}
+				>
+					{live && editor ? (
+						<BlockConversationsController
+							key={`${fileId}:${editor.instanceId}`}
+							fileId={fileId}
+							editor={editor}
+							onPublish={setPublished}
+						/>
+					) : null}
+					{children}
+				</BlockConversationsStateContext.Provider>
+			</MissingMarkdownPluginContext.Provider>
 		</BlockCommentsContext.Provider>
 	);
 }
+
+type PublishedBlockComments =
+	| {
+			readonly kind: "available";
+			readonly api: BlockCommentsApi;
+			readonly state: BlockConversationsState;
+	  }
+	| { readonly kind: "plugin-missing" }
+	| null;
 
 const BlockConversationsController = memo(
 	function BlockConversationsController({
@@ -433,12 +448,7 @@ const BlockConversationsController = memo(
 	}: {
 		readonly fileId: string;
 		readonly editor: Editor;
-		readonly onPublish: (
-			value: {
-				readonly api: BlockCommentsApi;
-				readonly state: BlockConversationsState;
-			} | null,
-		) => void;
+		readonly onPublish: (value: PublishedBlockComments) => void;
 	}) {
 		const lix = useLix();
 		const viewReady = useEditorViewMounted(editor);
@@ -1659,11 +1669,16 @@ const BlockConversationsController = memo(
 			],
 		);
 
-		// Without the Markdown plugin's rows (a host that has not installed it)
-		// there is no block to attach a conversation to: no Comment row, no marks.
+		// A completed read with no projected blocks leaves no target for comments.
 		useLayoutEffect(() => {
-			onPublish(available && viewReady ? { api, state } : null);
-		}, [api, available, onPublish, state, viewReady]);
+			onPublish(
+				!viewReady || blocksResult.status === "pending"
+					? null
+					: available
+						? { kind: "available", api, state }
+						: { kind: "plugin-missing" },
+			);
+		}, [api, available, blocksResult.status, onPublish, state, viewReady]);
 		useLayoutEffect(() => () => onPublish(null), [onPublish]);
 		return null;
 	},
