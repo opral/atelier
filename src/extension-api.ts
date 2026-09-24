@@ -146,6 +146,8 @@ export type AtelierDocumentNavigationCause =
 export type AtelierDocumentOpenOptions = {
 	/** Cancels navigation before it changes the workspace. */
 	readonly signal?: AbortSignal;
+	/** Stable identity already resolved with this path by the caller. */
+	readonly fileId?: string;
 	readonly state?: AtelierExtensionState;
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;

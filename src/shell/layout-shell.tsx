@@ -2572,6 +2572,7 @@ function LayoutShellLoadedContentResolved({
 	const resolveAndOpenFile = useCallback(
 		async ({
 			area,
+			fileId,
 			filePath,
 			state,
 			focus,
@@ -2582,6 +2583,7 @@ function LayoutShellLoadedContentResolved({
 			signal,
 		}: {
 			area: Area;
+			fileId?: string;
 			filePath: string;
 			state?: ExtensionState;
 			focus?: boolean;
@@ -2597,7 +2599,9 @@ function LayoutShellLoadedContentResolved({
 				: ++openGeneration.current[area];
 			const lifecycle = openLifecycle.current;
 			const branch = configuration.branchSession.getSnapshot();
-			const resolvedFile = await resolveLixFileForOpen({ lix, filePath });
+			const resolvedFile = fileId
+				? { id: fileId, path: filePath }
+				: await resolveLixFileForOpen({ lix, filePath });
 			signal?.throwIfAborted();
 			if (
 				lifecycle !== openLifecycle.current ||
@@ -2684,9 +2688,9 @@ function LayoutShellLoadedContentResolved({
 				});
 				return historicalFile.path;
 			}
-
 			return resolveAndOpenFile({
 				area: "main",
+				fileId: options.fileId,
 				filePath: normalizedPath,
 				signal: options.signal,
 				state,

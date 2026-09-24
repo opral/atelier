@@ -65,7 +65,14 @@ export function DeclarativeExtension({
 		!["beforeCommitId", "afterCommitId", "sourceCommitId"].some(
 			(key) => typeof view.state[key] === "string",
 		)
-			? { path: view.state.filePath, branchId: atelier.branches.activeId }
+			? {
+					path: view.state.filePath,
+					fileId:
+						typeof view.state.fileId === "string"
+							? view.state.fileId
+							: undefined,
+					branchId: atelier.branches.activeId,
+				}
 			: {
 					view: definition.kind,
 					state: view.state as Record<string, AtelierJsonValue>,

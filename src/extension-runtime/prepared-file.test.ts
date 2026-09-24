@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { Lix } from "@lix-js/sdk";
 import { openLix } from "../test-utils/node-lix-sdk";
 import { createCheckpoint } from "../lib/lix-diff-commands";
 import { loadTextFile } from "./prepared-file";
@@ -43,6 +44,35 @@ describe("prepared file loaders", () => {
 		} finally {
 			await lix.close();
 		}
+	});
+	test("uses the stable file ID for a live document", async () => {
+		const fileId = "00000000-0000-7000-8000-000000000123";
+		const queries: Array<{ statement: string; params: readonly unknown[] }> =
+			[];
+		const lix = {
+			execute: async (statement: string, params: readonly unknown[] = []) => {
+				queries.push({ statement, params });
+				return {
+					rows: [
+						{
+							id: fileId,
+							path: "/file.md",
+							content: new TextEncoder().encode("# By ID"),
+						},
+					],
+				};
+			},
+		} as unknown as Lix;
+		expect(
+			await loadTextFile({
+				lix,
+				signal: new AbortController().signal,
+				location: { path: "/file.md", fileId },
+			}),
+		).toMatchObject({ id: fileId, content: "# By ID" });
+		expect(queries).toHaveLength(1);
+		expect(queries[0]?.statement).toMatch(/where\s+[`"]?id[`"]?\s*=/i);
+		expect(queries[0]?.params).toEqual([fileId]);
 	});
 	test("caps embedded media snapshots and respects preparation cancellation", async () => {
 		const lix = await openLix();
