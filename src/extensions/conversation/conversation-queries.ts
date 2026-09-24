@@ -3,7 +3,6 @@ import type { Lix } from "@lix-js/sdk";
 import { assertDocument, type Document } from "@opral/zettel-ast";
 import { toPlainText } from "@opral/zettel-lexical";
 import { qb } from "@/lib/lix-kysely";
-import { resolvedColumn } from "@/lib/conversation-writes";
 import {
 	blockRowText,
 	type MarkdownBlockRow,
@@ -26,20 +25,21 @@ export type ConversationRow = {
 	readonly title: string | null;
 	readonly lixcol_global: boolean;
 	readonly lixcol_created_at: string | null;
-	/** Always false on a Lix without the `resolved` column. */
-	readonly resolved?: boolean;
+	readonly resolved: boolean;
 };
 
 /** One conversation, in whichever scope the reader's overlay shows it. */
-export function selectConversation(
-	lix: Lix,
-	conversationId: string,
-	resolvable = false,
-) {
+export function selectConversation(lix: Lix, conversationId: string) {
 	return qb(lix)
 		.selectFrom("lix_conversation")
-		.select(["id", "target", "title", "lixcol_global", "lixcol_created_at"])
-		.select(resolvedColumn("lix_conversation", resolvable))
+		.select([
+			"id",
+			"target",
+			"title",
+			"resolved",
+			"lixcol_global",
+			"lixcol_created_at",
+		])
 		.where("id", "=", conversationId)
 		.limit(1)
 		.$castTo<ConversationRow>();
@@ -96,90 +96,61 @@ export type ConversationTarget =
 	/** A row of a relation this view does not draw. */
 	| { readonly kind: "row"; readonly relation: string | null };
 
-export type RowRefHint = {
+export type RowRefParts = {
 	readonly relation: string;
 	readonly fileId: string | null;
-	/** UUID key components; other key types are not decoded. */
+	/** The primary key's components, in order, each as text. */
 	readonly keys: readonly string[];
 };
 
 /**
- * A guess at what an opaque `lix_row_ref` names. Lix documents the
- * reference as opaque, so a guess is only ever used after
- * `lix_row_ref(guess) = target` confirms it in SQL; a changed encoding
- * costs a slower lookup, never a wrong anchor.
+ * What a `lix_row_ref` names, read by Lix itself (`lix_row_ref_parts`):
+ * the reference stays opaque to Atelier. Null for a reference Lix cannot
+ * read (a malformed one, or a Lix without the function).
  */
-export function rowRefHint(ref: string): RowRefHint | null {
-	const prefix = "lix_row_ref:v2:";
-	if (!ref.startsWith(prefix)) return null;
-	let bytes: Uint8Array;
+export async function rowRefParts(
+	lix: Lix,
+	ref: string,
+): Promise<RowRefParts | null> {
 	try {
-		const base64 = ref
-			.slice(prefix.length)
-			.replace(/-/g, "+")
-			.replace(/_/g, "/");
-		const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
-		bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-	} catch {
-		return null;
-	}
-	let offset = 0;
-	const u32 = () => {
-		if (offset + 4 > bytes.length) throw new RangeError();
-		const value =
-			((bytes[offset]! << 24) >>> 0) +
-			(bytes[offset + 1]! << 16) +
-			(bytes[offset + 2]! << 8) +
-			bytes[offset + 3]!;
-		offset += 4;
-		return value;
-	};
-	const text = (length: number) => {
-		if (offset + length > bytes.length) throw new RangeError();
-		const value = new TextDecoder().decode(
-			bytes.subarray(offset, offset + length),
-		);
-		offset += length;
-		return value;
-	};
-	try {
-		const relation = text(u32());
-		const hasFile = bytes[offset++];
-		const fileId = hasFile === 1 ? text(u32()) : null;
-		if (hasFile !== 0 && hasFile !== 1) return null;
-		const count = (bytes[offset]! << 8) + bytes[offset + 1]!;
-		offset += 2;
-		const keys: string[] = [];
-		for (let index = 0; index < count; index++) {
-			// 0x01: a UUID, sixteen bytes.
-			if (bytes[offset] !== 1 || offset + 17 > bytes.length) break;
-			const hex = Array.from(bytes.subarray(offset + 1, offset + 17), (byte) =>
-				byte.toString(16).padStart(2, "0"),
-			).join("");
-			keys.push(
-				`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`,
-			);
-			offset += 17;
-		}
-		return { relation, fileId, keys };
+		const result = await lix.execute("SELECT lix_row_ref_parts($1) AS parts", [
+			ref,
+		]);
+		let parts = result.rows[0]?.parts as unknown;
+		if (typeof parts === "string") parts = JSON.parse(parts);
+		if (!parts || typeof parts !== "object") return null;
+		const value = parts as {
+			relation?: unknown;
+			file_id?: unknown;
+			primary_key?: unknown;
+		};
+		if (typeof value.relation !== "string") return null;
+		const keys = Array.isArray(value.primary_key)
+			? value.primary_key.map((part) =>
+					String((part as { value?: unknown } | null)?.value ?? ""),
+				)
+			: [];
+		return {
+			relation: value.relation,
+			fileId: typeof value.file_id === "string" ? value.file_id : null,
+			keys,
+		};
 	} catch {
 		return null;
 	}
 }
 
-async function refEquals(
-	lix: Lix,
-	target: string,
-	relation: "lix_commit" | "markdown_node" | "csv_row",
-	fileId: string | null,
-	id: string,
-): Promise<boolean> {
-	// The relation is a literal: lix_row_ref validates it at construction.
-	const result = await lix.execute(
-		`SELECT lix_row_ref('${relation}', $1, $2) = $3 AS same`,
-		[fileId, id, target],
-	);
-	return result.rows[0]?.same === true;
+/** What a reference's parts name, when Atelier draws it. */
+function targetOfParts(parts: RowRefParts): ConversationTarget | null {
+	const key = parts.keys[0];
+	if (!key) return null;
+	if (parts.relation === "lix_commit")
+		return { kind: "checkpoint", commitId: key };
+	if (parts.relation === "markdown_node" && parts.fileId)
+		return { kind: "markdown_block", fileId: parts.fileId, nodeId: key };
+	if (parts.relation === "csv_row" && parts.fileId)
+		return { kind: "csv_row", fileId: parts.fileId, rowId: key };
+	return null;
 }
 
 /** Slow path: find the row by comparing its reference with the target. */
@@ -225,43 +196,19 @@ async function scanForTarget(
 }
 
 /**
- * What a stored target names. The reference is decoded as a hint and
- * confirmed in SQL; a reference the hint cannot explain is looked up by
- * comparison (checkpoints, Markdown blocks, CSV rows), and anything else is
- * a row of another relation.
+ * What a stored target names, as Lix reads the reference. A reference it
+ * cannot read is looked up by comparison (checkpoints, Markdown blocks,
+ * CSV rows); anything else is a row of another relation.
  */
 export async function resolveConversationTarget(
 	lix: Lix,
 	target: string | null,
 ): Promise<ConversationTarget> {
 	if (target === null) return { kind: "none" };
-	const hint = rowRefHint(target);
-	const key = hint?.keys[0];
-	if (hint && key) {
-		try {
-			if (
-				hint.relation === "lix_commit" &&
-				(await refEquals(lix, target, "lix_commit", null, key))
-			)
-				return { kind: "checkpoint", commitId: key };
-			if (
-				(hint.relation === "markdown_node" || hint.relation === "csv_row") &&
-				hint.fileId &&
-				(await refEquals(lix, target, hint.relation, hint.fileId, key))
-			)
-				return hint.relation === "markdown_node"
-					? { kind: "markdown_block", fileId: hint.fileId, nodeId: key }
-					: { kind: "csv_row", fileId: hint.fileId, rowId: key };
-		} catch {
-			// Fall through to the comparison scan.
-		}
-	}
-	return (
-		(await scanForTarget(lix, target)) ?? {
-			kind: "row",
-			relation: hint?.relation ?? null,
-		}
-	);
+	const parts = await rowRefParts(lix, target);
+	if (parts)
+		return targetOfParts(parts) ?? { kind: "row", relation: parts.relation };
+	return (await scanForTarget(lix, target)) ?? { kind: "row", relation: null };
 }
 
 /* ── Anchor details, one reader per kind ────────────────────────────── */
@@ -508,13 +455,12 @@ export function selectFilePath(lix: Lix, fileId: string) {
 /* ── A conversation whose anchor was removed ────────────────────────── */
 
 /**
- * Deleting a conversation's target deletes the conversation and its
- * comments with it (Lix cascades). What was said is still in history: the
- * last state before the removal, and the commit that removed it.
+ * Deleting a conversation's target detaches the conversation: it keeps
+ * its comments and its `target`, which no longer names a row. What it was
+ * on is read from history: the row as it was just before the commit that
+ * removed it.
  */
-export type RemovedConversation = {
-	readonly conversation: ConversationRow;
-	readonly target: ConversationTarget;
+export type AnchorRemoval = {
 	/** The state just before the removal. */
 	readonly beforeCommitId: string;
 	/** The commit that removed it. */
@@ -524,26 +470,30 @@ export type RemovedConversation = {
 	readonly removedInCheckpoint: boolean;
 	/** The removing commit's first parent, for opening its review. */
 	readonly removedInParentCommitId: string | null;
-	readonly comments: readonly ConversationCommentRow[];
 	readonly anchor: MarkdownBlockAnchor | CsvRowAnchor | null;
 };
 
 /**
- * The removed conversation, when it went with its anchor. A conversation
- * deleted on its own (its anchor still here, or it had none) is not
- * "removed with its anchor": it is gone, and the view says only that.
+ * When the row a conversation is on (a Markdown block, a CSV row) has
+ * been deleted: the removal, with the anchor as it was. Null while the row
+ * is there, for any other target, or when history has no removal of it.
  */
-export async function readRemovedConversation(
+export async function readAnchorRemoval(
 	lix: Lix,
-	conversationId: string,
-): Promise<RemovedConversation | null> {
+	target: ConversationTarget,
+): Promise<AnchorRemoval | null> {
+	if (target.kind !== "markdown_block" && target.kind !== "csv_row")
+		return null;
+	if (await targetExists(lix, target)) return null;
+	const relation =
+		target.kind === "markdown_block" ? "markdown_node" : "csv_row";
+	const id = target.kind === "markdown_block" ? target.nodeId : target.rowId;
 	const history = await lix.execute(
-		"SELECT from_target, lixcol_from_commit_id, lixcol_to_commit_id, lixcol_commit_created_at FROM lix_history('lix_conversation') WHERE id = $1 AND diff_type = 'removed' ORDER BY lixcol_position ASC LIMIT 1",
-		[conversationId],
+		`SELECT lixcol_from_commit_id, lixcol_to_commit_id, lixcol_commit_created_at FROM lix_history('${relation}') WHERE id = $1 AND diff_type = 'removed' ORDER BY lixcol_position ASC LIMIT 1`,
+		[id],
 	);
 	const removal = history.rows[0] as
 		| {
-				from_target?: unknown;
 				lixcol_from_commit_id?: unknown;
 				lixcol_to_commit_id?: unknown;
 				lixcol_commit_created_at?: unknown;
@@ -551,35 +501,12 @@ export async function readRemovedConversation(
 		| undefined;
 	if (
 		!removal ||
-		typeof removal.from_target !== "string" ||
 		typeof removal.lixcol_from_commit_id !== "string" ||
 		typeof removal.lixcol_to_commit_id !== "string"
 	)
 		return null;
 	const before = removal.lixcol_from_commit_id;
 	const removedIn = removal.lixcol_to_commit_id;
-	const target = await resolveTargetAt(lix, removal.from_target, before);
-	if (target.kind !== "markdown_block" && target.kind !== "csv_row")
-		return null;
-	// Only the cascade of the anchor's removal: the anchor was there when
-	// the conversation was last visible and went in the very commit that
-	// took the conversation. A conversation deleted on purpose stays deleted
-	// when its anchor goes later, and one whose anchor is still here was
-	// deleted on its own. (Two deletions compacted into one checkpoint
-	// cannot be told apart; the anchor's goes first either way.)
-	if (!(await targetExists(lix, target, before))) return null;
-	if (await targetExists(lix, target, removedIn)) return null;
-	if (await targetExists(lix, target)) return null;
-	const conversationRows = await lix.execute(
-		"SELECT id, target, title, lixcol_global, lixcol_created_at FROM lix_as_of('lix_conversation', $1) WHERE id = $2",
-		[before, conversationId],
-	);
-	const conversation = conversationRows.rows[0] as ConversationRow | undefined;
-	if (!conversation) return null;
-	const comments = await lix.execute(
-		"SELECT id, body, lixcol_created_at, lixcol_change_id AS change_id FROM lix_as_of('lix_comment', $1) WHERE conversation_id = $2 ORDER BY lixcol_created_at, id",
-		[before, conversationId],
-	);
 	const log = await lix.execute(
 		"SELECT is_checkpoint, parent_commit_id FROM lix_log() WHERE commit_id = $1",
 		[removedIn],
@@ -588,14 +515,6 @@ export async function readRemovedConversation(
 		| { is_checkpoint?: unknown; parent_commit_id?: unknown }
 		| undefined;
 	return {
-		conversation: {
-			id: conversation.id,
-			target: conversation.target,
-			title: conversation.title ?? null,
-			lixcol_global: conversation.lixcol_global === true,
-			lixcol_created_at: conversation.lixcol_created_at ?? null,
-		},
-		target,
 		beforeCommitId: before,
 		removedInCommitId: removedIn,
 		removedAt:
@@ -607,57 +526,8 @@ export async function readRemovedConversation(
 			typeof logRow?.parent_commit_id === "string"
 				? logRow.parent_commit_id
 				: before,
-		comments: comments.rows as unknown as ConversationCommentRow[],
 		anchor: await readAnchorAt(lix, target, before),
 	};
-}
-
-async function resolveTargetAt(
-	lix: Lix,
-	target: string,
-	commitId: string,
-): Promise<ConversationTarget> {
-	const hint = rowRefHint(target);
-	const key = hint?.keys[0];
-	if (
-		hint &&
-		key &&
-		hint.fileId &&
-		(hint.relation === "markdown_node" || hint.relation === "csv_row")
-	) {
-		try {
-			if (await refEquals(lix, target, hint.relation, hint.fileId, key))
-				return hint.relation === "markdown_node"
-					? { kind: "markdown_block", fileId: hint.fileId, nodeId: key }
-					: { kind: "csv_row", fileId: hint.fileId, rowId: key };
-		} catch {
-			// Unknown relation here.
-		}
-	}
-	for (const relation of ["markdown_node", "csv_row"] as const) {
-		try {
-			const result = await lix.execute(
-				`SELECT id, lixcol_file_id FROM lix_as_of('${relation}', $1) WHERE lix_row_ref('${relation}', lixcol_file_id, id) = $2 LIMIT 1`,
-				[commitId, target],
-			);
-			const row = result.rows[0];
-			if (!row) continue;
-			return relation === "markdown_node"
-				? {
-						kind: "markdown_block",
-						fileId: String(row.lixcol_file_id),
-						nodeId: String(row.id),
-					}
-				: {
-						kind: "csv_row",
-						fileId: String(row.lixcol_file_id),
-						rowId: String(row.id),
-					};
-		} catch {
-			// The plugin is not installed.
-		}
-	}
-	return { kind: "row", relation: hint?.relation ?? null };
 }
 
 /** Whether the anchor row exists now, or at `commitId` when given. */
@@ -812,7 +682,7 @@ export type ConversationSummary = {
 	readonly anchorKind: ConversationAnchorKind;
 	/** "Checkpoint", "README.md › Releases", "posts.csv › row 14"; null when standalone. */
 	readonly anchorLabel: string | null;
-	/** Its anchor was deleted, and the conversation with it; read from history. */
+	/** Its anchor was deleted; the conversation lives on, detached from it. */
 	readonly removed: boolean;
 };
 
@@ -840,30 +710,23 @@ async function summarize(
 ): Promise<ConversationSummary | null> {
 	const rows = await selectConversation(lix, conversationId).execute();
 	const conversation = rows[0];
-	if (!conversation) {
-		const removed = await readRemovedConversation(lix, conversationId).catch(
-			() => null,
-		);
-		if (!removed) return null;
-		return {
-			id: conversationId,
-			title: removed.conversation.title?.trim() || null,
-			anchorKind: removed.target.kind,
-			anchorLabel: anchorLabel(removed.anchor),
-			removed: true,
-		};
-	}
+	if (!conversation) return null;
 	const target = await resolveConversationTarget(lix, conversation.target);
 	const anchor = await readAnchor(lix, target);
+	// Its row was deleted: named for what it was on.
+	const removal = anchor
+		? null
+		: await readAnchorRemoval(lix, target).catch(() => null);
 	return {
 		id: conversation.id,
 		title: conversation.title?.trim() || null,
 		anchorKind: target.kind,
 		anchorLabel: anchorLabel(
 			anchor ??
+				removal?.anchor ??
 				(target.kind === "row" || target.kind === "none" ? target : null),
 		),
-		removed: false,
+		removed: removal !== null,
 	};
 }
 

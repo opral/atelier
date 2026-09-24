@@ -166,6 +166,16 @@ export function markdownEditorExpectedFileMarkdown(
 	return persistenceBaselines.get(editor)?.expectedFileMarkdown;
 }
 
+/** True while a newer editor revision has not reached its persistence boundary. */
+export function markdownEditorHasUnacknowledgedChanges(
+	editor: Editor,
+): boolean {
+	const baseline = persistenceBaselines.get(editor);
+	return Boolean(
+		baseline && baseline.documentRevision !== baseline.acknowledgedRevision,
+	);
+}
+
 export const createMarkdownEditorOriginKey = (): string => {
 	if (
 		typeof crypto !== "undefined" &&

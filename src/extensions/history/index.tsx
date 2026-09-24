@@ -52,10 +52,7 @@ import {
 	setCommitConversationTitle,
 } from "./commit-conversations";
 import { emptyCommentDocument } from "@/components/comments/comment-composer";
-import {
-	ResolveButton,
-	useConversationsResolvable,
-} from "@/components/comments/resolve-controls";
+import { ResolveButton } from "@/components/comments/resolve-controls";
 import { setConversationResolved } from "@/lib/conversation-writes";
 import { OpenConversationButton } from "../conversation/open-conversation";
 
@@ -789,14 +786,12 @@ function CheckpointPage({
 }) {
 	const [visible, setVisible] = useState(false);
 	const [conversationRetryKey, setConversationRetryKey] = useState(0);
-	const resolvable = useConversationsResolvable();
 	const conversations = useHeldResult(
 		useQueryResult(
 			(lix) =>
 				selectCheckpointConversations(
 					lix,
 					checkpoints.map((checkpoint) => checkpoint.commit_id),
-					resolvable,
 				),
 			{ retryKey: conversationRetryKey },
 		),
@@ -859,7 +854,6 @@ function CheckpointPage({
 						)}
 						conversationStatus={conversations.status}
 						commentCounts={countsByConversation}
-						resolvable={resolvable}
 						// Resolved conversations are not counted.
 						commentCount={conversations.rows
 							.filter(
@@ -896,7 +890,6 @@ function CheckpointItem({
 	conversationStatus,
 	commentCount,
 	commentCounts,
-	resolvable,
 	onRefreshConversations,
 	activeFileId,
 	onPreviewVisible,
@@ -917,8 +910,6 @@ function CheckpointItem({
 	readonly commentCount: number;
 	/** Comments per conversation, for a resolved one's folded line. */
 	readonly commentCounts: ReadonlyMap<string, number>;
-	/** Whether this Lix can resolve a conversation (has the column). */
-	readonly resolvable: boolean;
 	readonly onRefreshConversations: () => void;
 	/** File scope: the file the rows are filtered by, marked in the previews. */
 	readonly activeFileId: string | null;
@@ -1108,9 +1099,12 @@ function CheckpointItem({
 	const showOpenConversation =
 		isViewing && !editingTitle && Boolean(atelier.views && conversations[0]);
 	const resolveTarget =
-		resolvable && isViewing && !editingTitle && !atelier.readOnly
+		isViewing && !editingTitle && !atelier.readOnly
 			? (openConversations[0] ?? null)
 			: null;
+	// The field reads its text once: after a Resolve took it as the note,
+	// a new field starts empty.
+	const [fieldKey, setFieldKey] = useState(0);
 	async function resolve(conversationId: string, resolved: boolean) {
 		try {
 			// A written comment goes with the Resolve, as its note.
@@ -1120,7 +1114,10 @@ function CheckpointItem({
 				resolved,
 				resolved ? draft : null,
 			);
-			if (resolved) setDraft(emptyCommentDocument());
+			if (resolved && hasConversationDraft(draft)) {
+				setDraft(emptyCommentDocument());
+				setFieldKey((key) => key + 1);
+			}
 		} catch (error) {
 			console.error(error);
 		}
@@ -1350,6 +1347,7 @@ function CheckpointItem({
 						onReopen={
 							atelier.readOnly ? undefined : (id) => void resolve(id, false)
 						}
+						fieldKey={fieldKey}
 						status={conversationStatus}
 						onRefresh={onRefreshConversations}
 						readOnly={atelier.readOnly}
@@ -1556,7 +1554,6 @@ function CheckpointFileList({
 		selectInstalledCommentableRelations(lix),
 	);
 	const installed = relations.rows.map((row) => row.schema_key).sort();
-	const resolvable = useConversationsResolvable();
 	const counts = useQueryResult(
 		(lix) =>
 			selectCheckpointFileConversationCounts(
@@ -1564,7 +1561,6 @@ function CheckpointFileList({
 				baseCommitId,
 				commitId,
 				installed,
-				resolvable,
 			),
 		{ enabled: relations.status === "success" && installed.length > 0 },
 	);

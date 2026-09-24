@@ -1,28 +1,7 @@
-import { useEffect, useState } from "react";
-import { useLix } from "@/lib/lix-react";
-import { conversationsResolvable } from "@/lib/conversation-writes";
-
 /*
- * Resolve and Reopen, shown only where the Lix can store it
- * (`useConversationsResolvable`): on a Lix without the `resolved` column
- * none of this renders, and every surface looks and counts as before.
+ * Resolve and Reopen: the ✓ beside "Open conversation", a resolved
+ * conversation folded to one line, and the conversation page's chip.
  */
-
-/** `conversationsResolvable` for a component: false until it is known. */
-export function useConversationsResolvable(): boolean {
-	const lix = useLix();
-	const [resolvable, setResolvable] = useState(false);
-	useEffect(() => {
-		let current = true;
-		void conversationsResolvable(lix).then((value) => {
-			if (current) setResolvable(value);
-		});
-		return () => {
-			current = false;
-		};
-	}, [lix]);
-	return resolvable;
-}
 
 function CheckIcon({
 	className = "size-3.5",
@@ -48,14 +27,30 @@ function CheckIcon({
 /**
  * "Resolve": a ✓ beside "Open conversation", drawn as it is (24px, the
  * secondary colour), and revealed the same way by the surface's classes.
+ * With `labelled`, a small button that says it (the conversation page,
+ * under its reply box).
  */
 export function ResolveButton({
 	onResolve,
 	className = "",
+	labelled = false,
 }: {
 	readonly onResolve: () => void;
 	readonly className?: string;
+	readonly labelled?: boolean;
 }) {
+	if (labelled)
+		return (
+			<button
+				type="button"
+				data-attr="resolve-conversation"
+				onClick={onResolve}
+				className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-control px-2.5 text-[12.5px] font-semibold text-fg-muted ring-1 ring-border-strong ring-inset hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`}
+			>
+				<CheckIcon />
+				Resolve conversation
+			</button>
+		);
 	return (
 		<button
 			type="button"

@@ -6,10 +6,10 @@ import { createCheckpoint } from "@/lib/lix-diff-commands";
 import {
 	anchorLabel,
 	readAnchor,
-	readRemovedConversation,
+	readAnchorRemoval,
 	replyInConversation,
 	resolveConversationTarget,
-	rowRefHint,
+	rowRefParts,
 	selectConversation,
 	selectConversationSummary,
 	selectConversationThread,
@@ -121,17 +121,17 @@ describe("conversation queries", () => {
 		csvRowId = records.rows[2]!.id as string;
 	}, 60_000);
 
-	test("rowRefHint decodes the relation, file and key of a v2 reference", async () => {
+	test("rowRefParts reads the relation, file and key of a reference through Lix", async () => {
 		const result = await lix.execute(
 			"SELECT lix_row_ref('markdown_node', $1, $2) AS ref",
 			[readmeId, paragraphId],
 		);
-		expect(rowRefHint(String(result.rows[0]!.ref))).toEqual({
+		expect(await rowRefParts(lix, String(result.rows[0]!.ref))).toEqual({
 			relation: "markdown_node",
 			fileId: readmeId,
 			keys: [paragraphId],
 		});
-		expect(rowRefHint("not a ref")).toBeNull();
+		expect(await rowRefParts(lix, "not a ref")).toBeNull();
 	});
 
 	test("a checkpoint conversation resolves to its commit, parent and files", async () => {
@@ -262,7 +262,7 @@ describe("conversation queries", () => {
 		).rejects.toThrow("no longer exists");
 	});
 
-	test("a conversation removed with its paragraph is read back from history", async () => {
+	test("a conversation whose paragraph was removed lives on, detached, and reads the paragraph from history", async () => {
 		const id = await startConversation(
 			lix,
 			{
@@ -277,12 +277,20 @@ describe("conversation queries", () => {
 			encode(README.replace(/\nSee open-design\.md[^\n]*\n/, "")),
 		]);
 		const removedIn = (await createCheckpoint(lix)).commitId;
-		// Lix cascades: the conversation and its comments went with the block.
-		expect(await selectConversation(lix, id).execute()).toEqual([]);
-		const removed = await readRemovedConversation(lix, id);
-		expect(removed).toMatchObject({
-			conversation: { id, title: "Keep open-design.md", lixcol_global: false },
-			target: { kind: "markdown_block", nodeId: removedParagraphId },
+		// Lix detaches it: the conversation, its comments and its target stay.
+		const [conversation] = await selectConversation(lix, id).execute();
+		expect(conversation).toMatchObject({ id, title: "Keep open-design.md" });
+		expect(conversation?.target).toEqual(expect.any(String));
+		expect(
+			await selectConversationThread(lix, id, false).execute(),
+		).toHaveLength(1);
+		const target = await resolveConversationTarget(lix, conversation!.target);
+		expect(target).toEqual({
+			kind: "markdown_block",
+			fileId: readmeId,
+			nodeId: removedParagraphId,
+		});
+		expect(await readAnchorRemoval(lix, target)).toMatchObject({
 			removedInCommitId: removedIn,
 			removedInCheckpoint: true,
 			anchor: {
@@ -290,12 +298,27 @@ describe("conversation queries", () => {
 				text: "See open-design.md for the Claude Design comparison.",
 			},
 		});
-		expect(removed?.comments).toHaveLength(1);
 		expect(await selectConversationSummary(lix, id)).toMatchObject({
 			title: "Keep open-design.md",
 			anchorKind: "markdown_block",
 			removed: true,
 		});
+		// It is still a conversation: it can be resolved.
+		await lix.execute(
+			"UPDATE lix_conversation SET resolved = true WHERE id = $1",
+			[id],
+		);
+	});
+
+	test("a block that is still there has no removal", async () => {
+		expect(
+			await readAnchorRemoval(lix, {
+				kind: "markdown_block",
+				fileId: readmeId,
+				nodeId: paragraphId,
+			}),
+		).toBeNull();
+		expect(await readAnchorRemoval(lix, { kind: "none" })).toBeNull();
 	});
 
 	test("a missing, deleted or malformed id is simply not available", async () => {
@@ -315,7 +338,6 @@ describe("conversation queries", () => {
 		await createCheckpoint(lix);
 		await lix.execute("DELETE FROM lix_conversation WHERE id = $1", [id]);
 		await createCheckpoint(lix);
-		expect(await readRemovedConversation(lix, id)).toBeNull();
 		expect(await selectConversationSummary(lix, id)).toBeNull();
 	});
 
@@ -345,7 +367,6 @@ describe("conversation queries", () => {
 			encode("# Notes\n\nKeep this paragraph.\n"),
 		]);
 		await createCheckpoint(lix);
-		expect(await readRemovedConversation(lix, id)).toBeNull();
 		expect(await selectConversationSummary(lix, id)).toBeNull();
 	});
 

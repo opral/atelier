@@ -43,10 +43,7 @@ import {
 	deleteComment,
 	setConversationResolved,
 } from "@/lib/conversation-writes";
-import {
-	ResolveButton,
-	useConversationsResolvable,
-} from "@/components/comments/resolve-controls";
+import { ResolveButton } from "@/components/comments/resolve-controls";
 import { CommentAvatar } from "@/components/comments/comment-avatar";
 import { useEditorCtx } from "../editor/editor-context";
 import { mountedView, useEditorViewMounted } from "../editor/mounted-view";
@@ -54,7 +51,7 @@ import {
 	joinMarkdownEditorSaves,
 	markdownEditorLastAcknowledgedMarkdown,
 } from "../editor/create-editor";
-import type { LixBatchStatement, LixTransaction, SqlParam } from "@lix-js/sdk";
+import type { LixTransaction, SqlParam } from "@lix-js/sdk";
 import { buildNormalizedMarkdownIncrementally } from "../editor/incremental-markdown-save";
 import {
 	blockCommentPluginKey,
@@ -180,16 +177,15 @@ type BlockConversationsState = {
 		comment: ThreadComment,
 	) => Promise<{ readonly focusHandled: boolean }>;
 	readonly accountId: string | null;
-	/** Whether this Lix can resolve a conversation (has the column). */
-	readonly resolvable: boolean;
 	/** Resolves a conversation, posting its written reply first. */
 	readonly resolveConversation: (conversationId: string) => Promise<void>;
 	readonly authorName: string;
 	/** Said when comments could not be kept on their blocks by a save. */
 	readonly notice: string | null;
 	/**
-	 * Conversations deleted with their block by someone else's write while
-	 * the document was open (Lix deletes the conversations on a deleted row).
+	 * Conversations removed with their block by someone else's write while
+	 * the document was open (Lix detaches the conversations on a deleted
+	 * row: they keep their comments, and their page shows the block).
 	 */
 	readonly removed: readonly string[];
 	readonly dismissRemoved: () => void;
@@ -449,9 +445,8 @@ const BlockConversationsController = memo(
 		const blocksResult = useQueryResult<MarkdownBlockRow>((session) =>
 			selectMarkdownBlocks(session, fileId),
 		);
-		const resolvable = useConversationsResolvable();
 		const commentsResult = useQueryResult((session) =>
-			selectBlockComments(session, fileId, resolvable),
+			selectBlockComments(session, fileId),
 		);
 		const accountResult = useQueryResult(selectActiveAccount);
 		const rows = blocksResult.rows.length ? blocksResult.rows : EMPTY_ROWS;
@@ -1005,23 +1000,25 @@ const BlockConversationsController = memo(
 
 		// A conversation belongs to the block the writer sees. Lix keeps it on
 		// a row, and a save re-derives the rows: a block merged away, cut or
-		// deleted takes its row with it, and Lix deletes the conversations on a
-		// deleted row. So the editor follows each conversation's block through
+		// deleted takes its row with it, and Lix detaches the conversations on
+		// a deleted row. So the editor follows each conversation's block through
 		// edits (a merge hands it to the block merged into, a split keeps it on
 		// the first half, text cut or dragged out of it takes it along to
 		// where it is pasted or dropped, a deletion hands it to the block that
 		// takes the deleted one's place, undo gives it back), and every save that changes
-		// the blocks moves the conversations in its own transaction: let go of
-		// their rows before the write, put on their blocks' new rows after it.
+		// the blocks moves the conversations in its own transaction: whatever
+		// the write detached, and whatever moved, is put on its block's new row
+		// after it.
 		// What the last save left: the blocks and the conversations' places.
 		// Empty until a save has placed them.
 		const lastSavedStructure = useRef("");
 		const [notice, setNotice] = useState<string | null>(null);
 
 		// A conversation that leaves the comments without this editor letting
-		// it go of its row: deleted. When its block's row went too, it went
-		// with the block (someone else's write removed the block), and the
-		// writer is told, with the way to the conversation's removed page.
+		// it go of its row: deleted, or detached. When its block's row went
+		// too, it went with the block (someone else's write removed the block;
+		// Lix detached it), and the writer is told, with the way to the
+		// conversation's page, which shows the removed block.
 		const [removed, setRemoved] = useState<readonly string[]>([]);
 		const dismissRemoved = useCallback(() => setRemoved([]), []);
 		// The threads known to be on this file. One that goes missing stays
@@ -1049,14 +1046,23 @@ const BlockConversationsController = memo(
 					const list = (values: readonly string[]) =>
 						values.map((_, index) => `$${index + 1}`).join(", ");
 					const existing = await lix.execute(
-						`SELECT id FROM lix_conversation WHERE id IN (${list(ids)})`,
+						`SELECT id, resolved FROM lix_conversation WHERE id IN (${list(ids)})`,
 						ids,
 					);
-					const exists = new Set(
-						existing.rows.map((row) => String((row as { id: unknown }).id)),
+					const rows = existing.rows as { id: unknown; resolved: unknown }[];
+					const exists = new Set(rows.map((row) => String(row.id)));
+					// Resolved: left on purpose, and still followed with its block,
+					// so a Reopen finds it where it was.
+					const resolved = new Set(
+						rows
+							.filter((row) => row.resolved === true)
+							.map((row) => String(row.id)),
 					);
+					// Gone from the file otherwise: deleted, or its block's row was
+					// deleted under it (Lix detaches the conversation, which keeps
+					// a target that no longer resolves).
 					const deleted = missing.filter(
-						(thread) => !exists.has(thread.conversationId),
+						(thread) => !resolved.has(thread.conversationId),
 					);
 					let withBlock: string[] = [];
 					if (deleted.length > 0) {
@@ -1068,11 +1074,17 @@ const BlockConversationsController = memo(
 						const stillThere = new Set(
 							blockRows.rows.map((row) => String((row as { id: unknown }).id)),
 						);
-						for (const thread of deleted)
-							carriers.current.delete(thread.conversationId);
 						withBlock = deleted
 							.filter((thread) => !stillThere.has(thread.nodeId))
 							.map((thread) => thread.conversationId);
+						// A deleted one, or one whose block went, is not put back
+						// on a block by the next save.
+						for (const thread of deleted)
+							if (
+								!exists.has(thread.conversationId) ||
+								withBlock.includes(thread.conversationId)
+							)
+								carriers.current.delete(thread.conversationId);
 					}
 					// Settled: a thread that has not come back is no longer known,
 					// unless it came back and went again while this lookup was out;
@@ -1313,9 +1325,12 @@ const BlockConversationsController = memo(
 			editor.on("transaction", onTransaction);
 
 			/**
-			 * What moves the conversations with a save of `doc`: one statement
-			 * that lets them go of their rows, and the work that puts each on
-			 * its block's new row once the file is re-projected.
+			 * What moves the conversations with a save of `doc`: the work that
+			 * puts each on its block's new row once the file is re-projected.
+			 * Nothing is let go of before the write: a row the write deletes
+			 * leaves its conversation detached (Lix keeps the conversation,
+			 * its target no longer resolving), and this puts it back on its
+			 * block, in the same transaction.
 			 */
 			const plan = (doc: ProseMirrorNode) => {
 				const conversationIds = [...carriers.current.keys()];
@@ -1330,37 +1345,11 @@ const BlockConversationsController = memo(
 					.join(",")}`;
 				let unplacedIds: string[] = [];
 				let goneIds: string[] = [];
-				// Let go of their rows before this save (by an earlier one).
-				const wereDetached = new Set(detachedIds.current);
+				// Off their rows after the write: detached by it (their target no
+				// longer names a row of this file), or by an earlier one.
+				let looseIds = new Set<string>();
 				const list = (ids: readonly string[]) =>
 					ids.map((_, index) => `$${index + 1}`).join(", ");
-				const releaseOf = (ids: readonly string[]): LixBatchStatement => ({
-					sql: `UPDATE lix_conversation SET target = NULL WHERE lixcol_global = false AND id IN (${list(ids)})`,
-					params: [...ids],
-				});
-				const existingIn = async (transaction: LixTransaction) => {
-					const existing = await transaction.execute(
-						`SELECT id FROM lix_conversation WHERE id IN (${list(conversationIds)})`,
-						conversationIds,
-					);
-					return new Set(
-						existing.rows.map((row) => String((row as { id: unknown }).id)),
-					);
-				};
-				// Learned by the save's rehearsal: the conversations whose rows the
-				// write deletes. Only these are let go of before it; every other
-				// conversation is left alone unless its block's row changes.
-				let atRisk: string[] = [];
-				const rehearse = async (transaction: LixTransaction) => {
-					const survived = await existingIn(transaction);
-					const before = await lix.execute(
-						`SELECT id FROM lix_conversation WHERE id IN (${list(conversationIds)})`,
-						conversationIds,
-					);
-					atRisk = before.rows
-						.map((row) => String((row as { id: unknown }).id))
-						.filter((id) => !survived.has(id));
-				};
 				const attach = async (transaction: LixTransaction) => {
 					const query = selectMarkdownBlocks(lix, fileId).compile();
 					const saved = await transaction.execute(
@@ -1371,9 +1360,23 @@ const BlockConversationsController = memo(
 						doc,
 						saved.rows as unknown as MarkdownBlockRow[],
 					);
-					// Conversations deleted meanwhile (by hand, or with their block
-					// by someone else's write) are let go of for good.
-					const exists = await existingIn(transaction);
+					const existing = await transaction.execute(
+						`SELECT id FROM lix_conversation WHERE id IN (${list(conversationIds)})`,
+						conversationIds,
+					);
+					const exists = new Set(
+						existing.rows.map((row) => String((row as { id: unknown }).id)),
+					);
+					const attached = await transaction.execute(
+						`SELECT conversation.id AS id FROM lix_conversation AS conversation JOIN markdown_node AS block ON conversation.target = lix_row_ref('markdown_node', block.lixcol_file_id, block.id) WHERE block.lixcol_file_id = $${conversationIds.length + 1} AND conversation.id IN (${list(conversationIds)})`,
+						[...conversationIds, fileId],
+					);
+					const onRows = new Set(
+						attached.rows.map((row) => String((row as { id: unknown }).id)),
+					);
+					looseIds = new Set([...exists].filter((id) => !onRows.has(id)));
+					// Conversations deleted meanwhile (by hand, or a comment's last
+					// delete) are let go of for good.
 					goneIds = conversationIds.filter((id) => !exists.has(id));
 					unplacedIds = [];
 					for (const [conversationId, index] of targets) {
@@ -1388,13 +1391,10 @@ const BlockConversationsController = memo(
 						// (One statement each: Lix SQL has no CASE in an UPDATE's
 						// SET, opral/lix#1901.)
 						const current = await transaction.execute(
-							"SELECT target = lix_row_ref('markdown_node', $2, $3) AS same FROM lix_conversation WHERE id = $1",
+							"SELECT id FROM lix_conversation WHERE id = $1 AND target = lix_row_ref('markdown_node', $2, $3)",
 							[conversationId, fileId, nodeId],
 						);
-						if (
-							(current.rows[0] as { same?: unknown } | undefined)?.same === true
-						)
-							continue;
+						if (current.rows.length > 0) continue;
 						await transaction.execute(
 							"UPDATE lix_conversation SET target = lix_row_ref('markdown_node', $2, $3) WHERE id = $1",
 							[conversationId, fileId, nodeId],
@@ -1408,26 +1408,16 @@ const BlockConversationsController = memo(
 						detachedIds.current.delete(id);
 					}
 					// Without a row to be put on (the document was emptied), the ones
-					// let go of stay let go of, and kept, until a save gives their
-					// blocks rows; every other one is on its row.
+					// off their rows stay let go of, and kept, until a save gives
+					// their blocks rows; every other one is on its row.
 					for (const id of conversationIds) {
-						const letGo =
-							unplacedIds.includes(id) &&
-							(atRisk.includes(id) || wereDetached.has(id));
-						if (letGo) detachedIds.current.add(id);
+						if (unplacedIds.includes(id) && looseIds.has(id))
+							detachedIds.current.add(id);
 						else detachedIds.current.delete(id);
 					}
 					setNotice(null);
 				};
-				return {
-					structure: savedStructure,
-					rehearse,
-					before: (): readonly LixBatchStatement[] =>
-						atRisk.length > 0 ? [releaseOf(atRisk)] : [],
-					lastResort: releaseOf(conversationIds),
-					attach,
-					committed,
-				};
+				return { structure: savedStructure, attach, committed };
 			};
 
 			// Puts conversations back on their rows outside a save, after a save
@@ -1477,9 +1467,6 @@ const BlockConversationsController = memo(
 					// arrives, and must not be forgotten in between.
 					for (const id of carriers.current.keys()) detachedIds.current.add(id);
 					return {
-						rehearse: work.rehearse,
-						before: work.before,
-						lastResort: [work.lastResort],
 						after: work.attach,
 						committed: work.committed,
 						degraded: (cause) => {
@@ -1638,7 +1625,6 @@ const BlockConversationsController = memo(
 				submitReply,
 				deleteComment: deleteBlockComment,
 				accountId,
-				resolvable,
 				resolveConversation,
 				authorName: name,
 				notice,
@@ -1659,7 +1645,6 @@ const BlockConversationsController = memo(
 				pending,
 				removed,
 				dismissRemoved,
-				resolvable,
 				resolveConversation,
 				pendingDraft,
 				pendingIndex,
@@ -2144,16 +2129,14 @@ function ConversationBody({
 								className="markdown-comment-open"
 							/>
 						) : null}
-						{state.resolvable ? (
-							<ResolveButton
-								className="markdown-comment-resolve"
-								onResolve={() =>
-									void state
-										.resolveConversation(conversationId)
-										.catch((error: unknown) => console.error(error))
-								}
-							/>
-						) : null}
+						<ResolveButton
+							className="markdown-comment-resolve"
+							onResolve={() =>
+								void state
+									.resolveConversation(conversationId)
+									.catch((error: unknown) => console.error(error))
+							}
+						/>
 						<CommentThread
 							comments={conversation.comments}
 							label={

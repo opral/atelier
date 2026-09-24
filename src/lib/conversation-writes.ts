@@ -73,45 +73,10 @@ export async function deleteComment(
 }
 
 /*
- * Resolving a conversation. Lix adds a `resolved` column to
- * `lix_conversation`; until the vendored Lix has it, every Resolve control
- * stays hidden and every count reads as before (`useConversationsResolvable`
- * in `@/components/comments/resolve-controls`).
+ * Resolving a conversation: `lix_conversation.resolved` (boolean, false by
+ * default, also for conversations written before the column existed).
+ * Resolved conversations are not counted and do not mark their blocks.
  */
-
-/**
- * A query's condition that its `lix_conversation` row (as `alias`) is not
- * resolved. Only where the column exists: pass `useConversationsResolvable`.
- */
-export function unresolved(alias: string) {
-	return sql<boolean>`coalesce(${sql.ref(`${alias}.resolved`)}, false) = false`;
-}
-
-/** The `resolved` column, or false where this Lix has none. */
-export function resolvedColumn(alias: string, resolvable: boolean) {
-	return resolvable
-		? sql<boolean>`coalesce(${sql.ref(`${alias}.resolved`)}, false)`.as(
-				"resolved",
-			)
-		: sql<boolean>`false`.as("resolved");
-}
-
-const resolvableByLix = new WeakMap<Lix, Promise<boolean>>();
-
-/** Whether this Lix's `lix_conversation` has the `resolved` column. */
-export function conversationsResolvable(lix: Lix): Promise<boolean> {
-	let known = resolvableByLix.get(lix);
-	if (!known) {
-		known = lix
-			.execute("SELECT * FROM lix_conversation LIMIT 0")
-			.then((result) =>
-				result.columns.some((column) => column.name === "resolved"),
-			)
-			.catch(() => false);
-		resolvableByLix.set(lix, known);
-	}
-	return known;
-}
 
 /**
  * Resolves or reopens a conversation. A note (what the reply field held

@@ -1205,6 +1205,82 @@ describe("checkpoint conversation flows", () => {
 		}
 	});
 
+	test("Resolve folds the open checkpoint's conversation to one line, posting what was written; Reopen brings it back", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await createCommitConversation(lix, commitId, commentBody("Ready?"));
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub({ historicalCommitId: commitId })} />
+			</LixProvider>,
+		);
+		try {
+			const field = await screen.findByRole("textbox", { name: "Reply" });
+			act(() => field.focus());
+			await typeInto(field, "Yes, shipped");
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "Resolve conversation" }),
+				);
+			});
+			await waitFor(() =>
+				expect(screen.queryByRole("list", { name: "Comments" })).toBeNull(),
+			);
+			// The note went with it: two comments.
+			expect(
+				await screen.findByText(/Resolved · 2 comments/),
+			).toBeInTheDocument();
+			const resolved = await lix.execute(
+				"SELECT resolved FROM lix_conversation WHERE lixcol_global = true",
+			);
+			expect(resolved.rows[0]?.resolved).toBe(true);
+			// A new field, empty: the note is not left to be sent again.
+			await waitFor(() =>
+				expect(
+					screen.getByRole("textbox", { name: "Comment on this checkpoint" }),
+				).not.toHaveTextContent("Yes, shipped"),
+			);
+			await act(async () => {
+				fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
+			});
+			const thread = await screen.findByRole("list", { name: "Comments" });
+			expect(
+				await within(thread).findByText("Yes, shipped"),
+			).toBeInTheDocument();
+			expect(screen.queryByText(/Resolved ·/)).toBeNull();
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
+	test("a resolved conversation is not counted on its checkpoint's row", async () => {
+		const lix = await openLix();
+		const { commitId } = await createCheckpoint(lix);
+		await createCommitConversation(lix, commitId, commentBody("Done"));
+		const view = render(
+			<LixProvider lix={lix}>
+				<HistoryView atelier={atelierStub()} />
+			</LixProvider>,
+		);
+		try {
+			await waitFor(() =>
+				expect(screen.getByLabelText("1 comment")).toBeInTheDocument(),
+			);
+			await act(async () => {
+				await lix.execute("UPDATE lix_conversation SET resolved = true");
+			});
+			await waitFor(() =>
+				expect(
+					document.querySelector("[data-attr=history-comment-count]"),
+				).toBeNull(),
+			);
+		} finally {
+			view.unmount();
+			await lix.close();
+		}
+	});
+
 	test("a click on another checkpoint lets the mouse move focus from History, not from the document", async () => {
 		const lix = await openLix();
 		await createCheckpoint(lix);

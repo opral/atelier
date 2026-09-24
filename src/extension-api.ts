@@ -138,6 +138,10 @@ export type AtelierFilesViewOptions = {
 };
 
 export type AtelierDocumentOrigin = "existing" | "new";
+export type AtelierDocumentNavigationCause =
+	| "foreground"
+	| "route"
+	| "restoration";
 
 export type AtelierDocumentOpenOptions = {
 	/** Cancels navigation before it changes the workspace. */
@@ -145,6 +149,8 @@ export type AtelierDocumentOpenOptions = {
 	readonly state?: AtelierExtensionState;
 	readonly focus?: boolean;
 	readonly documentOrigin?: AtelierDocumentOrigin;
+	/** Why the document entered the workspace, independent of its content origin. */
+	readonly navigationCause?: AtelierDocumentNavigationCause;
 	/**
 	 * Appends a new main tab instead of navigating the active tab in place.
 	 * Appends a new main tab instead of navigating the active tab.
@@ -179,12 +185,12 @@ export type AtelierViewOpenOptions = {
 };
 
 export type AtelierViewsApi = {
-	/** Opens (or activates) a registered extension view. */
+	/** Resolves when the registered extension view is active. */
 	open(extensionId: string, options?: AtelierViewOpenOptions): Promise<void>;
 };
 
 export type AtelierDocumentsApi = {
-	/** Opens a document by workspace path. */
+	/** Resolves when the document is active; rejects if its activation is displaced. */
 	open(path: string, options?: AtelierDocumentOpenOptions): Promise<void>;
 	/** Requests Atelier's contextual new-document UI. */
 	startNew(): Promise<void>;
@@ -200,7 +206,9 @@ export type AtelierDocumentsApi = {
 export type AtelierEvent =
 	| {
 			type: "document_open_attempted";
+			fileId: string;
 			filePath: string;
+			navigationCause: AtelierDocumentNavigationCause;
 			documentOrigin: AtelierDocumentOrigin;
 			viewKind: string;
 			supported: boolean;
@@ -214,6 +222,7 @@ export type AtelierEvent =
 	| {
 			/** The first document data has rendered; excludes subsequent refreshes. */
 			type: "document_loaded";
+			fileId: string | undefined;
 			filePath: string;
 			viewKind: string;
 			durationMs: number;
@@ -384,7 +393,11 @@ export type AtelierDocumentLinks = {
 
 export type AtelierExtensionRuntime = {
 	readonly lix: Lix;
-	readonly scopeDocumentLix?: (path: string, lix: Lix) => Lix;
+	readonly scopeDocumentLix?: (
+		path: string,
+		fileId: string | undefined,
+		lix: Lix,
+	) => Lix;
 	/** The host's file URLs, when it has any; see `AtelierDocumentLinks`. */
 	readonly documentLinks?: AtelierDocumentLinks;
 	/**

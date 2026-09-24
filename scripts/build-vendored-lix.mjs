@@ -57,6 +57,8 @@ const browserFiles = [
 	join(sdkDist, "index.d.ts"),
 	join(sdkDist, "wasm", "lix_js_sdk.js"),
 	join(sdkDist, "wasm", "lix_js_sdk_bg.wasm"),
+	join(sdkDist, "migration-wasm", "lix_js_sdk.js"),
+	join(sdkDist, "migration-wasm", "lix_js_sdk_bg.wasm"),
 	join(sdkDist, "bundled-plugins", "plugin_markdown.lixplugin"),
 	join(sdkDist, "bundled-plugins", "plugin_csv.lixplugin"),
 	join(opfsRoot, "dist", "index.js"),
@@ -219,7 +221,13 @@ async function buildFromSource() {
 	run("npm", ["ci"], env, sdkRoot);
 	if (!browserReady) {
 		// Prepare only browser outputs here. The native build below does not clean dist.
-		for (const script of ["clean", "build:wasm", "build:ts", "build:plugins"]) {
+		for (const script of [
+			"clean",
+			"build:wasm",
+			"build:migration:wasm",
+			"build:ts",
+			"build:plugins",
+		]) {
 			run("npm", ["run", script], env, sdkRoot);
 		}
 		run("npm", ["ci"], env, opfsRoot);

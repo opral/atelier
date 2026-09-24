@@ -201,6 +201,27 @@ describe("per-file conversation counts under a checkpoint", () => {
 			).execute();
 			// Only the edited paragraph's conversation belongs to this checkpoint.
 			expect(counts).toEqual([{ file_id: fileId, conversation_count: 1 }]);
+
+			// A resolved conversation is not counted; reopened, it is again.
+			await lix.execute(
+				"UPDATE lix_conversation SET resolved = true WHERE target = lix_row_ref('markdown_node', $1, $2)",
+				[fileId, changedId],
+			);
+			const recount = () =>
+				selectCheckpointFileConversationCounts(
+					lix,
+					before.commitId,
+					after.commitId,
+					relations,
+				).execute();
+			expect(await recount()).toEqual([]);
+			await lix.execute(
+				"UPDATE lix_conversation SET resolved = false WHERE target = lix_row_ref('markdown_node', $1, $2)",
+				[fileId, changedId],
+			);
+			expect(await recount()).toEqual([
+				{ file_id: fileId, conversation_count: 1 },
+			]);
 		} finally {
 			await lix.close();
 		}

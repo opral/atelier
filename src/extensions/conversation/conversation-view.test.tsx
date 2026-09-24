@@ -7,7 +7,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { Lix } from "@lix-js/sdk";
+import { bundledPluginArchives, type Lix } from "@lix-js/sdk";
 import type { Document } from "@opral/zettel-ast";
 import { LixProvider } from "@/lib/lix-react";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
@@ -250,6 +250,34 @@ describe("ConversationView", () => {
 		).toBeTruthy();
 	});
 
+	test("Resolve conversation resolves it, and the page says so with Reopen", async () => {
+		lix = await openLix();
+		const { id } = await checkpointConversation(lix, ["Ready to send?"]);
+		renderView(runtimeStub(), id);
+		const resolve = await screen.findByRole("button", {
+			name: /Resolve conversation/,
+		});
+		await act(async () => {
+			fireEvent.click(resolve);
+		});
+		await screen.findByText("Resolved");
+		expect(
+			screen.queryByRole("button", { name: /Resolve conversation/ }),
+		).toBeNull();
+		const row = await lix.execute(
+			"SELECT resolved FROM lix_conversation WHERE id = $1",
+			[id],
+		);
+		expect(row.rows[0]?.resolved).toBe(true);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
+		});
+		await waitFor(() => expect(screen.queryByText("Resolved")).toBeNull());
+		expect(
+			screen.getByRole("button", { name: /Resolve conversation/ }),
+		).toBeTruthy();
+	});
+
 	test("a missing or malformed id says only that the conversation isn't available", async () => {
 		lix = await openLix();
 		renderView(runtimeStub(), crypto.randomUUID());
@@ -258,44 +286,74 @@ describe("ConversationView", () => {
 		).toBeTruthy();
 	});
 
-	test("a missing conversation reads history only when it can have changed, and not in the background", async () => {
+	test("a conversation whose paragraph was removed shows the paragraph as it was, and can still be answered and resolved", async () => {
+		lix = await openLix();
+		const plugin = (await bundledPluginArchives()).find(
+			(archive) => archive.key === "plugin_markdown",
+		)!;
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			`/.lix/plugins/${plugin.key}.lixplugin`,
+			plugin.archiveBytes,
+		]);
+		const fileId = (
+			await lix.execute(
+				"INSERT INTO lix_file (path, content) VALUES ($1, $2) RETURNING id",
+				[
+					"/README.md",
+					new TextEncoder().encode("# Hello\n\nKeep me.\n\nGone soon.\n"),
+				],
+			)
+		).rows[0]!.id as string;
+		const nodes = await lix.execute(
+			"SELECT id, payload_json FROM markdown_node WHERE lixcol_file_id = $1 AND kind = 'paragraph' ORDER BY order_key",
+			[fileId],
+		);
+		const nodeId = String(nodes.rows[1]!.id);
+		const id = crypto.randomUUID();
+		await lix.execute(
+			"INSERT INTO lix_conversation (id, target) VALUES ($1, lix_row_ref('markdown_node', $2, $3))",
+			[id, fileId, nodeId],
+		);
+		await lix.execute(
+			"INSERT INTO lix_comment (id, conversation_id, body) VALUES ($1, $2, $3::jsonb)",
+			[crypto.randomUUID(), id, JSON.stringify(body("Why is this here?"))],
+		);
+		await createCheckpoint(lix);
+		await lix.execute("UPDATE lix_file SET content = $2 WHERE id = $1", [
+			fileId,
+			new TextEncoder().encode("# Hello\n\nKeep me.\n"),
+		]);
+		await createCheckpoint(lix);
+		renderView(runtimeStub(), id);
+		const context = await screen.findByRole("navigation", {
+			name: "Attached to",
+		});
+		expect(context.textContent).toMatch(/removed/);
+		expect(await screen.findByText("Gone soon.")).toBeTruthy();
+		expect(screen.getByText("Why is this here?")).toBeTruthy();
+		expect(
+			screen.getByRole("textbox", { name: "Leave a comment" }),
+		).toBeTruthy();
+		await act(async () => {
+			fireEvent.click(
+				screen.getByRole("button", { name: /Resolve conversation/ }),
+			);
+		});
+		await screen.findByText("Resolved");
+	});
+
+	test("a missing conversation reads no history: a removed anchor detaches, never deletes", async () => {
 		lix = await openLix();
 		const execute = vi.spyOn(lix, "execute");
-		const historyReads = () =>
-			execute.mock.calls.filter(([statement]) =>
-				String(statement).includes("lix_history"),
-			).length;
-		const id = crypto.randomUUID();
-		const background = render(
-			<LixProvider lix={lix}>
-				<ConversationView
-					atelier={runtimeStub() as never}
-					view={{
-						instanceId: "bg",
-						isActive: false,
-						state: { conversationId: id },
-					}}
-				/>
-			</LixProvider>,
-		);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-		expect(historyReads()).toBe(0);
-		background.unmount();
-
-		renderView(runtimeStub(), id);
+		renderView(runtimeStub(), crypto.randomUUID());
 		expect(
 			await screen.findByText("This conversation isn’t available"),
 		).toBeTruthy();
-		const reads = historyReads();
-		expect(reads).toBeGreaterThan(0);
-		// Commits elsewhere in the workspace are not a reason to read again.
-		for (let index = 0; index < 3; index++)
-			await lix.execute(
-				"INSERT INTO lix_key_value (key, value) VALUES ($1, $2)",
-				[`elsewhere-${index}`, "x"],
-			);
-		await new Promise((resolve) => setTimeout(resolve, 300));
-		expect(historyReads()).toBe(reads);
+		expect(
+			execute.mock.calls.filter(([statement]) =>
+				String(statement).includes("lix_history"),
+			),
+		).toHaveLength(0);
 	});
 
 	test("a malformed id needs no read", async () => {
