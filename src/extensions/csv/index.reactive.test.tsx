@@ -2941,12 +2941,16 @@ test("the review toolbar offers to show every row, and opens the bands when it i
 			"/folded.csv",
 			rows(String),
 		]);
-		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute(
+			"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
+		);
 		await lix.execute("UPDATE lix_file SET content = $1 WHERE path = $2", [
 			rows((index) => (index === 5 ? "changed" : String(index))),
 			"/folded.csv",
 		]);
-		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute(
+			"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
+		);
 		const observe = vi.spyOn(lix, "observe");
 		utils = render(<Atelier lix={lix} />);
 		await waitFor(() => expect(observe).toHaveBeenCalled());
@@ -2993,14 +2997,18 @@ test("checkpoint review reveals CSV column additions on a freshly opened surface
 				"company,website\r\nExample,https://example.com\r\n",
 			),
 		]);
-		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute(
+			"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
+		);
 		await lix.execute("UPDATE lix_file SET content = $1 WHERE path = $2", [
 			new TextEncoder().encode(
 				"company,website,company_size_min,company_size_max\r\nExample,https://example.com,51,200\r\n",
 			),
 			"/leads.csv",
 		]);
-		await lix.execute("SELECT commit_id FROM lix_create_checkpoint()");
+		await lix.execute(
+			"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
+		);
 		const observe = vi.spyOn(lix, "observe");
 		utils = render(<Atelier lix={lix} />);
 		await waitFor(() => expect(observe).toHaveBeenCalled());

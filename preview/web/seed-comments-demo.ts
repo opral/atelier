@@ -127,7 +127,7 @@ async function seedCheckpoints(lix: Lix): Promise<void> {
 				);
 		}
 		const created = await lix.execute(
-			"SELECT commit_id FROM lix_create_checkpoint()",
+			"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
 		);
 		const commitId = created.rows[0]?.commit_id;
 		if (typeof commitId !== "string") continue;

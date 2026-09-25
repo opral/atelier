@@ -907,7 +907,9 @@ describe("diff review navigation", () => {
 			await waitFor(() => {
 				expect(
 					execute.mock.calls.some(([statement]) =>
-						String(statement).includes("FROM lix_create_checkpoint("),
+						String(statement).includes(
+							"FROM lix_create_checkpoint(NULL, NULL, ARRAY(",
+						),
 					),
 				).toBe(true);
 			});
@@ -1094,7 +1096,9 @@ describe("diff review navigation", () => {
 			await waitFor(() => {
 				expect(
 					execute.mock.calls.some(([statement]) =>
-						String(statement).includes("FROM lix_create_checkpoint("),
+						String(statement).includes(
+							"FROM lix_create_checkpoint(NULL, NULL, ARRAY(",
+						),
 					),
 				).toBe(true);
 			});
