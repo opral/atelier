@@ -1,10 +1,11 @@
-import { bundledPluginArchives, type Lix } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
+import { lixPluginArchive } from "./lix-plugin-archives";
 
 const MARKDOWN_PLUGIN_KEY = "plugin_markdown";
 const MARKDOWN_PLUGIN_PATH = `/.lix/plugins/${MARKDOWN_PLUGIN_KEY}.lixplugin`;
 
 /**
- * Installs the SDK's bundled Markdown plugin, the way a host does: its
+ * Installs the Markdown plugin, the way a host does: its
  * archive written to `/.lix/plugins/<key>.lixplugin` (vendor/lix
  * docs/plugins.md). The plugin projects each Markdown file into
  * `markdown_node` rows, which block conversations attach to and History
@@ -21,13 +22,10 @@ export async function installMarkdownPlugin(lix: Lix): Promise<void> {
 		[MARKDOWN_PLUGIN_PATH],
 	);
 	if (installed.rows.length > 0) return;
-	const archive = (await bundledPluginArchives()).find(
-		(plugin) => plugin.key === MARKDOWN_PLUGIN_KEY,
-	);
-	if (!archive) throw new Error("The SDK bundles no Markdown plugin.");
+	const archiveBytes = await lixPluginArchive(MARKDOWN_PLUGIN_KEY);
 	await lix.execute(
 		"INSERT INTO lix_file (path, content) VALUES ($1, $2) ON CONFLICT (path) DO UPDATE SET content = excluded.content",
-		[MARKDOWN_PLUGIN_PATH, archive.archiveBytes],
+		[MARKDOWN_PLUGIN_PATH, archiveBytes],
 	);
 	const markdownFiles = await lix.execute<{ id: string; content: Uint8Array }>(
 		"SELECT id, content FROM lix_file WHERE path LIKE '%.md'",

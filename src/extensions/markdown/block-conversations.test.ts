@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { bundledPluginArchives } from "@lix-js/sdk";
+import { lixPluginArchives } from "@/test-utils/lix-plugin-archives";
 import { Editor, type JSONContent } from "@tiptap/core";
 import type { Document } from "@opral/zettel-ast";
 import { openLix } from "@/test-utils/node-lix-sdk";
@@ -187,10 +187,10 @@ describe("block conversations in Lix", () => {
 		);
 		try {
 			// The rows a conversation attaches to are the Markdown plugin's.
-			const plugin = (await bundledPluginArchives()).find(
+			const plugin = (await lixPluginArchives()).find(
 				(archive) => archive.key === "plugin_markdown",
 			);
-			if (!plugin) throw new Error("expected the bundled Markdown plugin");
+			if (!plugin) throw new Error("expected the Markdown plugin");
 			await lix.execute(
 				"INSERT INTO lix_file (path, content) VALUES ($1, $2)",
 				[`/.lix/plugins/${plugin.key}.lixplugin`, plugin.archiveBytes],

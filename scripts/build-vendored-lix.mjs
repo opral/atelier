@@ -59,8 +59,6 @@ const browserFiles = [
 	join(sdkDist, "wasm", "lix_js_sdk_bg.wasm"),
 	join(sdkDist, "migration-wasm", "lix_js_sdk.js"),
 	join(sdkDist, "migration-wasm", "lix_js_sdk_bg.wasm"),
-	join(sdkDist, "bundled-plugins", "plugin_markdown.lixplugin"),
-	join(sdkDist, "bundled-plugins", "plugin_csv.lixplugin"),
 	join(opfsRoot, "dist", "index.js"),
 ];
 console.log(`[lix-sdk] Selected vendored Lix ${revision}.`);
@@ -226,7 +224,6 @@ async function buildFromSource() {
 			"build:wasm",
 			"build:migration:wasm",
 			"build:ts",
-			"build:plugins",
 		]) {
 			run("npm", ["run", script], env, sdkRoot);
 		}

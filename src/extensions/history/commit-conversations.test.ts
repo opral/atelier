@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { toHtml } from "@opral/zettel-html";
 import type { Document } from "@opral/zettel-ast";
-import { bundledPluginArchives } from "@lix-js/sdk";
+import { lixPluginArchives } from "@/test-utils/lix-plugin-archives";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
 import {
@@ -151,10 +151,10 @@ describe("per-file conversation counts under a checkpoint", () => {
 	test("counts conversations on the Markdown blocks a checkpoint changed", async () => {
 		const lix = await openLix();
 		try {
-			const plugin = (await bundledPluginArchives()).find(
+			const plugin = (await lixPluginArchives()).find(
 				(archive) => archive.key === "plugin_markdown",
 			);
-			if (!plugin) throw new Error("expected the bundled Markdown plugin");
+			if (!plugin) throw new Error("expected the Markdown plugin");
 			await lix.execute(
 				"INSERT INTO lix_file (path, content) VALUES ($1, $2)",
 				[`/.lix/plugins/${plugin.key}.lixplugin`, plugin.archiveBytes],

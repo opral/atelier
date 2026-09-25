@@ -16,7 +16,7 @@ import {
 	getNearestEditorFromDOMNode,
 	type LexicalEditor,
 } from "lexical";
-import { bundledPluginArchives } from "@lix-js/sdk";
+import { lixPluginArchives } from "@/test-utils/lix-plugin-archives";
 import type { Editor } from "@tiptap/core";
 import type { Document } from "@opral/zettel-ast";
 import { LixProvider } from "@/lib/lix-react";
@@ -70,10 +70,10 @@ async function setup(
 	}: { readonly last?: boolean; readonly views?: AtelierViewsApi | null } = {},
 ) {
 	const lix = await openLix();
-	const plugin = (await bundledPluginArchives()).find(
+	const plugin = (await lixPluginArchives()).find(
 		(archive) => archive.key === "plugin_markdown",
 	);
-	if (!plugin) throw new Error("expected the bundled Markdown plugin");
+	if (!plugin) throw new Error("expected the Markdown plugin");
 	await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
 		`/.lix/plugins/${plugin.key}.lixplugin`,
 		plugin.archiveBytes,

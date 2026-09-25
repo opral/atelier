@@ -37,9 +37,6 @@ function files(sha = revision) {
 			"packages/js-sdk/dist/wasm/lix_js_sdk_bg.wasm": "wasm",
 			"packages/js-sdk/dist/migration-wasm/lix_js_sdk.js": "export default () => {};",
 			"packages/js-sdk/dist/migration-wasm/lix_js_sdk_bg.wasm": "migration wasm",
-			"packages/js-sdk/dist/bundled-plugins/plugin_markdown.lixplugin":
-				"markdown",
-			"packages/js-sdk/dist/bundled-plugins/plugin_csv.lixplugin": "csv",
 			"packages/storage-opfs/dist/index.js": "export const opfs = true;",
 		}).map(([path, content]) => [path, encoder.encode(content)]),
 	);
