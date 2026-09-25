@@ -26,7 +26,7 @@ export function functionDescription(name: string): string {
 				lix_commit_ancestry:
 					"Reachable commits and their depth from the active head or a specified commit.",
 				lix_create_checkpoint:
-					"Creates a checkpoint. This function changes repository state.",
+					"Creates a checkpoint with an optional title and comment. This function changes repository state.",
 				lix_undo:
 					"Undoes an ordinary commit or checkpoint and returns its commit receipt.",
 				lix_redo: "Redoes an undo receipt and returns its commit receipt.",

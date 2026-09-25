@@ -41,9 +41,9 @@ describe("friendlyDataType", () => {
 describe("isReadOnlyStatement", () => {
 	test.each([
 		["SELECT * FROM lix_file", true],
-		['SELECT * FROM "lix_create_checkpoint"()', false],
-		["SELECT * FROM lix_create_checkpoint()", false],
-		["SELECT 'lix_create_checkpoint()' AS example", true],
+		['SELECT * FROM "lix_create_checkpoint"(NULL, NULL)', false],
+		["SELECT * FROM lix_create_checkpoint('Title', NULL)", false],
+		["SELECT 'lix_create_checkpoint(NULL, NULL)' AS example", true],
 		["SELECT commit_id FROM lix_restore($1)", false],
 		["SELECT commit_id FROM lix_revert($1)", false],
 		["SELECT commit_id FROM lix_revert_range($1,$2)", false],

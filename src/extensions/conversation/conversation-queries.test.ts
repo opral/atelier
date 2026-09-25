@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "vitest";
-import { bundledPluginArchives, type Lix } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
+import { lixPluginArchives } from "@/test-utils/lix-plugin-archives";
 import type { Document } from "@opral/zettel-ast";
 import { openLix } from "@/test-utils/node-lix-sdk";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
@@ -37,10 +38,10 @@ function comment(text: string): Document {
 const encode = (text: string) => new TextEncoder().encode(text);
 
 async function installPlugins(lix: Lix) {
-	const archives = await bundledPluginArchives();
+	const archives = await lixPluginArchives();
 	for (const key of ["plugin_markdown", "plugin_csv"]) {
 		const plugin = archives.find((archive) => archive.key === key);
-		if (!plugin) throw new Error(`expected the bundled ${key}`);
+		if (!plugin) throw new Error(`expected the ${key}`);
 		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
 			`/.lix/plugins/${plugin.key}.lixplugin`,
 			plugin.archiveBytes,

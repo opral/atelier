@@ -7,7 +7,8 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { bundledPluginArchives, type Lix } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
+import { lixPluginArchives } from "@/test-utils/lix-plugin-archives";
 import type { Document } from "@opral/zettel-ast";
 import { LixProvider } from "@/lib/lix-react";
 import { createCheckpoint } from "@/lib/lix-diff-commands";
@@ -288,7 +289,7 @@ describe("ConversationView", () => {
 
 	test("a conversation whose paragraph was removed shows the paragraph as it was, and can still be answered and resolved", async () => {
 		lix = await openLix();
-		const plugin = (await bundledPluginArchives()).find(
+		const plugin = (await lixPluginArchives()).find(
 			(archive) => archive.key === "plugin_markdown",
 		)!;
 		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [

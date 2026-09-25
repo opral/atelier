@@ -1,4 +1,5 @@
-import { bundledPluginArchives, type Lix } from "@lix-js/sdk";
+import type { Lix } from "@lix-js/sdk";
+import { lixPluginArchive } from "./lix-plugin-archives";
 
 /**
  * `?demo=conversations`: one conversation per state of the conversation
@@ -129,7 +130,7 @@ export async function seedConversationDemo(lix: Lix): Promise<void> {
 	}
 	async function checkpoint(): Promise<string> {
 		const created = await lix.execute(
-			"SELECT commit_id FROM lix_create_checkpoint()",
+			"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
 		);
 		return String(created.rows[0]!.commit_id);
 	}
@@ -373,13 +374,9 @@ async function installCsvPlugin(lix: Lix): Promise<void> {
 		[path],
 	);
 	if (installed.rows.length > 0) return;
-	const archive = (await bundledPluginArchives()).find(
-		(plugin) => plugin.key === "plugin_csv",
-	);
-	if (!archive) throw new Error("The SDK bundles no CSV plugin.");
 	await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
 		path,
-		archive.archiveBytes,
+		await lixPluginArchive("plugin_csv"),
 	]);
 }
 

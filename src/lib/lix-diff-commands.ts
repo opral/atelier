@@ -43,7 +43,7 @@ export async function createCheckpoint(
 	lix: Lix,
 ): Promise<{ readonly commitId: string }> {
 	const result = await lix.execute(
-		"SELECT commit_id FROM lix_create_checkpoint()",
+		"SELECT commit_id FROM lix_create_checkpoint(NULL, NULL)",
 	);
 	const commitId = result.rows[0]?.commit_id;
 	if (result.rows.length !== 1 || !isString(commitId)) {
@@ -60,7 +60,7 @@ export async function createCheckpointForFiles(
 	if (fileIds.length === 0) return null;
 	const result = await lix.execute(
 		`SELECT commit_id
-		 FROM lix_create_checkpoint(ARRAY(
+		 FROM lix_create_checkpoint(NULL, NULL, ARRAY(
 		   SELECT row_ref
 		   FROM lix_diff('lix_file')
 		   WHERE lixcol_from_commit_id = $1

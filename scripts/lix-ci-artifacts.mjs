@@ -45,15 +45,16 @@ export async function installBrowserArtifact({
 			"packages/js-sdk/dist/index.d.ts",
 			"packages/js-sdk/dist/wasm/lix_js_sdk.js",
 			"packages/js-sdk/dist/migration-wasm/lix_js_sdk.js",
-			"packages/js-sdk/dist/bundled-plugins/plugin_markdown.lixplugin",
-			"packages/js-sdk/dist/bundled-plugins/plugin_csv.lixplugin",
 		])
 			await requireFile(join(downloaded.root, file));
 		await requireFile(
 			join(downloaded.root, "packages/js-sdk/dist/wasm/lix_js_sdk_bg.wasm"),
 		);
 		await requireFile(
-			join(downloaded.root, "packages/js-sdk/dist/migration-wasm/lix_js_sdk_bg.wasm"),
+			join(
+				downloaded.root,
+				"packages/js-sdk/dist/migration-wasm/lix_js_sdk_bg.wasm",
+			),
 		);
 		await requireFile(
 			join(downloaded.root, "packages/storage-opfs/dist/index.js"),

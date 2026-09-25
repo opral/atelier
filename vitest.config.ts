@@ -4,7 +4,7 @@ import path from "node:path";
 
 // Vitest resolves this workspace link to its real path before applying
 // dependency externalization. Keep the linked SDK in Node so its import.meta.url
-// continues to locate native bindings and bundled plugin files correctly.
+// continues to locate native bindings correctly.
 const linkedSdkExternal = (() => {
 	try {
 		const sdkPath = realpathSync(

@@ -136,7 +136,7 @@ a third.
 
 `@opral/atelier/file-icons` is a path→icon map: per-file-type, and a top-level
 export. It is an asset, not a capability — it renders nothing and decides
-nothing — which is why it is not a view. Anything that *renders* is.
+nothing — which is why it is not a view. Anything that _renders_ is.
 
 `toHtml` covers Markdown and CSV. A view with no static mode says so
 (`skipped: "unsupported"`). That is not a gap to route around with a new
