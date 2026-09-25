@@ -234,6 +234,7 @@ function useThreadComments(
 				lixcol_created_at: row.lixcol_created_at,
 				author_name: author?.author_name ?? null,
 				author_id: author?.author_id ?? null,
+				author_profile_uri: author?.author_profile_uri ?? null,
 			};
 		});
 	}, [authors, rows]);

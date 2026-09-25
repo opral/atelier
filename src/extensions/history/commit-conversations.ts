@@ -18,6 +18,7 @@ export type ConversationComment = {
 	lixcol_created_at: string | null;
 	author_name: string | null;
 	author_id: string | null;
+	author_profile_uri: string | null;
 };
 
 export type ConversationCount = {
@@ -97,6 +98,7 @@ export function selectConversationComments(
 			"comment.body as body",
 			"comment.lixcol_created_at as lixcol_created_at",
 			"author.name as author_name",
+			"author.profile_uri as author_profile_uri",
 			"change.account_id as author_id",
 		])
 		.where("comment.conversation_id", "in", ids.length ? ids : [""])

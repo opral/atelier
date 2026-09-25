@@ -2382,7 +2382,11 @@ function MarginCards({
 						}}
 					>
 						<div className="flex gap-2">
-							<CommentAvatar name={authorName(first)} size="lg" />
+							<CommentAvatar
+								name={authorName(first)}
+								profileUri={first.author_profile_uri}
+								size="lg"
+							/>
 							<div className="min-w-0 flex-1">
 								<div className="flex items-baseline gap-1.5 leading-[18px]">
 									<span className="truncate text-[12.5px] font-semibold text-fg">

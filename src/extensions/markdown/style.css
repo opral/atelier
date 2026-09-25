@@ -3028,6 +3028,8 @@
 		.markdown-comment-open,
 		.markdown-comment-resolve {
 			position: absolute;
+			/* These precede the comment surface in the DOM but must receive hits. */
+			z-index: 1;
 			top: -4px;
 			right: -4px;
 			background: var(--atelier-panel);

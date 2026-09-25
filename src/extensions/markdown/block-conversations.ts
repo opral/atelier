@@ -33,12 +33,14 @@ export type BlockCommentRow = {
 export type BlockComment = Omit<BlockCommentRow, "change_id"> & {
 	readonly author_name: string | null;
 	readonly author_id: string | null;
+	readonly author_profile_uri: string | null;
 };
 
 export type CommentAuthor = {
 	change_id: string;
 	author_name: string | null;
 	author_id: string | null;
+	author_profile_uri: string | null;
 };
 
 /**
@@ -111,6 +113,7 @@ export function selectCommentAuthors(lix: Lix, changeIds: readonly string[]) {
 			"change.id as change_id",
 			"author.name as author_name",
 			"author.id as author_id",
+			"author.profile_uri as author_profile_uri",
 		])
 		.where("change.id", "in", changeIds.length ? [...changeIds] : [""])
 		.$castTo<CommentAuthor>();
@@ -127,6 +130,7 @@ export function withAuthors(
 			...comment,
 			author_name: author?.author_name ?? null,
 			author_id: author?.author_id ?? null,
+			author_profile_uri: author?.author_profile_uri ?? null,
 		};
 	});
 }

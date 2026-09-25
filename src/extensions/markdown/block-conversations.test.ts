@@ -248,6 +248,22 @@ describe("block conversations in Lix", () => {
 			);
 			expect(comments).toHaveLength(2);
 			expect(comments[0]?.author_name).toBeTruthy();
+			const authorId = comments[0]?.author_id;
+			expect(authorId).toBeTruthy();
+			await lix.execute(
+				"UPDATE lix_account SET profile_uri = $2 WHERE id = $1",
+				[authorId!, "https://profiles.example/people/author.json"],
+			);
+			const withProfile = withAuthors(
+				commentRows,
+				await selectCommentAuthors(
+					lix,
+					commentRows.map((entry) => entry.change_id!),
+				).execute(),
+			);
+			expect(withProfile[0]?.author_profile_uri).toBe(
+				"https://profiles.example/people/author.json",
+			);
 			expect(comments.every((entry) => entry.node_id === nodeId)).toBe(true);
 			const scopes = await lix.execute(
 				"SELECT lixcol_global FROM lix_comment WHERE conversation_id = $1",

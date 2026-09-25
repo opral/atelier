@@ -22,6 +22,8 @@ export type ThreadComment = {
 	readonly author_name: string | null;
 	/** The account that wrote it: the reader's own comments offer Delete. */
 	readonly author_id?: string | null;
+	/** Public JSContact Card for the account that wrote this comment. */
+	readonly author_profile_uri?: string | null;
 };
 
 /** Threads longer than this fold their middle (design 4a, "Long, folded"). */
@@ -222,7 +224,11 @@ function CommentRow({
 			{...focus}
 			className={`comment-row ${inDocument ? "flex gap-2" : "flex gap-[7px] pl-[23px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 		>
-			<CommentAvatar name={name} size={inDocument ? "lg" : "md"} />
+			<CommentAvatar
+				name={name}
+				profileUri={comment.author_profile_uri}
+				size={inDocument ? "lg" : "md"}
+			/>
 			<div className="min-w-0 flex-1">
 				<div className="flex items-baseline gap-1.5 leading-[18px]">
 					<span
@@ -284,7 +290,11 @@ function ViewCommentRow({
 			{...focus}
 			className={`comment-row flex gap-2.5 ${revealed ? REVEALED_FOCUS : ""}`}
 		>
-			<CommentAvatar name={name} size="2xl" />
+			<CommentAvatar
+				name={name}
+				profileUri={comment.author_profile_uri}
+				size="2xl"
+			/>
 			<div className="min-w-0 flex-1">
 				<div className="flex items-baseline gap-2 leading-4">
 					<span className="truncate text-[13px] font-semibold text-fg">
@@ -357,7 +367,14 @@ function ViewFoldRow({
 							key={name}
 							className={`comment-fold-avatar comment-fold-avatar-view flex rounded-full ${index > 0 ? "-ml-1.5" : ""}`}
 						>
-							<CommentAvatar name={name} size="md" />
+							<CommentAvatar
+								name={name}
+								profileUri={
+									hidden.find((comment) => authorName(comment) === name)
+										?.author_profile_uri
+								}
+								size="md"
+							/>
 						</span>
 					))}
 				</span>
@@ -392,7 +409,14 @@ function FoldRow({
 							key={name}
 							className={`comment-fold-avatar flex rounded-full ${index > 0 ? "-ml-[5px]" : ""}`}
 						>
-							<CommentAvatar name={name} size="sm" />
+							<CommentAvatar
+								name={name}
+								profileUri={
+									hidden.find((comment) => authorName(comment) === name)
+										?.author_profile_uri
+								}
+								size="sm"
+							/>
 						</span>
 					))}
 				</span>

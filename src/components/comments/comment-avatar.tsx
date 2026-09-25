@@ -1,4 +1,35 @@
+import { useEffect, useState } from "react";
 import claudeAvatarUrl from "./claude-avatar.png";
+
+function webUrl(value: unknown, base?: string): string | null {
+	if (typeof value !== "string") return null;
+	try {
+		const url = new URL(value, base);
+		return url.protocol === "https:" || url.protocol === "http:"
+			? url.href
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+/** `lix_account.profile_uri` points to a JSContact Card, not to the image. */
+export function profileAvatarUrl(
+	card: unknown,
+	profileUri: string,
+): string | null {
+	if (!card || typeof card !== "object") return null;
+	const profile = card as Record<string, unknown>;
+	if (profile["@type"] !== "Card" || profile.version !== "2.0") return null;
+	if (!profile.media || typeof profile.media !== "object") return null;
+	const media = profile.media as Record<string, unknown>;
+	const photos = [media.avatar, ...Object.values(media)].filter(
+		(value): value is Record<string, unknown> =>
+			!!value && typeof value === "object" && !Array.isArray(value),
+	);
+	const photo = photos.find((value) => value.kind === "photo");
+	return webUrl(photo?.uri, profileUri);
+}
 
 /**
  * Author colours reuse the tag palette: each pair is already a tinted fill
@@ -36,11 +67,36 @@ export function isClaudeAuthor(name: string | null | undefined): boolean {
  */
 export function CommentAvatar({
 	name,
+	profileUri,
 	size = "md",
 }: {
 	readonly name: string;
+	readonly profileUri?: string | null;
 	readonly size?: "sm" | "md" | "lg" | "xl" | "2xl";
 }) {
+	const [photo, setPhoto] = useState<{
+		profileUri: string;
+		url: string | null;
+	} | null>(null);
+	useEffect(() => {
+		const url = webUrl(profileUri);
+		if (!url) return;
+		const controller = new AbortController();
+		void fetch(url, { credentials: "omit", signal: controller.signal })
+			.then(async (response) => {
+				if (!response.ok) return null;
+				return profileAvatarUrl(await response.json(), response.url);
+			})
+			.then((avatarUrl) => {
+				if (!controller.signal.aborted)
+					setPhoto({ profileUri: url, url: avatarUrl });
+			})
+			.catch(() => {
+				if (!controller.signal.aborted)
+					setPhoto({ profileUri: url, url: null });
+			});
+		return () => controller.abort();
+	}, [profileUri]);
 	const dimensions =
 		size === "sm"
 			? "size-3.5 text-[6px]"
@@ -51,6 +107,19 @@ export function CommentAvatar({
 					: size === "2xl"
 						? "size-6 text-[10px]"
 						: "size-4.5 text-[8px]";
+	const profileUrl = webUrl(profileUri);
+	if (profileUrl && photo?.profileUri === profileUrl && photo.url) {
+		return (
+			<img
+				src={photo.url}
+				alt=""
+				aria-hidden="true"
+				data-comment-avatar="profile"
+				className={`${dimensions} shrink-0 rounded-full object-cover`}
+				onError={() => setPhoto({ profileUri: profileUrl, url: null })}
+			/>
+		);
+	}
 	if (isClaudeAuthor(name)) {
 		return (
 			<img
