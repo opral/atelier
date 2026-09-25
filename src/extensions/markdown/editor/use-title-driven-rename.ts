@@ -8,9 +8,8 @@ import {
 
 /**
  * Stems the create flows assign automatically ("untitled.md",
- * "new-file-2.md"). Only files still carrying one of these names — or a name
- * this session derived — follow the document title; a manual rename breaks
- * the link and wins.
+ * "new-file-2.md"). Only files still carrying one of these names take the
+ * document title as their filename.
  */
 const AUTO_NAME_STEM = /^(untitled|new-file)(-\d+)?$/i;
 
@@ -49,8 +48,8 @@ function splitFilePath(
  * Title-driven file naming (the Notion/Obsidian pattern): while a markdown
  * file still has an auto-assigned name, typing the document's first heading
  * renames the file to match it — "untitled.md" becomes "Team handbook.md".
- * Renames debounce behind typing, dedupe with " 2", " 3", … suffixes, and
- * stop for good once the name no longer tracks the title (manual rename).
+ * Renames debounce behind typing and dedupe with " 2", " 3", … suffixes.
+ * Once named, subsequent title edits leave the filename alone.
  */
 export function useTitleDrivenFileRename({
 	lix,
@@ -67,14 +66,10 @@ export function useTitleDrivenFileRename({
 }): void {
 	const filePathRef = useRef(filePath);
 	filePathRef.current = filePath;
-	// The stem this hook last assigned; typing keeps tracking the title until
-	// the file's name stops matching it.
-	const lastDerivedStemRef = useRef<string | null>(null);
+	// The path prop may lag behind a successful rename while the file query
+	// refreshes. Remember the file identity so that window cannot rename twice.
+	const renamedFileIdRef = useRef<string | null>(null);
 	const inFlightRef = useRef(false);
-
-	useEffect(() => {
-		lastDerivedStemRef.current = null;
-	}, [fileId]);
 
 	useEffect(() => {
 		if (!editor || !enabled || !fileId) return;
@@ -82,15 +77,17 @@ export function useTitleDrivenFileRename({
 		let timer: ReturnType<typeof setTimeout> | null = null;
 
 		const attempt = async () => {
-			if (disposed || inFlightRef.current) return;
+			if (
+				disposed ||
+				inFlightRef.current ||
+				renamedFileIdRef.current === fileId
+			)
+				return;
 			const path = filePathRef.current;
 			if (!path) return;
 			const parts = splitFilePath(path);
 			if (!parts) return;
-			const tracksTitle =
-				AUTO_NAME_STEM.test(parts.stem) ||
-				parts.stem === lastDerivedStemRef.current;
-			if (!tracksTitle) return;
+			if (!AUTO_NAME_STEM.test(parts.stem)) return;
 			const firstBlock = editor.isDestroyed
 				? null
 				: editor.state.doc.firstChild;
@@ -101,17 +98,14 @@ export function useTitleDrivenFileRename({
 			try {
 				for (let n = 1; n <= 50; n += 1) {
 					const candidate = n === 1 ? nextStem : `${nextStem} ${n}`;
-					if (candidate === parts.stem) {
-						lastDerivedStemRef.current = candidate;
-						return;
-					}
+					if (candidate === parts.stem) return;
 					try {
 						await renameWorkspaceEntry(
 							lix,
 							{ kind: "file", id: fileId },
 							`${parts.dir}${candidate}${parts.extension}`,
 						);
-						lastDerivedStemRef.current = candidate;
+						renamedFileIdRef.current = fileId;
 						return;
 					} catch (error) {
 						if (!(error instanceof WorkspacePathTakenError)) throw error;
