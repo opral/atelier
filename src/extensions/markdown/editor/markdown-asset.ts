@@ -69,12 +69,11 @@ export async function loadMarkdownAsset({
 	maxRemotePreviewBytes = DEFAULT_MAX_REMOTE_PREVIEW_BYTES,
 	remotePreviewTimeoutMs = DEFAULT_REMOTE_PREVIEW_TIMEOUT_MS,
 }: LoadMarkdownAssetArgs): Promise<LoadedMarkdownAsset | null> {
-	const isPdf = isPdfAssetSrc(src);
 	const externalUrl = parseExternalAssetUrl(src);
 	const hostFile = externalUrl ? (resolveHostFile?.(src) ?? null) : null;
 	if (externalUrl && !hostFile) {
 		if (!EXTERNAL_ASSET_PROTOCOLS.has(externalUrl.protocol)) return null;
-		if (isPdf) {
+		if (isPdfAssetSrc(src)) {
 			if (
 				externalUrl.protocol !== "http:" &&
 				externalUrl.protocol !== "https:"
@@ -126,6 +125,8 @@ export async function loadMarkdownAsset({
 		file.content instanceof Uint8Array
 			? file.content
 			: new Uint8Array(file.content as ArrayBuffer);
+	// A host URL has no extension; the file's path says what it is.
+	const isPdf = isPdfAssetSrc(hostFile ? file.path : src);
 	if (isPdf && !hasPdfSignature(bytes)) return null;
 
 	const objectUrl = URL.createObjectURL(

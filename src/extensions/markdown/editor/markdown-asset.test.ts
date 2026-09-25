@@ -221,6 +221,27 @@ test("loads an image the host names by URL from the Lix, not from the web", asyn
 	await lix.close();
 });
 
+test("a PDF the host names by URL reaches the PDF viewer with its bytes", async () => {
+	const lix = await openLix();
+	const pdf = new TextEncoder().encode("%PDF-1.7\n");
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({ id: fakeUuid("host-pdf"), path: "/talks/deck.pdf", content: pdf })
+		.execute();
+	vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:atelier-host-pdf");
+	vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+	const asset = await loadMarkdownAsset({
+		lix,
+		sourceFilePath: "/talks/notes.md",
+		src: "https://lixray.com/@samuel/repository/file/AaDWAKfH",
+		resolveHostFile: () => ({ id: fakeUuid("host-pdf") }),
+	});
+	expect(asset?.data).toEqual(pdf);
+	expect(asset?.workspaceFile?.filePath).toBe("/talks/deck.pdf");
+	await lix.close();
+});
+
 test("loads a workspace PDF as a disposable object URL", async () => {
 	const lix = await openLix();
 	await qb(lix)
