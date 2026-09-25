@@ -532,6 +532,31 @@ test("renders YAML frontmatter as editable fields", async () => {
 	).toBeChecked();
 });
 
+test("a click on the frontmatter panel's chrome leaves the panel unselected", async () => {
+	const { editor } = await renderEditorForMarkdownFile({
+		fileId: fakeUuid("file_frontmatter_chrome_click"),
+		markdown: "---\ntitle: Demo\n---\n\nHello",
+	});
+	const title = await screen.findByText("Frontmatter");
+	editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+	const before = editor.state.selection;
+
+	// Selecting the whole panel ringed it while it was being edited, and the
+	// next letter typed replaced every property.
+	expect(fireEvent.mouseDown(title)).toBe(false);
+	fireEvent.mouseUp(title);
+	fireEvent.click(title);
+
+	expect(editor.state.selection.eq(before)).toBe(true);
+	await waitFor(() => {
+		expect(
+			document
+				.querySelector(".markdown-frontmatter")
+				?.getAttribute("data-selected"),
+		).toBe("false");
+	});
+});
+
 test("offers a one-click repair when a long dash line swallowed Markdown into frontmatter", async () => {
 	const fileId = fakeUuid("file_frontmatter_recovery");
 	const markdown = `---
