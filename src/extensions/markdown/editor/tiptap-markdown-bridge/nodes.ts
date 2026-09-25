@@ -11,6 +11,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { codeLanguageLabel } from "./code-language-label";
 import { isSafeHref } from "../normalize-url";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
+import { mediaKindSource } from "../extensions/host-media-files";
 import {
 	isPdfAssetSrc,
 	isVideoAssetSrc,
@@ -574,7 +575,9 @@ export function markdownWcNodes(
 				};
 			},
 			addNodeView() {
-				return ReactNodeViewRenderer(FrontmatterEditorNodeView);
+				return ReactNodeViewRenderer(FrontmatterEditorNodeView, {
+					stopEvent: ({ event }) => stopFrontmatterEvent(event),
+				});
 			},
 		}),
 		// Unsupported blocks (html, yaml, etc.)
@@ -974,9 +977,10 @@ export function markdownWcNodes(
 				return ["img", { ...attrs, ...diffAttrs(node, "element") }];
 			},
 			addNodeView() {
-				return ({ node, editor, getPos }) =>
+				return ({ node, editor, getPos, decorations }) =>
 					createMarkdownMediaNodeView({
 						node,
+						decorations,
 						resolveImageSrc,
 						loadAsset,
 						openWorkspaceFile,
@@ -1041,9 +1045,10 @@ export function markdownWcNodes(
 				return ["img", { ...attrs, ...diffAttrs(node, "element") }];
 			},
 			addNodeView() {
-				return ({ node, editor, getPos }) =>
+				return ({ node, editor, getPos, decorations }) =>
 					createMarkdownMediaNodeView({
 						node,
+						decorations,
 						resolveImageSrc,
 						loadAsset,
 						openWorkspaceFile,
@@ -1061,14 +1066,14 @@ export function markdownWcNodes(
  */
 function createMarkdownMediaNodeView(args: {
 	readonly node: any;
+	readonly decorations?: readonly Decoration[];
 	readonly resolveImageSrc?: MarkdownImageSrcResolver;
 	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
 	readonly renderPdfPreview?: PdfPreviewRenderer;
 	readonly deleteNode?: () => boolean;
 }) {
-	const src = String(args.node.attrs?.src ?? "");
-	if (isVideoAssetSrc(src)) {
+	if (isVideoAssetSrc(mediaKindSource(args.node, args.decorations))) {
 		return createMarkdownVideoNodeView(args);
 	}
 	return createMarkdownAssetNodeView(args);
@@ -1087,6 +1092,44 @@ function suppressMarkdownMediaControlSelection(event: Event): void {
 	// still shielding the editor from selecting the atom on the way through.
 	if (!control.matches("video")) event.preventDefault();
 	event.stopPropagation();
+}
+
+/**
+ * Which events the frontmatter panel keeps from ProseMirror.
+ *
+ * Tiptap's default hands a mousedown on the panel's own chrome — its header,
+ * the gaps between rows, the space around the tags — to ProseMirror, which
+ * selects the whole panel and focuses the document. The panel then wore its
+ * selection ring while its properties were being edited, and the next letter
+ * typed replaced every one of them. A click inside the panel is a click on
+ * its fields, never on the node: the panel keeps it, and a click on chrome
+ * that focuses nothing leaves focus and selection where they were. Selecting
+ * the panel from the keyboard (Backspace at the top of the body) still rings.
+ */
+function stopFrontmatterEvent(event: Event): boolean {
+	const target = event.target;
+	const isDrag = event.type.startsWith("drag") || event.type === "drop";
+	if (
+		target instanceof HTMLElement &&
+		(target.matches("input, button, select, textarea") ||
+			target.isContentEditable)
+	) {
+		return !isDrag;
+	}
+	if (event.type === "mousedown") {
+		const control =
+			target instanceof Element ? target.closest("a, label, [tabindex]") : null;
+		if (control?.closest(".markdown-frontmatter") == null) {
+			event.preventDefault();
+		}
+		return true;
+	}
+	return !(
+		isDrag ||
+		event.type === "copy" ||
+		event.type === "cut" ||
+		event.type === "paste"
+	);
 }
 
 function pdfRenderSpec({
@@ -1438,10 +1481,12 @@ function createMarkdownVideoNodeView({
 	updateSource(node);
 	return {
 		dom,
-		update: (nextNode: any) => {
+		update: (nextNode: any, decorations: readonly Decoration[]) => {
 			if (nextNode.type.name !== nodeTypeName) return false;
 			const nextSource = String(nextNode.attrs?.src ?? "");
-			if (!isVideoAssetSrc(nextSource)) return false;
+			if (!isVideoAssetSrc(mediaKindSource(nextNode, decorations))) {
+				return false;
+			}
 			if (nextSource === currentSource) {
 				applyAttributes(nextNode);
 				return true;
@@ -1489,6 +1534,7 @@ function safeVideoSrc(src: string): string {
 
 function createMarkdownAssetNodeView({
 	node,
+	decorations,
 	resolveImageSrc,
 	loadAsset,
 	openWorkspaceFile,
@@ -1496,6 +1542,7 @@ function createMarkdownAssetNodeView({
 	deleteNode,
 }: {
 	readonly node: any;
+	readonly decorations?: readonly Decoration[];
 	readonly resolveImageSrc?: MarkdownImageSrcResolver;
 	readonly loadAsset?: (src: string) => Promise<LoadedMarkdownAsset | null>;
 	readonly openWorkspaceFile?: MarkdownWorkspaceFileOpener;
@@ -1503,8 +1550,7 @@ function createMarkdownAssetNodeView({
 	readonly deleteNode?: () => boolean;
 }) {
 	const nodeTypeName = node.type.name;
-	const originalSrc = String(node.attrs?.src ?? "");
-	const rendersPdf = isPdfAssetSrc(originalSrc);
+	const rendersPdf = isPdfAssetSrc(mediaKindSource(node, decorations));
 	const dom = rendersPdf ? createPdfEmbedDom(node) : createImageDom(node);
 	dom.addEventListener("pointerdown", suppressMarkdownMediaControlSelection);
 	dom.addEventListener("mousedown", suppressMarkdownMediaControlSelection);
@@ -1829,14 +1875,13 @@ function createMarkdownAssetNodeView({
 	updateSource(node);
 	return {
 		dom,
-		update: (nextNode: any) => {
+		update: (nextNode: any, nextDecorations: readonly Decoration[]) => {
 			if (nextNode.type.name !== nodeTypeName) return false;
-			if (isPdfAssetSrc(String(nextNode.attrs?.src ?? "")) !== rendersPdf) {
-				return false;
-			}
+			const kindSource = mediaKindSource(nextNode, nextDecorations);
+			if (isPdfAssetSrc(kindSource) !== rendersPdf) return false;
 			// A source edit can turn this asset into a video — rebuild as the
 			// video node view instead of updating in place.
-			if (isVideoAssetSrc(String(nextNode.attrs?.src ?? ""))) return false;
+			if (isVideoAssetSrc(kindSource)) return false;
 			const nextSource = String(nextNode.attrs?.src ?? "");
 			if (nextSource === currentSource) {
 				updateAssetDomAttributes(dom, nextNode);

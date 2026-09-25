@@ -33,7 +33,12 @@ export async function readPreparedFile(
 			: typeof state.filePath === "string"
 				? state.filePath
 				: undefined;
-	const id = typeof state.fileId === "string" ? state.fileId : undefined;
+	const id =
+		"path" in location && typeof location.fileId === "string"
+			? location.fileId
+			: typeof state.fileId === "string"
+				? state.fileId
+				: undefined;
 	if (!path && !id) return undefined;
 	const commit = [
 		state.sourceCommitId,

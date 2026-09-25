@@ -33,6 +33,7 @@ import { SelectionBlockHighlightExtension } from "./extensions/selection-block-h
 import { CodeLanguageMenuExtension } from "./extensions/code-language-menu";
 import { JoinAdjacentListsExtension } from "./extensions/join-adjacent-lists";
 import { DocumentLinkIconsExtension } from "./extensions/document-link-icons";
+import { HostMediaFilesExtension } from "./extensions/host-media-files";
 import type { AtelierDocumentLinks } from "@/extension-api";
 import { createDocumentExistence } from "./document-existence";
 import {
@@ -529,7 +530,16 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	const markdownExtensions = MarkdownWc({
 		resolveImageSrc,
 		loadAsset: sourceFilePath
-			? (src) => loadMarkdownAsset({ lix, sourceFilePath, sourceCommitId, src })
+			? (src) =>
+					loadMarkdownAsset({
+						lix,
+						sourceFilePath,
+						sourceCommitId,
+						src,
+						resolveHostFile: documentLinks
+							? (href) => documentLinks.resolve(href)
+							: undefined,
+					})
 			: undefined,
 		openWorkspaceFile,
 		renderPdfPreview,
@@ -566,6 +576,10 @@ export function createEditor(args: CreateEditorArgs): Editor {
 				exists: documentExistence.exists,
 				subscribe: documentExistence.subscribe,
 				...(resolveHostHref ? { resolveHostHref } : {}),
+			}),
+			HostMediaFilesExtension.configure({
+				...(resolveHostHref ? { resolveHostHref } : {}),
+				subscribe: documentExistence.subscribe,
 			}),
 			...additionalExtensions,
 			History.configure({
