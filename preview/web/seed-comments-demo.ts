@@ -206,7 +206,7 @@ async function seedOwnComments(lix: Lix): Promise<void> {
 			 LIMIT 1`,
 		);
 		const row = block.rows[0];
-		if (row) {
+		if (typeof row?.file_id === "string" && typeof row.node_id === "string") {
 			const conversationId = crypto.randomUUID();
 			await lix.execute(
 				"INSERT INTO lix_conversation (id, target) VALUES ($1, lix_row_ref('markdown_node', $2, $3))",
@@ -250,7 +250,8 @@ async function seedBlockConversation(
 			[baseCommitId, commitId],
 		);
 		const row = changed.rows[0];
-		if (!row) return;
+		if (typeof row?.file_id !== "string" || typeof row.node_id !== "string")
+			return;
 		await lix.execute(
 			"INSERT INTO lix_conversation (id, target) VALUES ($1, lix_row_ref('markdown_node', $2, $3))",
 			[conversationId, row.file_id, row.node_id],

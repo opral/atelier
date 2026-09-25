@@ -51,7 +51,10 @@ export async function installBrowserArtifact({
 			join(downloaded.root, "packages/js-sdk/dist/wasm/lix_js_sdk_bg.wasm"),
 		);
 		await requireFile(
-			join(downloaded.root, "packages/js-sdk/dist/migration-wasm/lix_js_sdk_bg.wasm"),
+			join(
+				downloaded.root,
+				"packages/js-sdk/dist/migration-wasm/lix_js_sdk_bg.wasm",
+			),
 		);
 		await requireFile(
 			join(downloaded.root, "packages/storage-opfs/dist/index.js"),
