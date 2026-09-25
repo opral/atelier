@@ -529,7 +529,16 @@ export function createEditor(args: CreateEditorArgs): Editor {
 	const markdownExtensions = MarkdownWc({
 		resolveImageSrc,
 		loadAsset: sourceFilePath
-			? (src) => loadMarkdownAsset({ lix, sourceFilePath, sourceCommitId, src })
+			? (src) =>
+					loadMarkdownAsset({
+						lix,
+						sourceFilePath,
+						sourceCommitId,
+						src,
+						resolveHostFile: documentLinks
+							? (href) => documentLinks.resolve(href)
+							: undefined,
+					})
 			: undefined,
 		openWorkspaceFile,
 		renderPdfPreview,

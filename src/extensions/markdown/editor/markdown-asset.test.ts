@@ -178,6 +178,49 @@ test("loads a workspace video as a disposable object URL", async () => {
 	await lix.close();
 });
 
+test("loads an image the host names by URL from the Lix, not from the web", async () => {
+	const lix = await openLix();
+	await qb(lix)
+		.insertInto("lix_file")
+		.values({
+			id: fakeUuid("host-image"),
+			path: "/blog/loop.png",
+			content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+		})
+		.execute();
+	let createdBlob: Blob | undefined;
+	vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+		createdBlob = blob as Blob;
+		return "blob:atelier-host-image";
+	});
+	vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+	const hostUrl = "https://lixray.com/@samuel/repository/file/AaDWAKfG";
+	const resolveHostFile = (href: string) =>
+		href === hostUrl ? { id: fakeUuid("host-image") } : null;
+
+	// The host's URL is its page for the file, behind its sign-in: an <img>
+	// pointed there showed a broken image.
+	const asset = await loadMarkdownAsset({
+		lix,
+		sourceFilePath: "/blog/post.md",
+		src: hostUrl,
+		resolveHostFile,
+	});
+	expect(asset?.src).toBe("blob:atelier-host-image");
+	expect(createdBlob?.type).toBe("image/png");
+	expect(asset?.workspaceFile?.filePath).toBe("/blog/loop.png");
+
+	// Any other web URL is still the browser's to load.
+	const remote = await loadMarkdownAsset({
+		lix,
+		sourceFilePath: "/blog/post.md",
+		src: "https://example.com/loop.png",
+		resolveHostFile,
+	});
+	expect(remote?.src).toBe("https://example.com/loop.png");
+	await lix.close();
+});
+
 test("loads a workspace PDF as a disposable object URL", async () => {
 	const lix = await openLix();
 	await qb(lix)

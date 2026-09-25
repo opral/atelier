@@ -34,6 +34,16 @@ type LoadMarkdownAssetArgs = {
 	readonly sourceFilePath: string;
 	readonly sourceCommitId?: string;
 	readonly src: string;
+	/**
+	 * The host's reading of a URL that names one of its files, the same one
+	 * links use (`AtelierDocumentLinks.resolve`). Documents reference their
+	 * repository's files by the host's stable URL, which is the host's page for
+	 * the file, not its bytes: such an image loads from the Lix, like a
+	 * relative one.
+	 */
+	readonly resolveHostFile?: (
+		href: string,
+	) => { readonly id: string } | { readonly path: string } | null;
 	readonly maxAutoPreviewBytes?: number;
 	readonly maxRemotePreviewBytes?: number;
 	readonly remotePreviewTimeoutMs?: number;
@@ -54,13 +64,15 @@ export async function loadMarkdownAsset({
 	sourceFilePath,
 	sourceCommitId,
 	src,
+	resolveHostFile,
 	maxAutoPreviewBytes = DEFAULT_MAX_AUTO_PREVIEW_BYTES,
 	maxRemotePreviewBytes = DEFAULT_MAX_REMOTE_PREVIEW_BYTES,
 	remotePreviewTimeoutMs = DEFAULT_REMOTE_PREVIEW_TIMEOUT_MS,
 }: LoadMarkdownAssetArgs): Promise<LoadedMarkdownAsset | null> {
 	const isPdf = isPdfAssetSrc(src);
 	const externalUrl = parseExternalAssetUrl(src);
-	if (externalUrl) {
+	const hostFile = externalUrl ? (resolveHostFile?.(src) ?? null) : null;
+	if (externalUrl && !hostFile) {
 		if (!EXTERNAL_ASSET_PROTOCOLS.has(externalUrl.protocol)) return null;
 		if (isPdf) {
 			if (
@@ -86,18 +98,27 @@ export async function loadMarkdownAsset({
 		return { src: externalUrl.href, preview: "auto" };
 	}
 
-	const workspacePath = resolveMarkdownAssetPath({ src, sourceFilePath });
-	if (!workspacePath) return null;
+	const target: { readonly id: string } | { readonly path: string } | null =
+		hostFile ??
+		(() => {
+			const path = resolveMarkdownAssetPath({ src, sourceFilePath });
+			return path ? { path } : null;
+		})();
+	if (!target) return null;
+	const [column, key] =
+		"id" in target
+			? (["id", target.id] as const)
+			: (["path", target.path] as const);
 
 	const file = sourceCommitId
 		? await selectFilesStateAt(lix, sourceCommitId)
 				.select(["id", "content", "path"])
-				.where("path", "=", workspacePath)
+				.where(column, "=", key)
 				.executeTakeFirst()
 		: await qb(lix)
 				.selectFrom("lix_file")
 				.select(["id", "content", "path"])
-				.where("path", "=", workspacePath)
+				.where(column, "=", key)
 				.limit(1)
 				.executeTakeFirst();
 	if (!file?.content) return null;
