@@ -1,9 +1,5 @@
 /**
- * `prune-types.mjs` keeps an allowlist of declarations. A new public export
- * whose declaration is missing from it still builds, and reaches consumers
- * as `any`. This walks the published declarations from each entry point, as
- * a consumer's compiler would, and fails on any import that no longer
- * resolves.
+ * Published declarations must resolve without the package's private paths.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -13,12 +9,16 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const typesRoot = join(root, "dist/types");
-const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const packageJson = JSON.parse(
+	readFileSync(join(root, "package.json"), "utf8"),
+);
 
 function entryDeclarations() {
 	return Object.values(packageJson.exports)
 		.map((target) => (typeof target === "object" ? target.types : undefined))
-		.filter((types) => typeof types === "string" && types.startsWith("./dist/types/"))
+		.filter(
+			(types) => typeof types === "string" && types.startsWith("./dist/types/"),
+		)
 		.map((types) => types.slice("./dist/types/".length));
 }
 
@@ -32,9 +32,14 @@ function unresolvedImports() {
 		seen.add(file);
 		const source = readFileSync(join(typesRoot, file), "utf8");
 		for (const match of source.matchAll(
-			/(?:from|import)\s*\(?\s*"(\.{1,2}\/[^"]+)"/g,
+			/(?:from|import)\s*\(?\s*["']([^"']+)["']/g,
 		)) {
 			const specifier = match[1];
+			if (specifier.startsWith("@/")) {
+				unresolved.push(file + " -> " + specifier);
+				continue;
+			}
+			if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
 			// Side-effect stylesheet imports carry no types.
 			if (specifier.endsWith(".css")) continue;
 			const base = posix
