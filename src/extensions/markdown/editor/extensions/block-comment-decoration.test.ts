@@ -44,6 +44,19 @@ describe("block comment marks", () => {
 		expect(block.querySelector(".markdown-block-comment")).not.toBeNull();
 	});
 
+	test("anchor on a callout by its id, like any other block", () => {
+		const editor = createEditor("First.\n\n> [!NOTE] Heads up\n> Body\n");
+		const callout = editor.state.doc.child(1);
+		expect(callout.type.name).toBe("callout");
+		const id = blockNodeId(callout)!;
+		expect(id).toBeTruthy();
+		setBlockCommentMarks(editor, new Map([[id, "rest"]]));
+		const block = editor.view.dom.children[1] as HTMLElement;
+		expect(block.classList.contains("markdown-callout")).toBe(true);
+		expect(block.getAttribute("data-block-comment")).toBe("rest");
+		expect(block.querySelector(".markdown-block-comment")).not.toBeNull();
+	});
+
 	test("wait for a press in the document to end, and never move the caret", async () => {
 		const editor = createEditor("First.\n\nSecond.\n");
 		editor.commands.setTextSelection(3);

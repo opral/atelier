@@ -172,6 +172,29 @@ describe("deleting the table a quote or item was", () => {
 		editor.commands.deleteTableRow();
 		expect(await saved()).toBe("> x\n");
 	});
+
+	test("takes an untitled callout with it", async () => {
+		const { editor, saved } = await open(
+			"> [!NOTE]\n>\n> | a |\n> |---|\n\nafter\n",
+		);
+		caretIn(editor, "a");
+		editor.commands.deleteTableRow();
+		expect(await saved()).toBe("after\n");
+		expect(editor.state.selection.$from.parent.textContent).toBe("after");
+	});
+
+	test("keeps a titled callout, with a line to type in", async () => {
+		const { editor, saved } = await open(
+			"> [!TIP] Keep me\n>\n> | a |\n> |---|\n\nafter\n",
+		);
+		caretIn(editor, "a");
+		editor.commands.deleteTableRow();
+		const callout = editor.state.doc.firstChild!;
+		expect(callout.type.name).toBe("callout");
+		expect(callout.firstChild!.textContent).toBe("Keep me");
+		expect(callout.childCount).toBe(2);
+		expect(await saved()).toBe("> [!TIP] Keep me\n\nafter\n");
+	});
 });
 
 /** The body cells of column `c` of the first table. */

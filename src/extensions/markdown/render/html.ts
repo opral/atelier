@@ -1,4 +1,11 @@
 import type { JSONContent } from "@tiptap/core";
+// The concrete module, never the bridge barrel: the barrel carries the
+// editor extensions, and this file runs where there is no DOM.
+import {
+	calloutFamily,
+	calloutIconSvg,
+	calloutLabel,
+} from "../editor/tiptap-markdown-bridge/callout";
 
 /**
  * Serializes a review document to standalone HTML.
@@ -26,6 +33,7 @@ const VOID_BLOCKS = new Set(["horizontalRule", "image", "imageBlock"]);
 const COUNTED_BLOCKS = new Set([
 	"paragraph",
 	"heading",
+	"calloutTitle",
 	"listItem",
 	"taskItem",
 	"codeBlock",
@@ -55,7 +63,13 @@ function imageHost(source: string): string | null {
 
 function reviewStatus(node: JSONContent): ReviewStatus | null {
 	const data = node.attrs?.data as Record<string, unknown> | null | undefined;
-	const review = data?.markdownReview as { status?: unknown } | undefined;
+	const review = data?.markdownReview as
+		| { status?: unknown; hidden?: unknown }
+		| undefined;
+	// A serialization-only change (`[!NOTE]` spelled `[!note]`, a list
+	// loosened by a blank line) reads exactly as it did: the editor leaves
+	// it unpainted, and so does a card.
+	if (review?.hidden === true) return null;
 	const status = review?.status;
 	return status === "added" ||
 		status === "removed" ||
@@ -89,8 +103,15 @@ export function countMarkdownDiff(doc: JSONContent): MarkdownDiffStats {
 		parentType: string | null,
 		index: number,
 		inherited: ReviewStatus | null,
+		parentOwn: ReviewStatus | null,
 	): void => {
-		const own = reviewStatus(node);
+		// A callout is a frame, not a line: a change of its kind or fold
+		// counts once, on its title, the line the reader sees it on.
+		const own =
+			reviewStatus(node) ??
+			(node.type === "calloutTitle" && parentType === "callout"
+				? parentOwn
+				: null);
 		const status = own ?? inherited;
 		if (isCountedLine(node, parentType, index)) {
 			if (status === "added") added += 1;
@@ -103,9 +124,9 @@ export function countMarkdownDiff(doc: JSONContent): MarkdownDiffStats {
 				modified += 1;
 		}
 		for (const [childIndex, child] of (node.content ?? []).entries())
-			walk(child, node.type ?? null, childIndex, status);
+			walk(child, node.type ?? null, childIndex, status, reviewStatus(node));
 	};
-	walk(doc, null, 0, null);
+	walk(doc, null, 0, null, null);
 	return { added, removed, modified };
 }
 
@@ -251,6 +272,8 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 		}
 		case "blockquote":
 			return `<blockquote${attributes(node)}>${renderChildren(node, options)}</blockquote>`;
+		case "callout":
+			return renderCallout(node, options);
 		case "codeBlock": {
 			const language = node.attrs?.language;
 			const languageAttribute =
@@ -337,6 +360,80 @@ function renderNode(node: JSONContent, options: RenderOptions): string {
 				? ""
 				: `<div${attributes(node)}>${renderChildren(node, options)}</div>`;
 	}
+}
+
+/**
+ * A callout, drawn with the editor's structure and classes so document.css
+ * dresses both. The editor shows an untitled callout's kind with a
+ * `::before`; here the kind's name is written into the title, so it reads
+ * where generated content does not (a mail client, a screen reader). A
+ * foldable callout (`[!NOTE]+`, `[!NOTE]-`) is a `<details>` whose summary
+ * is the icon and the title: it opens and closes, by keyboard too, with no
+ * script.
+ */
+function renderCallout(node: JSONContent, options: RenderOptions): string {
+	const kind = String(node.attrs?.kind ?? "note");
+	const family = calloutFamily(kind);
+	const fold = node.attrs?.fold;
+	const children = node.content ?? [];
+	const titleNode = children[0]?.type === "calloutTitle" ? children[0] : null;
+	const body = titleNode ? children.slice(1) : children;
+	// The kind's name stands in for a title the reader's side leaves empty;
+	// a title the change removed still shows, struck, before it.
+	const words = titleNode ? renderChildren(titleNode, options) : "";
+	const label = hasShownText(titleNode) ? "" : escapeHtml(calloutLabel(kind));
+	const title = `${words}${words && label ? " " : ""}${label}${previousKindChip(node)}`;
+	const titleAttributes = titleNode ? attributes(titleNode) : "";
+	const frame = `class="markdown-callout" data-callout-family="${family}" data-callout-kind="${escapeHtml(kind)}"${attributes(node)}`;
+	const icon = `<span class="markdown-callout-icon" aria-hidden="true">${calloutIconSvg(family)}</span>`;
+	const bodyHtml = renderChildren({ content: body }, options);
+	if (fold === "+" || fold === "-") {
+		// A card must not hide the change it exists to show: a folded
+		// callout whose body changed renders open.
+		const open = fold === "+" || body.some(carriesChange);
+		return `<details ${frame}${open ? " open" : ""}><summary class="markdown-callout-summary">${icon}<span class="markdown-callout-title"${titleAttributes}>${title}</span></summary><div class="markdown-callout-content">${bodyHtml}</div></details>`;
+	}
+	return `<div ${frame} role="note">${icon}<div class="markdown-callout-content"><div class="markdown-callout-title"${titleAttributes}>${title}</div>${bodyHtml}</div></div>`;
+}
+
+/** True when the title has text the reader's side keeps. */
+function hasShownText(node: JSONContent | null): boolean {
+	if (!node) return false;
+	return (node.content ?? []).some(
+		(child) =>
+			markStatus(child) !== "removed" &&
+			(child.type !== "text" || (child.text ?? "").trim().length > 0),
+	);
+}
+
+/**
+ * A callout whose kind changed says what it was: a small pill beside the
+ * title with the old name struck through. The callout itself already wears
+ * its new kind's colour and icon, so the pill is the only place the old one
+ * shows.
+ */
+function previousKindChip(node: JSONContent): string {
+	const previous = previousCalloutKind(node);
+	if (previous === null) return "";
+	const label = escapeHtml(calloutLabel(previous));
+	return `<span class="markdown-callout-was" title="Was ${label}">was <s>${label}</s></span>`;
+}
+
+/**
+ * The kind a callout had before the change, when a reader would see a
+ * difference: `NOTE` becoming `note` is the same callout.
+ */
+export function previousCalloutKind(node: JSONContent): string | null {
+	if (reviewStatus(node) !== "modified") return null;
+	const data = node.attrs?.data as Record<string, unknown> | null | undefined;
+	const review = data?.markdownReview as
+		| { originalAttrs?: { kind?: unknown } | null }
+		| undefined;
+	const before = review?.originalAttrs?.kind;
+	if (typeof before !== "string") return null;
+	return calloutLabel(before) === calloutLabel(String(node.attrs?.kind ?? ""))
+		? null
+		: before;
 }
 
 function footnoteLabel(node: JSONContent): string {

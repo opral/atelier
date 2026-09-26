@@ -634,7 +634,11 @@ function collectText(nodes: PMNode[]): string {
  */
 function calloutToAst(node: PMNode): any {
 	const { data } = extractNodeData(node.attrs);
-	const [titleNode, ...bodyNodes] = node.content || [];
+	// A copied slice that starts in the body opens the callout without its
+	// title: the body stays the body, under an untitled marker.
+	const [first, ...rest] = node.content || [];
+	const titleNode = first?.type === "calloutTitle" ? first : undefined;
+	const bodyNodes = titleNode ? rest : node.content || [];
 	const title = pmInlineToMd(titleNode?.content || []);
 	const markerLine: any[] = [
 		{ type: "html", value: calloutMarkerText(node.attrs ?? {}) },

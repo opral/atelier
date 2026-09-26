@@ -16,7 +16,21 @@ font-variant-numeric: normal;
 letter-spacing: 0;
 line-height: 1.5;
 }
-.atelier-document :is(p, li, blockquote, td, th, h1, h2, h3, h4, h5, h6) {
+.atelier-document
+:is(
+p,
+li,
+blockquote,
+td,
+th,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.markdown-callout-title
+) {
 unicode-bidi: plaintext;
 }
 .atelier-document :is(h1, h2, h3, h4, h5, h6) {
@@ -200,33 +214,34 @@ margin: var(--atelier-doc-gap) 0;
 }
 .atelier-document .markdown-callout {
 --markdown-callout-ink: var(--atelier-tag-gray-fg);
+--markdown-callout-tint: var(--atelier-tag-gray);
 display: flex;
 gap: 0.5em;
 margin: var(--atelier-doc-gap) 0;
 padding: 0.75em 1.125em 0.75em 0.625em;
 border-radius: var(--atelier-doc-radius);
-background: var(--atelier-tag-gray);
+background: var(--markdown-callout-tint);
 color: var(--atelier-fg);
 }
 .atelier-document .markdown-callout[data-callout-family="note"] {
 --markdown-callout-ink: var(--atelier-tag-blue-fg);
-background: var(--atelier-tag-blue);
+--markdown-callout-tint: var(--atelier-tag-blue);
 }
 .atelier-document .markdown-callout[data-callout-family="tip"] {
 --markdown-callout-ink: var(--atelier-tag-green-fg);
-background: var(--atelier-tag-green);
+--markdown-callout-tint: var(--atelier-tag-green);
 }
 .atelier-document .markdown-callout[data-callout-family="important"] {
 --markdown-callout-ink: var(--atelier-tag-purple-fg);
-background: var(--atelier-tag-purple);
+--markdown-callout-tint: var(--atelier-tag-purple);
 }
 .atelier-document .markdown-callout[data-callout-family="warning"] {
 --markdown-callout-ink: var(--atelier-tag-yellow-fg);
-background: var(--atelier-tag-yellow);
+--markdown-callout-tint: var(--atelier-tag-yellow);
 }
 .atelier-document .markdown-callout[data-callout-family="caution"] {
 --markdown-callout-ink: var(--atelier-tag-red-fg);
-background: var(--atelier-tag-red);
+--markdown-callout-tint: var(--atelier-tag-red);
 }
 .atelier-document .markdown-callout-icon {
 display: flex;
@@ -275,6 +290,72 @@ pointer-events: none;
 > .markdown-callout-content
 > :not(.markdown-callout-title) {
 display: none;
+}
+.atelier-document details.markdown-callout {
+display: block;
+}
+.atelier-document .markdown-callout-summary {
+display: flex;
+gap: 0.5em;
+align-items: flex-start;
+border-radius: var(--atelier-doc-radius);
+cursor: pointer;
+list-style: none;
+}
+.atelier-document .markdown-callout-summary::-webkit-details-marker {
+display: none;
+}
+.atelier-document .markdown-callout-summary:focus-visible {
+outline: 2px solid var(--atelier-ring);
+outline-offset: 2px;
+}
+.atelier-document .markdown-callout-summary > .markdown-callout-title {
+display: block;
+flex: 1 1 auto;
+min-width: 0;
+}
+.atelier-document .markdown-callout-summary::after {
+content: "";
+flex: none;
+width: 0.4375em;
+height: 0.4375em;
+margin: 0.625em 0.375em 0 0;
+border-right: 0.125em solid var(--markdown-callout-ink);
+border-bottom: 0.125em solid var(--markdown-callout-ink);
+transform: rotate(-45deg);
+transition: transform 120ms ease-out;
+}
+.atelier-document
+details.markdown-callout[open]
+> .markdown-callout-summary::after {
+transform: rotate(45deg);
+}
+.atelier-document details.markdown-callout > .markdown-callout-content {
+margin-top: calc(var(--atelier-doc-gap) * 0.5);
+padding-left: 2.25em;
+}
+.atelier-document .markdown-callout-was {
+display: inline-block;
+margin-left: 0.5em;
+padding: 0 0.5em;
+border-radius: var(--atelier-radius-full);
+background: color-mix(in srgb, var(--markdown-callout-ink) 12%, transparent);
+color: var(--markdown-callout-ink);
+font-size: 0.8em;
+font-weight: 500;
+line-height: 1.6;
+text-decoration: none;
+vertical-align: 0.1em;
+white-space: nowrap;
+user-select: none;
+}
+.atelier-document .markdown-callout-was > s {
+text-decoration: line-through;
+text-decoration-color: currentColor;
+}
+.atelier-document
+.markdown-callout-title[data-empty]:has(> .markdown-callout-was)::before {
+position: static;
 }
 .atelier-document blockquote p {
 margin-top: 0;
@@ -468,6 +549,11 @@ background-color: var(--atelier-accent-subtle);
 box-decoration-break: clone;
 -webkit-box-decoration-break: clone;
 border-radius: var(--atelier-doc-radius);
+}
+.atelier-document .markdown-callout[data-review-status="modified"] {
+background-color: var(--markdown-callout-tint);
+box-shadow: inset 0 0 0 1px
+color-mix(in srgb, var(--atelier-diff-modified) 40%, transparent);
 }
 .atelier-document span[data-review-status] {
 unicode-bidi: isolate;

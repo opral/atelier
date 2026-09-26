@@ -1105,6 +1105,19 @@ const CHANGE_ATTR_KEYS: Record<string, readonly string[]> = {
 	listItem: ["checked"],
 	heading: ["level"],
 	codeBlock: ["language"],
+	// A callout that changes kind (Note to Warning), spelling (NOTE to note)
+	// or fold sign is the same callout: it merges, and its body and title
+	// diff inside it.
+	callout: ["kind", "marker", "fold"],
+};
+
+/**
+ * Attrs that change how a node is written back but not how it reads. A
+ * callout's marker keeps the word's case for the file; `[!NOTE]` and
+ * `[!note]` draw the same callout.
+ */
+const SPELLING_ATTR_KEYS: Record<string, readonly string[]> = {
+	callout: ["marker"],
 };
 
 /** A span of a merged code block's text that exists on one side only. */
@@ -1138,8 +1151,16 @@ function withoutInvisibleData(
 }
 
 /** The attributes a reader can see: what the node renders as, not how it serializes. */
-function renderedAttrs(attrs: JSONContent["attrs"]): string {
-	return exactAttrs(withoutInvisibleData(attrs));
+function renderedAttrs(
+	attrs: JSONContent["attrs"],
+	type: string | undefined,
+): string {
+	const visible = withoutInvisibleData(attrs);
+	const spelling = SPELLING_ATTR_KEYS[type ?? ""];
+	if (!spelling || !visible) return exactAttrs(visible);
+	const shown: Record<string, unknown> = { ...visible };
+	for (const key of spelling) delete shown[key];
+	return exactAttrs(shown);
 }
 
 function mergeableAttrs(node: JSONContent): string {
@@ -1157,10 +1178,15 @@ function canMergeInline(before: JSONContent, after: JSONContent): boolean {
 		before.type !== "paragraph" &&
 		before.type !== "heading" &&
 		before.type !== "tableCell" &&
-		before.type !== "codeBlock"
+		before.type !== "codeBlock" &&
+		before.type !== "calloutTitle"
 	) {
 		return false;
 	}
+	// A callout's title is its first line whether or not it has words: a
+	// title written into an untitled callout is an edit of that line, and a
+	// callout holds exactly one title, so it never goes out and comes back.
+	if (before.type === "calloutTitle") return true;
 	return (
 		mergeableAttrs(before) === mergeableAttrs(after) &&
 		Object.hasOwn(before, "content") === Object.hasOwn(after, "content")
@@ -1174,6 +1200,7 @@ function canMergeContainer(before: JSONContent, after: JSONContent): boolean {
 		before.type !== "orderedList" &&
 		before.type !== "listItem" &&
 		before.type !== "blockquote" &&
+		before.type !== "callout" &&
 		before.type !== "table" &&
 		before.type !== "tableRow"
 	) {
@@ -1201,6 +1228,7 @@ function mergeChangedNode(
 		);
 	}
 	if (!canMergeContainer(before, after)) return null;
+	if (before.type === "callout") return mergeCallout(before, after, changeId);
 	return withAttrChange(
 		before,
 		{
@@ -1213,6 +1241,48 @@ function mergeChangedNode(
 		},
 		changeId,
 	);
+}
+
+/**
+ * A callout merges like the quote it is in the file, its body diffing block
+ * by block inside it, with its title held to the first place: the schema
+ * allows one title, first, and aligning it among the body's paragraphs could
+ * pair it with none and write it out twice.
+ */
+function mergeCallout(
+	before: JSONContent,
+	after: JSONContent,
+	changeId: string,
+): JSONContent | null {
+	const [beforeTitle, ...beforeBody] = before.content ?? [];
+	const [afterTitle, ...afterBody] = after.content ?? [];
+	if (
+		beforeTitle?.type !== "calloutTitle" ||
+		afterTitle?.type !== "calloutTitle"
+	) {
+		return null;
+	}
+	const title =
+		exactFingerprint(beforeTitle) === exactFingerprint(afterTitle)
+			? cloneContent(afterTitle)
+			: withoutEmptyContent(mergeInlineNode(beforeTitle, afterTitle, changeId));
+	return withAttrChange(
+		before,
+		{
+			...cloneContent(after),
+			content: [title, ...mergeChildNodes(beforeBody, afterBody, changeId)],
+		},
+		changeId,
+	);
+}
+
+/** An untitled callout's title has no content at all, as the parser writes it. */
+function withoutEmptyContent(node: JSONContent): JSONContent {
+	if (node.content && node.content.length === 0) {
+		const { content: _content, ...rest } = node;
+		return rest;
+	}
+	return node;
 }
 
 /**
@@ -1364,7 +1434,9 @@ function withAttrChange(
 			: {};
 	// Serialization-only differences still travel with the node so both
 	// sides project to their exact bytes; the view leaves them unpainted.
-	const hidden = renderedAttrs(before.attrs) === renderedAttrs(merged.attrs);
+	const hidden =
+		renderedAttrs(before.attrs, before.type) ===
+		renderedAttrs(merged.attrs, merged.type);
 	return {
 		...merged,
 		attrs: {
@@ -1719,7 +1791,7 @@ function resolveNodeDecisions(
 			.filter((child): child is JSONContent => child !== null);
 		clone.content = mergeAdjacentText(clone.content);
 	}
-	return clone;
+	return clone.type === "calloutTitle" ? withoutEmptyContent(clone) : clone;
 }
 
 function projectNode(
@@ -1766,7 +1838,7 @@ function projectNode(
 			.filter((child): child is JSONContent => child !== null);
 		clone.content = mergeAdjacentText(clone.content);
 	}
-	return clone;
+	return clone.type === "calloutTitle" ? withoutEmptyContent(clone) : clone;
 }
 
 function decisionSide(decision: MarkdownReviewDecision): "before" | "after" {

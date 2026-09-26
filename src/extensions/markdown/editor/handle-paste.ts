@@ -489,14 +489,24 @@ function splitFirstLine(block: any): any[] | null {
 	];
 }
 
-/** The paragraph or heading at one edge, through lists and quotes. */
+/** The paragraph or heading at one edge, through lists, quotes and callouts. */
 function edgeInlineBlock(block: any, side: "start" | "end"): any | null {
 	let node = block;
-	while (node && node.type !== "paragraph" && node.type !== "heading") {
-		if (!/^(bulletList|orderedList|listItem|blockquote)$/.test(node.type))
+	while (
+		node &&
+		node.type !== "paragraph" &&
+		node.type !== "heading" &&
+		node.type !== "calloutTitle"
+	) {
+		if (
+			!/^(bulletList|orderedList|listItem|blockquote|callout)$/.test(node.type)
+		)
 			return null;
 		node = side === "start" ? node.content?.[0] : node.content?.at(-1);
 	}
+	// An untitled callout's title is not a line of text to pad: a space
+	// there would give it a title.
+	if (node?.type === "calloutTitle" && !node.content?.length) return null;
 	return node ?? null;
 }
 

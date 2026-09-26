@@ -271,6 +271,8 @@ function buildTable(
 /** Containers that exist only for what they hold: emptied, they go too. */
 const HOLLOW_CONTAINERS = new Set([
 	"blockquote",
+	// Only while its title is empty: a titled callout still says something.
+	"callout",
 	"listItem",
 	"bulletList",
 	"orderedList",
@@ -283,6 +285,11 @@ function isListScaffold(node: ProseMirrorNode): boolean {
 		node.childCount === 0 &&
 		Boolean(node.attrs.data?.[LIST_LEADING_PARAGRAPH_DATA_KEY])
 	);
+}
+
+/** An untitled callout's title: the kind's name shows there, not words. */
+function isEmptyCalloutTitle(node: ProseMirrorNode): boolean {
+	return node.type.name === "calloutTitle" && node.childCount === 0;
 }
 
 /**
@@ -335,7 +342,7 @@ export function deleteTableTransaction(
 		parent.forEach((child, offset) => {
 			const childPos = start + offset;
 			if (childPos >= from && childPos < to) return;
-			if (!isListScaffold(child)) rest = true;
+			if (!isListScaffold(child) && !isEmptyCalloutTitle(child)) rest = true;
 		});
 		if (rest) break;
 		from = $table.before(depth);

@@ -1,4 +1,8 @@
 import { serializeAst } from "./markdown";
+import {
+	calloutLabel,
+	calloutMarkerText,
+} from "./tiptap-markdown-bridge/callout";
 
 /**
  * Converts rich clipboard HTML (Google Docs, Word, GitHub, Slack, web pages)
@@ -208,6 +212,8 @@ function flowContent(nodes: readonly Node[], marks: Marks): any[] {
 function blockContent(element: Element, inherited: Marks): any[] {
 	const tag = tagName(element);
 	const marks = marksOf(element, inherited);
+	const callout = calloutFromElement(element, marks);
+	if (callout) return [callout];
 	const heading = /^h([1-6])$/.exec(tag);
 	if (heading) {
 		const children = inlineChildren(
@@ -246,6 +252,134 @@ function blockContent(element: Element, inherited: Marks): any[] {
 		default:
 			return flowContent(Array.from(element.childNodes), marks);
 	}
+}
+
+/**
+ * A rendered callout, read back as the quote it was written as: GitHub's
+ * alert (`div.markdown-alert-note`, whose title is only the kind's name),
+ * Obsidian's callout (`div.callout[data-callout]`), and Atelier's own
+ * static render (`.markdown-callout[data-callout-kind]`, a `<details>` when
+ * foldable). Null for any other element.
+ */
+function calloutFromElement(element: Element, marks: Marks): any | null {
+	const classes = Array.from(element.classList);
+	const github = classes
+		.map((name) => /^markdown-alert-([a-z]+)$/.exec(name)?.[1])
+		.find((kind) => kind && kind !== "title");
+	if (classes.includes("markdown-alert") && github) {
+		const body = Array.from(element.childNodes).filter(
+			(child) =>
+				!(
+					child.nodeType === 1 &&
+					(child as Element).matches(".markdown-alert-title")
+				),
+		);
+		return calloutQuote(
+			{ kind: github, marker: github.toUpperCase(), fold: null },
+			[],
+			flowContent(body, marks),
+		);
+	}
+	const obsidian = element.getAttribute("data-callout");
+	if (classes.includes("callout") && obsidian) {
+		const fold = element.getAttribute("data-callout-fold");
+		const title = element.querySelector(
+			":scope > .callout-title .callout-title-inner",
+		);
+		const content = element.querySelector(":scope > .callout-content");
+		const titleInline = title ? inlineOf(title, marks) : [];
+		return calloutQuote(
+			{
+				kind: obsidian.toLowerCase(),
+				marker: obsidian,
+				fold: fold === "+" || fold === "-" ? fold : null,
+			},
+			// Obsidian writes the kind's name into an untitled callout.
+			plainText(titleInline).toLowerCase() === obsidian.toLowerCase()
+				? []
+				: titleInline,
+			content ? flowContent(Array.from(content.childNodes), marks) : [],
+		);
+	}
+	const atelier = element.getAttribute("data-callout-kind");
+	if (classes.includes("markdown-callout") && atelier) {
+		const title = element.querySelector(
+			":scope > .markdown-callout-content > .markdown-callout-title, :scope > summary > .markdown-callout-title",
+		);
+		const content = element.querySelector(":scope > .markdown-callout-content");
+		// A review's "was Note" pill is not part of the title.
+		const titleInline = title
+			? inlineOf(title, marks, ".markdown-callout-was")
+			: [];
+		const body = content
+			? Array.from(content.childNodes).filter((child) => child !== title)
+			: [];
+		const foldable = tagName(element) === "details";
+		return calloutQuote(
+			{
+				kind: atelier,
+				marker: null,
+				fold: foldable ? (element.hasAttribute("open") ? "+" : "-") : null,
+			},
+			// The static render writes the kind's name into an untitled title.
+			plainText(titleInline) === calloutLabel(atelier) ? [] : titleInline,
+			flowContent(body, marks),
+		);
+	}
+	return null;
+}
+
+function inlineOf(element: Element, marks: Marks, skip?: string): any[] {
+	return inlineChildren(
+		Array.from(element.childNodes)
+			.filter(
+				(child) =>
+					!skip || child.nodeType !== 1 || !(child as Element).matches(skip),
+			)
+			.flatMap((child) => inlineSegments(child, marks)),
+	);
+}
+
+function plainText(nodes: readonly any[]): string {
+	return nodes
+		.map((node) =>
+			typeof node.value === "string"
+				? node.value
+				: Array.isArray(node.children)
+					? plainText(node.children)
+					: "",
+		)
+		.join("");
+}
+
+/**
+ * The quote a callout is saved as, built the way the editor saves one:
+ * the marker as raw text (so the serializer does not escape it to
+ * `\[!NOTE]`), the title after it, and a body paragraph continuing the
+ * marker's line.
+ */
+function calloutQuote(
+	attrs: {
+		readonly kind: string;
+		readonly marker: string | null;
+		readonly fold: "+" | "-" | null;
+	},
+	title: readonly any[],
+	body: any[],
+): any {
+	const line = [
+		{ type: "html", value: calloutMarkerText(attrs) },
+		...(title.length > 0 ? [{ type: "text", value: " " }, ...title] : []),
+	];
+	const lead = body[0];
+	if (lead?.type === "paragraph" && lead.children.length > 0) {
+		lead.children = [...line, { type: "text", value: "\n" }, ...lead.children];
+		return { type: "blockquote", children: body };
+	}
+	return {
+		type: "blockquote",
+		children: [{ type: "paragraph", children: line }, ...body],
+	};
 }
 
 function list(element: Element, marks: Marks): any | null {

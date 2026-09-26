@@ -35,6 +35,29 @@ describe("initial extension content", () => {
 		expect(html).toContain("<td>value</td>");
 		expect(html).toContain('type="checkbox"');
 	});
+	test("renders a callout with the editor's structure", () => {
+		const html = renderToStaticMarkup(
+			<MarkdownContent
+				content={
+					"> [!WARNING] Mind the gap\n> Stand **back**.\n\n> [!note]\n> Untitled\n\n> [!tip]- Folded\n> Hidden"
+				}
+			/>,
+		);
+		expect(html).toContain(
+			'<div class="markdown-callout" role="note" data-callout-family="warning" data-callout-kind="warning">',
+		);
+		expect(html).toContain(
+			'<div class="markdown-callout-title">Mind the gap</div><p>Stand <strong>back</strong>.</p>',
+		);
+		expect(html).toContain('<div class="markdown-callout-title">Note</div>');
+		expect(html).toMatch(
+			/<details class="markdown-callout" data-callout-family="tip" data-callout-kind="tip"><summary class="markdown-callout-summary">/,
+		);
+		expect(html).toContain(
+			'<span class="markdown-callout-title">Folded</span>',
+		);
+		expect(html).not.toContain("[!");
+	});
 	test("escapes HTML and rejects executable URLs", () => {
 		const html = renderToStaticMarkup(
 			<MarkdownContent

@@ -27,6 +27,8 @@ const PRUNABLE = new Set([
 	"taskList",
 	"table",
 	"blockquote",
+	// Its body; the title is held back from the trim, below.
+	"callout",
 ]);
 
 export function pruneToChanges(
@@ -45,6 +47,14 @@ export function pruneToChanges(
 	const prune = (node: JSONContent): JSONContent => {
 		const children = node.content ?? [];
 		if (children.length === 0) return node;
+		// A callout trims like the quote it is in the file, except that its
+		// title stays: it is the callout's name, and the body under it reads
+		// as nobody's without it.
+		// The body is trimmed as a title-less callout, which lands below.
+		if (node.type === "callout" && children[0]?.type === "calloutTitle") {
+			const body = prune({ type: "callout", content: children.slice(1) });
+			return { ...node, content: [children[0], ...(body.content ?? [])] };
+		}
 		// A list item is not a container the trim can shorten, but the list
 		// nested under it is: the walk goes through the one to reach the other.
 		// Stopping here left a release note's six hundred sub-items whole, and
@@ -159,6 +169,7 @@ export function pruneToChanges(
 const CAPPABLE = new Set([
 	"paragraph",
 	"heading",
+	"calloutTitle",
 	"codeBlock",
 	"tableCell",
 	"tableHeader",

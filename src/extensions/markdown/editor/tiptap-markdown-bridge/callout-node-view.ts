@@ -49,7 +49,7 @@ export function createCalloutNodeView(props: {
 	getPos: () => number | undefined;
 }): NodeView {
 	let node = props.node;
-	let folded = node.attrs.fold === "-";
+	let folded = opensFolded(node);
 
 	const dom = document.createElement("div");
 	dom.className = "markdown-callout";
@@ -150,7 +150,7 @@ export function createCalloutNodeView(props: {
 			if (next.type !== node.type) return false;
 			const foldChanged = next.attrs.fold !== node.attrs.fold;
 			node = next;
-			if (foldChanged) folded = next.attrs.fold === "-";
+			if (foldChanged) folded = opensFolded(next);
 			render();
 			return true;
 		},
@@ -169,6 +169,27 @@ export function createCalloutNodeView(props: {
 			fold.removeEventListener("click", onFoldClick);
 		},
 	};
+}
+
+/**
+ * A `[!NOTE]-` callout opens folded, unless a review marked something in
+ * its body: a review must not hide the change it is there to show.
+ */
+function opensFolded(node: ProseMirrorNode): boolean {
+	if (node.attrs.fold !== "-") return false;
+	let reviewed = false;
+	node.descendants((child) => {
+		if (reviewed) return false;
+		const data = child.attrs?.data as Record<string, unknown> | null;
+		if (
+			data?.markdownReview ||
+			child.marks.some((mark) => mark.type.name === "markdownReviewDiff")
+		) {
+			reviewed = true;
+		}
+		return !reviewed;
+	});
+	return !reviewed;
 }
 
 /** Marks an empty title so its kind's name can show in its place. */

@@ -279,6 +279,8 @@ export function editorBlockKind(node: ProseMirrorNode): string {
 		case "heading":
 			return "heading";
 		case "blockquote":
+		// A callout is a quote in the file: `> [!NOTE] …`.
+		case "callout":
 			return "block_quote";
 		case "codeBlock":
 			return "code_block";

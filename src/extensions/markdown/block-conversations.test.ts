@@ -15,6 +15,7 @@ import {
 	blockCommentLayout,
 	marginColumnLeft,
 	createBlockConversation,
+	editorBlocks,
 	groupBlockThreads,
 	popoverSide,
 	replyToBlockConversation,
@@ -89,6 +90,27 @@ describe("alignBlocks", () => {
 				],
 			),
 		).toEqual([0, -1, 1, 2]);
+	});
+
+	test("a callout pairs with the quote the file saves it as", () => {
+		const editor = editorFor(
+			"Intro.\n\n> [!NOTE] Heads up\n> Body\n\n> Plain quote\n",
+		);
+		const blocks = editorBlocks(editor.state.doc);
+		editor.destroy();
+
+		expect(blocks.map((block) => block.kind)).toEqual([
+			"paragraph",
+			"block_quote",
+			"block_quote",
+		]);
+		expect(
+			alignBlocks(blocks, [
+				row("a", "paragraph", "Intro."),
+				row("b", "block_quote"),
+				row("c", "block_quote"),
+			]),
+		).toEqual([0, 1, 2]);
 	});
 });
 

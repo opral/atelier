@@ -22,6 +22,8 @@ import mixedGfmDocumentBefore from "./mixed-gfm-document.before.md?raw";
 import mixedGfmDocumentAfter from "./mixed-gfm-document.after.md?raw";
 import inlineMediaLinkBefore from "./inline-media-link.before.md?raw";
 import inlineMediaLinkAfter from "./inline-media-link.after.md?raw";
+import calloutEditsBefore from "./callout-edits.before.md?raw";
+import calloutEditsAfter from "./callout-edits.after.md?raw";
 import type { MarkdownBlockSnapshot } from "../review-diff";
 
 export type MarkdownDiffFixture = {
@@ -817,4 +819,26 @@ export const MARKDOWN_DIFF_FIXTURES: readonly MarkdownDiffFixture[] = [
 			},
 		],
 	},
+	{
+		id: "callout-edits",
+		title: "Callout kind, title, fold, spelling and body edits",
+		beforeMarkdown: calloutEditsBefore,
+		afterMarkdown: calloutEditsAfter,
+		beforeBlocks: calloutBlocks(calloutEditsBefore),
+		afterBlocks: calloutBlocks(calloutEditsAfter),
+	},
 ];
+
+/** One block per callout: they are separated by blank lines, nothing else. */
+function calloutBlocks(markdown: string): MarkdownBlockSnapshot[] {
+	const ids = ["deploy_note", "rollback_tip", "cache_faq", "keys_important"];
+	return markdown
+		.trimEnd()
+		.split("\n\n")
+		.map((block, index) => ({
+			id: ids[index]!,
+			// Order keys compare as strings: "a0" < "a1", where "120" < "40".
+			orderKey: `a${index}`,
+			block,
+		}));
+}

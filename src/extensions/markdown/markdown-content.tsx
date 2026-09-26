@@ -1,6 +1,11 @@
 import { createElement, Fragment, type ReactNode } from "react";
 import { parseMarkdown } from "./editor/markdown";
 import { astToTiptapDoc } from "./editor/tiptap-markdown-bridge/mdwc-to-tiptap";
+import {
+	CALLOUT_ICON_PATHS,
+	calloutFamily,
+	calloutLabel,
+} from "./editor/tiptap-markdown-bridge/callout";
 
 type Node = {
 	type: string;
@@ -119,6 +124,8 @@ function renderNode(
 			);
 		case "blockquote":
 			return <blockquote key={index}>{children}</blockquote>;
+		case "callout":
+			return renderCallout(node, index, children ?? []);
 		case "codeBlock":
 			return (
 				<pre key={index} data-language={attrs.language}>
@@ -184,4 +191,76 @@ function renderNode(
 		default:
 			return <Fragment key={index}>{children ?? node.text}</Fragment>;
 	}
+}
+
+/**
+ * The editor's callout, read-only: the same classes, so document.css
+ * dresses it, with the kind's name written into an untitled title. A
+ * foldable one is a `<details>`, as in the static render.
+ */
+function renderCallout(
+	node: Node,
+	index: number,
+	children: readonly ReactNode[],
+): ReactNode {
+	const kind = String(node.attrs?.kind ?? "note");
+	const family = calloutFamily(kind);
+	const fold = node.attrs?.fold;
+	const hasTitle = node.content?.[0]?.type === "calloutTitle";
+	const titleNode = hasTitle ? node.content![0]! : null;
+	const title =
+		titleNode && (titleNode.content?.length ?? 0) > 0
+			? children[0]
+			: calloutLabel(kind);
+	const body = hasTitle ? children.slice(1) : children;
+	const icon = (
+		<span className="markdown-callout-icon" aria-hidden="true">
+			<svg
+				viewBox="0 0 24 24"
+				width="18"
+				height="18"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			>
+				{CALLOUT_ICON_PATHS[family].map((d) => (
+					<path key={d} d={d} />
+				))}
+			</svg>
+		</span>
+	);
+	if (fold === "+" || fold === "-") {
+		return (
+			<details
+				key={index}
+				className="markdown-callout"
+				data-callout-family={family}
+				data-callout-kind={kind}
+				open={fold === "+"}
+			>
+				<summary className="markdown-callout-summary">
+					{icon}
+					<span className="markdown-callout-title">{title}</span>
+				</summary>
+				<div className="markdown-callout-content">{body}</div>
+			</details>
+		);
+	}
+	return (
+		<div
+			key={index}
+			className="markdown-callout"
+			role="note"
+			data-callout-family={family}
+			data-callout-kind={kind}
+		>
+			{icon}
+			<div className="markdown-callout-content">
+				<div className="markdown-callout-title">{title}</div>
+				{body}
+			</div>
+		</div>
+	);
 }

@@ -2,6 +2,7 @@ import { Extension, Mark, type Extensions } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { calloutLabel } from "../editor/tiptap-markdown-bridge/callout";
 
 type MarkdownReviewStatus = "added" | "removed" | "modified" | "format";
 
@@ -99,6 +100,39 @@ function formatGlyph(
 	return glyph;
 }
 
+/**
+ * The kind a modified callout had, when a reader would see the difference:
+ * the callout already wears its new colour and icon, so the old name is
+ * the only thing left to say.
+ */
+function previousCalloutKind(node: ProseMirrorNode): string | null {
+	if (node.type.name !== "callout") return null;
+	const review = (node.attrs?.data as Record<string, unknown> | null)
+		?.markdownReview as
+		| { status?: unknown; originalAttrs?: { kind?: unknown } | null }
+		| undefined;
+	if (review?.status !== "modified") return null;
+	const before = review.originalAttrs?.kind;
+	if (typeof before !== "string") return null;
+	return calloutLabel(before) === calloutLabel(String(node.attrs.kind ?? ""))
+		? null
+		: before;
+}
+
+/** "was Note": the same pill the static render writes beside the title. */
+function previousKindChip(kind: string, changeId: string): HTMLElement {
+	const label = calloutLabel(kind);
+	const chip = document.createElement("span");
+	chip.className = "markdown-callout-was";
+	chip.setAttribute("contenteditable", "false");
+	chip.setAttribute("data-review-change-id", changeId);
+	chip.title = `Was ${label}`;
+	const struck = document.createElement("s");
+	struck.textContent = label;
+	chip.append("was ", struck);
+	return chip;
+}
+
 /** The document position of a rendered-text offset inside a block. */
 function positionAtTextOffset(
 	node: ProseMirrorNode,
@@ -188,6 +222,21 @@ function buildReviewDecorations(doc: ProseMirrorNode): DecorationSet {
 				);
 			}
 		} else if (nodeMetadata && !node.isText) {
+			const previousKind = previousCalloutKind(node);
+			const title = node.firstChild;
+			if (previousKind !== null && title?.type.name === "calloutTitle") {
+				// At the title's end, so the pill follows its words.
+				decorations.push(
+					Decoration.widget(
+						position + 1 + title.nodeSize - 1,
+						() => previousKindChip(previousKind, nodeMetadata.changeId),
+						{
+							side: 1,
+							key: `callout-was:${nodeMetadata.changeId}:${previousKind}`,
+						},
+					),
+				);
+			}
 			const emptyParagraph =
 				node.type.name === "paragraph" &&
 				node.content.size === 0 &&
