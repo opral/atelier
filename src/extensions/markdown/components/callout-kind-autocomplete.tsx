@@ -123,6 +123,7 @@ export function CalloutKindAutocomplete() {
 			aria-activedescendant={
 				activeKind ? `markdown-callout-kind-${activeKind}` : undefined
 			}
+			tabIndex={-1}
 		>
 			<div className="markdown-slash-menu-scroll">
 				<div className="markdown-table-menu-label" role="presentation">
@@ -142,6 +143,12 @@ export function CalloutKindAutocomplete() {
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => {
 								editor.chain().focus().pickCalloutKind(kind).run();
+							}}
+							onKeyDown={(event) => {
+								if (event.key === "Enter" || event.key === " ") {
+									event.preventDefault();
+									editor.chain().focus().pickCalloutKind(kind).run();
+								}
 							}}
 						>
 							<span
