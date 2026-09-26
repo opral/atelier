@@ -66,6 +66,8 @@ import manifestJson from "./manifest.json";
 import { FormattingToolbar } from "./components/formatting-toolbar";
 import { SlashCommandMenu } from "./components/slash-command-menu";
 import { CodeLanguageMenu } from "./components/code-language-menu";
+import { CalloutMenu } from "./components/callout-menu";
+import { CalloutKindAutocomplete } from "./components/callout-kind-autocomplete";
 import { TableControls } from "./components/table-controls";
 import { SelectionToolbar } from "./components/selection-toolbar";
 import {
@@ -692,6 +694,8 @@ function MarkdownLiveDocument({
 						<SelectionToolbar />
 						<SlashCommandMenu />
 						<CodeLanguageMenu />
+						<CalloutMenu />
+						<CalloutKindAutocomplete />
 						<TableControls />
 						<EmojiPickerMenu />
 						<EmbedFilePickerMenu sourceFilePath={effectiveFileRow.path} />

@@ -39,6 +39,16 @@ const COMMAND_GROUPS = [
 		commandIds: ["bulletList", "orderedList", "taskList", "blockquote"],
 	},
 	{
+		label: "Callouts",
+		commandIds: [
+			"callout",
+			"callout-tip",
+			"callout-important",
+			"callout-warning",
+			"callout-caution",
+		],
+	},
+	{
 		label: "Insert",
 		commandIds: [
 			"embedFile",

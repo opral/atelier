@@ -111,6 +111,30 @@ describe("SlashCommandMenu", () => {
 		await waitFor(() => expect(editor.getText()).toBe("🚀"));
 	});
 
+	test("offers the callouts in their own group, and /callout makes one", async () => {
+		const editor = setup();
+		await act(async () => {
+			editor.commands.insertContent("Heads up /callout");
+		});
+		const menu = await screen.findByRole("listbox", { name: "Slash commands" });
+		expect(menu.textContent).toContain("Callouts");
+		expect(screen.getAllByRole("option").map((option) => option.id)).toEqual([
+			"markdown-slash-option-callout",
+			"markdown-slash-option-callout-tip",
+			"markdown-slash-option-callout-important",
+			"markdown-slash-option-callout-warning",
+			"markdown-slash-option-callout-caution",
+		]);
+		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
+		await waitFor(() =>
+			expect(editor.state.doc.firstChild?.type.name).toBe("callout"),
+		);
+		expect(editor.state.doc.firstChild?.lastChild?.textContent).toBe(
+			"Heads up ",
+		);
+		expect(editor.state.selection.$head.parent.textContent).toBe("Heads up ");
+	});
+
 	test("offers a footnote under /foot", async () => {
 		const editor = setup();
 		await act(async () => {

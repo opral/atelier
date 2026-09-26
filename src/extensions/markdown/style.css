@@ -2339,6 +2339,103 @@
 			outline-offset: -2px;
 		}
 
+		/* The callout menu: the table menu's rows, each kind with a swatch in
+		   its callout's colours, and two checkboxes for how it folds. */
+		.markdown-callout-menu[data-keyboard="true"]
+			.markdown-table-menu-item[data-active="true"] {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: -2px;
+		}
+
+		.markdown-callout-menu-swatch {
+			--markdown-callout-swatch: var(--atelier-tag-gray);
+			--markdown-callout-swatch-ink: var(--atelier-tag-gray-fg);
+			display: inline-flex;
+			width: 1.25rem;
+			height: 1.25rem;
+			flex: none;
+			align-items: center;
+			justify-content: center;
+			border-radius: 5px;
+			background: var(--markdown-callout-swatch);
+			color: var(--markdown-callout-swatch-ink);
+		}
+
+		.markdown-callout-menu-swatch[data-callout-family="note"] {
+			--markdown-callout-swatch: var(--atelier-tag-blue);
+			--markdown-callout-swatch-ink: var(--atelier-tag-blue-fg);
+		}
+
+		.markdown-callout-menu-swatch[data-callout-family="tip"] {
+			--markdown-callout-swatch: var(--atelier-tag-green);
+			--markdown-callout-swatch-ink: var(--atelier-tag-green-fg);
+		}
+
+		.markdown-callout-menu-swatch[data-callout-family="important"] {
+			--markdown-callout-swatch: var(--atelier-tag-purple);
+			--markdown-callout-swatch-ink: var(--atelier-tag-purple-fg);
+		}
+
+		.markdown-callout-menu-swatch[data-callout-family="warning"] {
+			--markdown-callout-swatch: var(--atelier-tag-yellow);
+			--markdown-callout-swatch-ink: var(--atelier-tag-yellow-fg);
+		}
+
+		.markdown-callout-menu-swatch[data-callout-family="caution"] {
+			--markdown-callout-swatch: var(--atelier-tag-red);
+			--markdown-callout-swatch-ink: var(--atelier-tag-red-fg);
+		}
+
+		.markdown-table-menu-item > .markdown-callout-menu-swatch > svg {
+			width: 0.8rem;
+			height: 0.8rem;
+			stroke-width: 2;
+		}
+
+		.markdown-table-menu-item > svg.markdown-callout-menu-check {
+			color: var(--atelier-link);
+		}
+
+		.markdown-callout-menu-checkbox {
+			display: inline-flex;
+			width: 0.95rem;
+			height: 0.95rem;
+			flex: none;
+			align-items: center;
+			justify-content: center;
+			margin: 0 0.15rem;
+			border: 1px solid var(--atelier-border-strong);
+			border-radius: 4px;
+			background: var(--atelier-panel);
+			color: var(--atelier-accent-on);
+		}
+
+		.markdown-callout-menu-checkbox[data-checked="true"] {
+			border-color: var(--atelier-accent);
+			background: var(--atelier-accent);
+		}
+
+		.markdown-callout-menu-checkbox > svg {
+			width: 0.7rem;
+			height: 0.7rem;
+			stroke-width: 3;
+		}
+
+		.markdown-table-menu-item[data-disabled="true"] {
+			color: var(--atelier-fg-faint);
+			cursor: default;
+		}
+
+		.markdown-table-menu-item[data-disabled="true"]
+			.markdown-callout-menu-checkbox {
+			opacity: 0.5;
+		}
+
+		/* The kind a quote's `[!` is about to name. */
+		.markdown-callout-kind-autocomplete .markdown-table-menu-item {
+			min-height: 1.75rem;
+		}
+
 		/* Slash command palette. It is portaled into .atelier-root so it keeps the
 		   same typography, theme tokens, and sizing model as the editor shell. */
 		.markdown-slash-menu {

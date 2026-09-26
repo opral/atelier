@@ -9,10 +9,14 @@ import {
 	Heading4,
 	Heading5,
 	Heading6,
+	Info,
 	Layers,
+	Lightbulb,
 	List,
 	ListOrdered,
+	MessageSquareWarning,
 	Minus,
+	OctagonAlert,
 	PanelTopDashed,
 	Paperclip,
 	Pilcrow,
@@ -21,6 +25,7 @@ import {
 	Table,
 	TextQuote,
 	Trash2,
+	TriangleAlert,
 	createLucideIcon,
 } from "lucide-react";
 import type { Editor } from "@tiptap/core";
@@ -29,6 +34,13 @@ import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import type { ComponentType } from "react";
 import { syncTaskListFlags } from "./extensions/join-adjacent-lists";
 import { LIST_LEADING_PARAGRAPH_DATA_KEY } from "./tiptap-markdown-bridge/mdwc-to-tiptap";
+import {
+	calloutAround,
+	inCalloutTitle,
+	quoteAround,
+	turnIntoCallout,
+	unwrapCallout,
+} from "./callout-commands";
 
 export type BlockCommand = {
 	id: string;
@@ -43,11 +55,106 @@ export type BlockCommand = {
 	toggle?: (editor: Editor) => void;
 };
 
-/** Lifts the selection out of a blockquote before another block type applies. */
-function unquoted(editor: Editor) {
+/**
+ * How a conversion treats a callout around the caret. "Turn into" takes it
+ * apart (`whole`), since the callout is what is being turned into something
+ * else. The slash menu does so only from the title (`title`): a title holds
+ * no other block, while the body holds any, so a heading typed in the body
+ * stays in the callout.
+ */
+type CalloutExit = "whole" | "title";
+
+/**
+ * Takes the callout around the caret apart, the way "Remove callout" does:
+ * its title becomes a paragraph and its body plain blocks, the caret beside
+ * the same character.
+ */
+function leaveCallout(editor: Editor, exit: CalloutExit = "whole"): void {
+	const { $from } = editor.state.selection;
+	const callout = calloutAround($from);
+	if (!callout || (exit === "title" && !inCalloutTitle($from))) return;
+	editor
+		.chain()
+		.focus()
+		.command(({ tr }) => unwrapCallout(tr, callout.pos, { quote: false }))
+		.run();
+}
+
+/**
+ * Lifts the selection out of a blockquote, or out of a callout (see
+ * `CalloutExit`), before another block type applies.
+ */
+function unquoted(editor: Editor, exit: CalloutExit = "whole") {
+	leaveCallout(editor, exit);
 	const chain = editor.chain().focus();
 	return editor.isActive("blockquote") ? chain.lift("blockquote") : chain;
 }
+
+/** The caret is in a callout, nearer to it than to any quote. */
+function inCallout(editor: Editor): boolean {
+	const { $from } = editor.state.selection;
+	const callout = calloutAround($from);
+	const quote = quoteAround($from);
+	return Boolean(callout && (!quote || callout.depth > quote.depth));
+}
+
+/**
+ * A callout of `kind` from the selection: the caret's line, or the selected
+ * blocks, become its body under an empty title; a quote around the caret
+ * becomes the callout; a callout around it changes kind.
+ */
+function toCallout(editor: Editor, kind: string): boolean {
+	return editor
+		.chain()
+		.focus()
+		.command(({ tr }) => turnIntoCallout(tr, kind))
+		.scrollIntoView()
+		.run();
+}
+
+const CALLOUT_COMMANDS: {
+	kind: string;
+	label: string;
+	description: string;
+	icon: ComponentType<{ className?: string }>;
+	keywords: string[];
+}[] = [
+	{
+		kind: "note",
+		label: "Callout",
+		description: "A note that stands out",
+		icon: Info,
+		keywords: ["callout", "alert", "admonition", "note", ">[!", "info"],
+	},
+	{
+		kind: "tip",
+		label: "Tip",
+		description: "Advice that helps",
+		icon: Lightbulb,
+		keywords: ["callout", "alert", "admonition", "tip", "hint"],
+	},
+	{
+		kind: "important",
+		label: "Important",
+		description: "What readers must not miss",
+		icon: MessageSquareWarning,
+		keywords: ["callout", "alert", "admonition", "important"],
+	},
+	{
+		kind: "warning",
+		label: "Warning",
+		description: "Needs attention",
+		icon: TriangleAlert,
+		keywords: ["callout", "alert", "admonition", "warning", "attention"],
+	},
+	{
+		kind: "caution",
+		label: "Caution",
+		description: "Risks and consequences",
+		icon: OctagonAlert,
+		keywords: ["callout", "alert", "admonition", "caution", "danger"],
+	},
+];
 
 /** The caret sits in a table cell, whose content is one line of inline text. */
 function inTableCell(editor: Editor): boolean {
@@ -295,8 +402,8 @@ function codeText(node: ProseMirrorNode): string {
  * per paragraph. A single block keeps its line breaks as lines (the hard
  * break is the schema's line break replacement).
  */
-function toCodeBlock(editor: Editor): boolean {
-	return unquoted(editor)
+function toCodeBlock(editor: Editor, exit: CalloutExit = "whole"): boolean {
+	return unquoted(editor, exit)
 		.command(({ tr }) => {
 			const { $from, $to } = tr.selection;
 			const codeBlock = tr.doc.type.schema.nodes.codeBlock!;
@@ -339,7 +446,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		isAvailable: outsideTableCell,
 		insert: (editor) =>
 			codeBlockToParagraphs(editor) ||
-			unquoted(editor).setNode("paragraph").run(),
+			unquoted(editor, "title").setNode("paragraph").run(),
 		toggle: (editor) =>
 			codeBlockToParagraphs(editor) ||
 			unquoted(editor).setNode("paragraph").run(),
@@ -364,7 +471,8 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: Heading1,
 		keywords: ["h1", "#", "title"],
 		isAvailable: outsideTableCell,
-		insert: (editor) => unquoted(editor).setNode("heading", { level: 1 }).run(),
+		insert: (editor) =>
+			unquoted(editor, "title").setNode("heading", { level: 1 }).run(),
 		toggle: (editor) => unquoted(editor).setNode("heading", { level: 1 }).run(),
 	},
 	{
@@ -374,7 +482,8 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: Heading2,
 		keywords: ["h2", "##", "subtitle"],
 		isAvailable: outsideTableCell,
-		insert: (editor) => unquoted(editor).setNode("heading", { level: 2 }).run(),
+		insert: (editor) =>
+			unquoted(editor, "title").setNode("heading", { level: 2 }).run(),
 		toggle: (editor) => unquoted(editor).setNode("heading", { level: 2 }).run(),
 	},
 	{
@@ -384,7 +493,8 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: Heading3,
 		keywords: ["h3", "###"],
 		isAvailable: outsideTableCell,
-		insert: (editor) => unquoted(editor).setNode("heading", { level: 3 }).run(),
+		insert: (editor) =>
+			unquoted(editor, "title").setNode("heading", { level: 3 }).run(),
 		toggle: (editor) => unquoted(editor).setNode("heading", { level: 3 }).run(),
 	},
 	{
@@ -395,6 +505,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		keywords: ["ul", "-", "unordered", "bullets"],
 		isAvailable: outsideTableCell,
 		insert: (editor) => {
+			leaveCallout(editor, "title");
 			convertListItem(editor, "bulletList", { checked: null });
 		},
 	},
@@ -406,6 +517,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		keywords: ["ol", "1.", "numbered", "ordered"],
 		isAvailable: outsideTableCell,
 		insert: (editor) => {
+			leaveCallout(editor, "title");
 			convertListItem(editor, "orderedList", { checked: null });
 		},
 	},
@@ -417,6 +529,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		keywords: ["todo", "checkbox", "checklist", "task", "[]"],
 		isAvailable: outsideTableCell,
 		insert: (editor) => {
+			leaveCallout(editor, "title");
 			convertListItem(editor, "bulletList", { checked: false });
 		},
 	},
@@ -462,7 +575,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: Code2,
 		keywords: ["code", "```", "pre", "snippet"],
 		isAvailable: outsideTableCell,
-		insert: (editor) => toCodeBlock(editor),
+		insert: (editor) => toCodeBlock(editor, "title"),
 		toggle: (editor) => {
 			if (editor.isActive("codeBlock")) {
 				editor.chain().focus().lift("codeBlock").run();
@@ -478,15 +591,48 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		icon: TextQuote,
 		keywords: [">", "quote", "blockquote"],
 		isAvailable: outsideTableCell,
-		insert: (editor) => editor.chain().focus().wrapIn("blockquote").run(),
+		// A callout's title is no place for a quote: from there, the callout
+		// becomes one.
+		insert: (editor) => {
+			const callout = calloutAround(editor.state.selection.$from);
+			if (callout && inCalloutTitle(editor.state.selection.$from)) {
+				editor
+					.chain()
+					.focus()
+					.command(({ tr }) => unwrapCallout(tr, callout.pos, { quote: true }))
+					.run();
+				return;
+			}
+			editor.chain().focus().wrapIn("blockquote").run();
+		},
 		toggle: (editor) => {
-			if (editor.isActive("blockquote")) {
+			if (inCallout(editor)) {
+				const callout = calloutAround(editor.state.selection.$from)!;
+				editor
+					.chain()
+					.focus()
+					.command(({ tr }) => unwrapCallout(tr, callout.pos, { quote: true }))
+					.run();
+			} else if (editor.isActive("blockquote")) {
 				editor.chain().focus().lift("blockquote").run();
 			} else {
 				editor.chain().focus().wrapIn("blockquote").run();
 			}
 		},
 	},
+	...CALLOUT_COMMANDS.map(
+		(callout): BlockCommand => ({
+			id: callout.kind === "note" ? "callout" : `callout-${callout.kind}`,
+			label: callout.label,
+			description: callout.description,
+			icon: callout.icon,
+			keywords: callout.keywords,
+			isAvailable: outsideTableCell,
+			insert: (editor) => {
+				toCallout(editor, callout.kind);
+			},
+		}),
+	),
 	{
 		id: "footnote",
 		label: "Footnote",
@@ -636,6 +782,7 @@ export type ToolbarBlockType =
  */
 export type ActiveBlockType =
 	| ToolbarBlockType
+	| "callout"
 	| "heading-4"
 	| "heading-5"
 	| "heading-6"
@@ -649,6 +796,7 @@ export function unlistedBlock(
 	if (block === "heading-5") return { label: "Heading 5", icon: Heading5 };
 	if (block === "heading-6") return { label: "Heading 6", icon: Heading6 };
 	if (block === "mixed") return { label: "Mixed", icon: Layers };
+	if (block === "callout") return { label: "Callout", icon: Info };
 	return null;
 }
 
@@ -712,6 +860,7 @@ export function getActiveBlock(editor: Editor): ActiveBlockType {
 	});
 	if (kinds.size > 1) return "mixed";
 	const kind = kinds.values().next().value ?? textblockKind($from.parent);
+	if (kind === "paragraph" && inCallout(editor)) return "callout";
 	if (kind === "paragraph" && editor.isActive("blockquote"))
 		return "blockquote";
 	return kind;
@@ -880,9 +1029,11 @@ const TextLines = createLucideIcon("text-lines", [
 ]);
 
 /**
- * "Turn into" entries for the selection toolbar. Text, headings, quote and
- * code first leave any list so the block converts as a whole, the way
- * Notion does; the list kinds convert just the selected item(s).
+ * "Turn into" entries for the selection toolbar. Text, headings, quote,
+ * callout and code first leave any list so the block converts as a whole,
+ * the way Notion does; the list kinds convert just the selected item(s).
+ * Every kind but the callout's own takes a callout around the caret apart
+ * first, and the quote keeps it together as a quote.
  */
 export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 	...TOOLBAR_BLOCK_OPTIONS.filter((option) =>
@@ -901,6 +1052,7 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 		label: "Bulleted list",
 		icon: List,
 		apply: (editor) => {
+			leaveCallout(editor);
 			convertListItem(editor, "bulletList", { checked: null });
 		},
 	},
@@ -909,6 +1061,7 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 		label: "Numbered list",
 		icon: ListOrdered,
 		apply: (editor) => {
+			leaveCallout(editor);
 			convertListItem(editor, "orderedList", { checked: null });
 		},
 	},
@@ -917,10 +1070,23 @@ export const SELECTION_BLOCK_OPTIONS: SelectionBlockOption[] = [
 		label: "To-do list",
 		icon: CheckSquare,
 		apply: (editor) => {
+			leaveCallout(editor);
 			convertListItem(editor, "bulletList", { checked: false });
 		},
 	},
-	...(["blockquote", "code"] as const).map((value) => {
+	...(["blockquote", "callout", "code"] as const).map((value) => {
+		if (value === "callout") {
+			return {
+				value,
+				label: "Callout",
+				icon: Info,
+				apply: (editor: Editor) => {
+					if (inCallout(editor)) return;
+					leaveLists(editor);
+					toCallout(editor, "note");
+				},
+			};
+		}
 		const option = TOOLBAR_BLOCK_OPTIONS.find(
 			(entry) => entry.value === value,
 		)!;
