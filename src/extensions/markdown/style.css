@@ -1185,6 +1185,19 @@
 			line-height: 0;
 		}
 
+		/* A picture the document holds directly gets a wide table's room: the
+		   column and both gutters. The wrapper stays the picture's own size,
+		   since its delete action sits on the picture's corner, and is centred
+		   on the column by offset rather than by auto margins, which stop
+		   centring once the picture is wider than the column. */
+		.markdown-view .ProseMirror > .markdown-image-embed {
+			width: max-content;
+			max-width: calc(100% + 2 * var(--atelier-doc-gutter, 0px));
+			margin-inline: 0;
+			left: 50%;
+			translate: -50% 0;
+		}
+
 		/* A picture that brought no size of its own: the default object size
 		   a replaced element gets, so an SVG without width and height is seen
 		   rather than laid out to nothing. */
