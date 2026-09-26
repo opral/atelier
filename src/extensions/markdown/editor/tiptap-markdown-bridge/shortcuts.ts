@@ -31,6 +31,7 @@ import { outdentSelectedListItems } from "./list-keyboard-commands";
 import { convertListItem } from "../block-commands";
 import { LIST_LEADING_PARAGRAPH_DATA_KEY } from "./mdwc-to-tiptap";
 import { focusIsOnEditorControl } from "../focused-control";
+import { calloutFolded, unfoldCallout } from "./callout-node-view";
 
 const CODE_FENCE_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s*$/;
 const CODE_FENCE_INPUT_PATTERN = /^(`{3,}|~{3,})([^\s`~]{0,48})\s$/;
@@ -886,11 +887,28 @@ export const MarkdownWcShortcuts = Extension.create({
 			return true;
 		};
 
-		// A footnote's note is left by the same keys as a quote.
+		// A footnote's note is left by the same keys as a quote. A callout is
+		// a quote in the file but has keys of its own: a quote around one is
+		// not the quote its caret is in.
 		const blockquoteDepth = ($from: any): number => {
 			for (let depth = $from.depth - 1; depth > 0; depth--) {
 				const name = $from.node(depth)?.type?.name;
 				if (name === "blockquote" || name === "footnoteDef") return depth;
+				if (name === "callout") return -1;
+			}
+			return -1;
+		};
+
+		/**
+		 * The list item the caret's line belongs to, or -1. An item outside the
+		 * caret's callout is not it: Tab or Enter in a callout inside a list
+		 * acted on the whole item around the callout.
+		 */
+		const listItemDepthAt = ($from: any): number => {
+			for (let depth = $from.depth; depth > 0; depth--) {
+				const name = $from.node(depth)?.type?.name;
+				if (name === "listItem") return depth;
+				if (name === "callout") return -1;
 			}
 			return -1;
 		};
@@ -985,6 +1003,230 @@ export const MarkdownWcShortcuts = Extension.create({
 			tr.setSelection(TextSelection.create(tr.doc, target + 1));
 			view.dispatch(tr.scrollIntoView());
 			return true;
+		};
+
+		const isEmptyLine = (node: any) =>
+			node?.type.name === "paragraph" && node.content.size === 0;
+
+		/**
+		 * Enter in a callout's title goes to the start of its body; the title
+		 * is one line and never splits, so where in it the caret was does not
+		 * matter. The body gets a new first line, as Enter after a heading
+		 * gives one, unless its first line is already empty. A folded callout
+		 * unfolds first: the caret must never go where it cannot be seen.
+		 */
+		const enterCalloutTitle = () => {
+			const { state, view } = this.editor;
+			const { $from, $to, empty } = state.selection;
+			if ($from.parent.type.name !== "calloutTitle" || !$from.sameParent($to)) {
+				return false;
+			}
+			const calloutPos = $from.before($from.depth - 1);
+			if (calloutFolded(view, calloutPos)) unfoldCallout(view, calloutPos);
+			const tr = state.tr;
+			if (!empty) tr.deleteSelection();
+			const bodyStart = tr.mapping.map($from.after());
+			if (!isEmptyLine(tr.doc.nodeAt(bodyStart))) {
+				tr.insert(bodyStart, state.schema.nodes.paragraph!.create());
+			}
+			tr.setSelection(TextSelection.create(tr.doc, bodyStart + 1));
+			view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+
+		/**
+		 * Enter on an empty last line of a callout's body leaves the callout,
+		 * as it leaves a quote: the line moves below it. The body's only line
+		 * stays, since a callout cannot be without one, and the caret goes to
+		 * a new line below. An empty line in the middle is a new line like any
+		 * other; leaving there would split the callout, and its second half
+		 * would have no title.
+		 */
+		const escapeEmptyCalloutLine = () => {
+			const { state, view } = this.editor;
+			const { selection } = state;
+			if (!selection.empty) return false;
+			const { $from } = selection;
+			const line = $from.parent;
+			if (!isEmptyLine(line)) return false;
+			const callout = $from.node(-1);
+			if (callout?.type.name !== "callout") return false;
+			if ($from.index(-1) !== callout.childCount - 1) return false;
+			const calloutEnd = $from.after(-1);
+			const tr = state.tr;
+			if (callout.childCount > 2) {
+				tr.insert(calloutEnd, line);
+				tr.delete($from.before(), $from.after());
+				tr.setSelection(
+					TextSelection.create(tr.doc, calloutEnd - line.nodeSize + 1),
+				);
+			} else {
+				tr.insert(calloutEnd, state.schema.nodes.paragraph!.create());
+				tr.setSelection(TextSelection.create(tr.doc, calloutEnd + 1));
+			}
+			view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+
+		/**
+		 * Backspace at the start of a callout's title turns the callout back
+		 * into text, the way it turns a heading back: the title becomes a
+		 * line of its own and the body follows it, where the callout was. The
+		 * empty line a callout with only a title keeps for its body goes.
+		 */
+		const unwrapCallout = ($from: any) => {
+			const { state, view } = this.editor;
+			if (
+				$from.parent.type.name !== "calloutTitle" ||
+				$from.parentOffset !== 0
+			) {
+				return false;
+			}
+			const title = $from.parent;
+			const callout = $from.node(-1);
+			const from = $from.before(-1);
+			const blocks: any[] = [];
+			if (title.content.size > 0) {
+				blocks.push(state.schema.nodes.paragraph!.create(null, title.content));
+			}
+			const onlyEmptyLine =
+				callout.childCount === 2 && isEmptyLine(callout.child(1));
+			callout.forEach((child: any, _offset: number, index: number) => {
+				if (index > 0 && !(onlyEmptyLine && blocks.length)) blocks.push(child);
+			});
+			const tr = closeHistory(
+				state.tr.replaceWith(from, from + callout.nodeSize, blocks),
+			);
+			tr.setSelection(Selection.near(tr.doc.resolve(from + 1)));
+			view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+
+		/**
+		 * Backspace at the start of a callout's first body line goes to the
+		 * end of its title and never joins the two: the title is one line and
+		 * the body's text is not a title. An empty first line goes as well,
+		 * unless it is the body's only one.
+		 */
+		const backspaceIntoCalloutTitle = ($from: any) => {
+			const { state, view } = this.editor;
+			const line = $from.parent;
+			if (
+				!line.isTextblock ||
+				line.type.spec.code ||
+				$from.parentOffset !== 0
+			) {
+				return false;
+			}
+			const callout = $from.node(-1);
+			if (callout?.type.name !== "callout" || $from.index(-1) !== 1) {
+				return false;
+			}
+			const titleEnd = $from.before() - 1;
+			const tr = state.tr;
+			if (isEmptyLine(line) && callout.childCount > 2) {
+				tr.delete($from.before(), $from.after());
+			}
+			tr.setSelection(TextSelection.create(tr.doc, titleEnd));
+			view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+
+		/**
+		 * Where a caret going up from `pos` lands. A folded callout's body
+		 * cannot be seen, so a caret that would land in it goes to the end of
+		 * that callout's title instead.
+		 */
+		const selectionBefore = (pos: number) => {
+			const { state, view } = this.editor;
+			const found = Selection.findFrom(state.doc.resolve(pos), -1);
+			if (!found) return null;
+			const $found = found.$from;
+			for (let depth = 1; depth < $found.depth; depth++) {
+				if ($found.node(depth).type.name !== "callout") continue;
+				const calloutPos = $found.before(depth);
+				if ($found.index(depth) === 0 || !calloutFolded(view, calloutPos)) {
+					continue;
+				}
+				const titleEnd = calloutPos + $found.node(depth).child(0).nodeSize;
+				return TextSelection.create(state.doc, titleEnd);
+			}
+			return found;
+		};
+
+		/** Moves the caret to `selection`, or to a new line at the document's edge. */
+		const arrowTo = (selection: Selection | null, direction: -1 | 1) => {
+			const { state, view } = this.editor;
+			if (selection) {
+				view.dispatch(state.tr.setSelection(selection).scrollIntoView());
+				return true;
+			}
+			const paragraph = state.schema.nodes.paragraph;
+			if (!paragraph) return false;
+			const at = direction < 0 ? 0 : state.doc.content.size;
+			const tr = state.tr.insert(at, paragraph.create());
+			tr.setSelection(TextSelection.create(tr.doc, at + 1));
+			view.dispatch(tr.scrollIntoView());
+			return true;
+		};
+
+		// Measuring lines needs layout; without it, only the start counts.
+		const onFirstLine = ($from: any) => {
+			if ($from.parentOffset === 0) return true;
+			try {
+				return this.editor.view.endOfTextblock("up");
+			} catch {
+				return false;
+			}
+		};
+
+		/**
+		 * Up from the start of a callout's title leaves it for the block
+		 * above, and Down from the end of its body's last line for the block
+		 * below; with nothing there, a new line opens, as it does beside a
+		 * quote. A folded body is stepped over both ways: Down from its title
+		 * goes past it, Up from below lands on its title.
+		 */
+		const arrowFromCallout = (direction: -1 | 1) => {
+			const { state, view } = this.editor;
+			const { selection } = state;
+			if (!selection.empty) return false;
+			const { $from } = selection as any;
+			if (!$from.parent.isTextblock) return false;
+			const inTitle = $from.parent.type.name === "calloutTitle";
+
+			if (direction < 0) {
+				if (inTitle) {
+					if ($from.parentOffset !== 0) return false;
+					return arrowTo(selectionBefore($from.before(-1)), -1);
+				}
+				if (!onFirstLine($from)) return false;
+				const target = selectionBefore($from.before());
+				const natural = Selection.findFrom(
+					state.doc.resolve($from.before()),
+					-1,
+				);
+				if (!target || !natural || target.eq(natural)) return false;
+				return arrowTo(target, -1);
+			}
+
+			if (inTitle) {
+				const calloutPos = $from.before(-1);
+				if (!calloutFolded(view, calloutPos)) return false;
+				const calloutEnd = $from.after(-1);
+				return arrowTo(Selection.findFrom(state.doc.resolve(calloutEnd), 1), 1);
+			}
+			if ($from.parentOffset !== $from.parent.content.size) return false;
+			if (blockquoteDepth($from) >= 0) return false;
+			for (let depth = $from.depth - 1; depth > 0; depth--) {
+				if ($from.index(depth) !== $from.node(depth).childCount - 1) {
+					return false;
+				}
+				if ($from.node(depth).type.name !== "callout") continue;
+				const calloutEnd = $from.after(depth);
+				return arrowTo(Selection.findFrom(state.doc.resolve(calloutEnd), 1), 1);
+			}
+			return false;
 		};
 
 		const outdentListItem = () =>
@@ -1339,6 +1581,8 @@ export const MarkdownWcShortcuts = Extension.create({
 					}
 					// Cells hand Tab to the table's own navigation.
 					if (name === "tableCell" || name === "tableHeader") return false;
+					// A list around a callout is not the caret's to indent.
+					if (name === "callout") break;
 				}
 				// Nothing to indent — but beside a footnote marker, or inside a
 				// footnote's own note, there is somewhere to go. The marker is
@@ -1361,17 +1605,29 @@ export const MarkdownWcShortcuts = Extension.create({
 				if (indentCodeLines(-1)) return true;
 				// Like Tab, the key stays in the document when there is nothing
 				// to outdent; focus leaving backwards is no better than forwards.
-				outdentListItem();
+				// A list around a callout is not the caret's to outdent.
+				const $from = this.editor.state.selection.$from;
+				let inCallout = false;
+				for (let depth = $from.depth; depth > 0; depth--) {
+					if ($from.node(depth).type.name === "callout") inCallout = true;
+				}
+				if (!inCallout || listItemDepthAt($from) > 0) outdentListItem();
 				return true;
 			},
 
-			"Shift-Enter": insertHardBreak,
+			// A callout's title is one line: Shift-Enter there goes to the body
+			// as Enter does, instead of breaking the title's marker line.
+			"Shift-Enter": () => enterCalloutTitle() || insertHardBreak(),
 			ArrowLeft: () => arrowFromCodeBlockBoundary(-1),
 			ArrowRight: () => arrowFromCodeBlockBoundary(1),
 			ArrowUp: () =>
-				arrowFromCodeBlockBoundary(-1) || arrowFromBlockquoteBoundary(-1),
+				arrowFromCodeBlockBoundary(-1) ||
+				arrowFromCallout(-1) ||
+				arrowFromBlockquoteBoundary(-1),
 			ArrowDown: () =>
-				arrowFromCodeBlockBoundary(1) || arrowFromBlockquoteBoundary(1),
+				arrowFromCodeBlockBoundary(1) ||
+				arrowFromCallout(1) ||
+				arrowFromBlockquoteBoundary(1),
 
 			Backspace: () => {
 				if (restoreTypedDivider()) return true;
@@ -1381,6 +1637,9 @@ export const MarkdownWcShortcuts = Extension.create({
 				const { selection } = state;
 				if (!selection.empty) return false;
 				const $from: any = selection.$from;
+				if (unwrapCallout($from) || backspaceIntoCalloutTitle($from)) {
+					return true;
+				}
 				// A heading turns back into text first, like Notion; the merge
 				// into the block above is the next keystroke.
 				// An empty line above goes before that, so Backspace undoes Enter
@@ -1501,14 +1760,7 @@ export const MarkdownWcShortcuts = Extension.create({
 				if (para?.type?.name !== "paragraph" || $from.parentOffset !== 0)
 					return false;
 
-				let listItemDepth = -1;
-				for (let d = $from.depth; d > 0; d--) {
-					const n = $from.node(d);
-					if (n?.type?.name === "listItem") {
-						listItemDepth = d;
-						break;
-					}
-				}
+				const listItemDepth = listItemDepthAt($from);
 				// An empty block right above is what Backspace at a block start
 				// removes, whether the empty block is a paragraph or a list item
 				// (then a following paragraph, or the next item, takes its place).
@@ -1689,25 +1941,20 @@ export const MarkdownWcShortcuts = Extension.create({
 						}
 					}
 				}
+				if (enterCalloutTitle()) return true;
 				if (convertDivider()) return true;
 				if (convertCodeFence()) return true;
 				if (enterCodeBlock()) return true;
 				if (escapeEmptyBlockquote()) return true;
+				if (escapeEmptyCalloutLine()) return true;
 				const { state } = this.editor;
 				const $from: any = state.selection.$from;
-				// Find enclosing listItem
-				let inListItem = false;
-				let isTask = false;
-				let itemDepth = -1;
-				for (let d = $from.depth; d > 0; d--) {
-					const n = $from.node(d);
-					if (n?.type?.name === "listItem") {
-						inListItem = true;
-						isTask = n.attrs?.checked === true || n.attrs?.checked === false;
-						itemDepth = d;
-						break;
-					}
-				}
+				const itemDepth = listItemDepthAt($from);
+				const inListItem = itemDepth > 0;
+				const itemChecked = inListItem
+					? $from.node(itemDepth).attrs?.checked
+					: null;
+				const isTask = itemChecked === true || itemChecked === false;
 				if (!inListItem) {
 					// Enter replaces a range selection before splitting the remaining
 					// block. Running both in one chain keeps the split position mapped

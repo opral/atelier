@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import type { NodeView } from "@tiptap/pm/view";
+import type { EditorView, NodeView } from "@tiptap/pm/view";
 import {
 	calloutFamily,
 	calloutIconSvg,
@@ -15,6 +15,24 @@ export type CalloutMenuRequest = {
 	readonly pos: number;
 	readonly anchor: HTMLElement;
 };
+
+/**
+ * Unfolds a callout's node view. Folding is the view's own state, not the
+ * document's, so the keyboard reaches it through the node view's dom.
+ */
+const unfolders = new WeakMap<globalThis.Node, () => void>();
+
+/** Whether the callout at `pos` has its body folded away. */
+export function calloutFolded(view: EditorView, pos: number): boolean {
+	const dom = view.nodeDOM(pos);
+	return dom instanceof HTMLElement && dom.hasAttribute("data-folded");
+}
+
+/** Shows the body of the callout at `pos`, as its chevron would. */
+export function unfoldCallout(view: EditorView, pos: number): void {
+	const dom = view.nodeDOM(pos);
+	if (dom) unfolders.get(dom)?.();
+}
 
 const CHEVRON_DOWN =
 	'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
@@ -100,6 +118,10 @@ export function createCalloutNodeView(props: {
 		render();
 		if (folded) moveCaretOutOfFoldedBody();
 	};
+	unfolders.set(dom, () => {
+		folded = false;
+		render();
+	});
 	icon.addEventListener("mousedown", onIconMouseDown);
 	icon.addEventListener("click", onIconClick);
 	fold.addEventListener("mousedown", onFoldMouseDown);
