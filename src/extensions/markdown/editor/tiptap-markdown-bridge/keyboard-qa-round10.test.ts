@@ -289,7 +289,7 @@ describe("Delete across block boundaries", () => {
 });
 
 describe("Enter", () => {
-	test("at the start of a heading opens a line above and puts the caret there", () => {
+	test("at the start of a heading opens a line above and keeps the caret on the heading", () => {
 		const editor = editorFor("# Obsidian Version Control\n\nbody\n");
 		caret(editor, "Obsidian Version Control", 0);
 		expect(key(editor, "Enter")).toBe(true);
@@ -297,10 +297,25 @@ describe("Enter", () => {
 			"<span></span>\n\n# Obsidian Version Control\n\nbody\n",
 		);
 		const $caret = editor.state.selection.$from;
-		expect($caret.parent.type.name).toBe("paragraph");
+		expect($caret.parent.type.name).toBe("heading");
 		expect($caret.parentOffset).toBe(0);
 		type(editor, "x");
-		expect(md(editor)).toBe("x\n\n# Obsidian Version Control\n\nbody\n");
+		expect(md(editor)).toBe(
+			"<span></span>\n\n# xObsidian Version Control\n\nbody\n",
+		);
+	});
+
+	test("twice at the start of a heading opens two lines and keeps the caret on the heading", () => {
+		const editor = editorFor("## How it worked\n");
+		caret(editor, "How it worked", 0);
+		key(editor, "Enter");
+		key(editor, "Enter");
+		const $caret = editor.state.selection.$from;
+		expect($caret.parent.type.name).toBe("heading");
+		expect($caret.parentOffset).toBe(0);
+		expect(editor.state.doc.child(0).content.size).toBe(0);
+		expect(editor.state.doc.child(1).content.size).toBe(0);
+		expect(editor.state.doc.child(2).type.name).toBe("heading");
 	});
 
 	test("at the start of a heading inside a quote keeps the heading", () => {
@@ -321,7 +336,7 @@ describe("Enter", () => {
 		expect(md(editor)).toBe("Title\n");
 	});
 
-	test("Backspace removes the inserted line after a table and enters its last cell", () => {
+	test("Backspace removes the inserted line after a table and keeps the caret on the heading", () => {
 		const editor = editorFor(
 			"| Folder | Holds |\n| --- | --- |\n| notes/ | Notes |\n\n## Conventions\n",
 		);
@@ -332,9 +347,23 @@ describe("Enter", () => {
 		expect(md(editor)).toBe(
 			"| Folder | Holds |\n| ------ | ----- |\n| notes/ | Notes |\n\n## Conventions\n",
 		);
+		expect(editor.state.selection.$from.parent.type.name).toBe("heading");
+		expect(editor.state.selection.$from.parentOffset).toBe(0);
+	});
+
+	test("Backspace in an empty line between a table and a heading enters the table's last cell", () => {
+		const editor = editorFor(
+			"| Folder | Holds |\n| --- | --- |\n| notes/ | Notes |\n\n## Conventions\n",
+		);
+		caret(editor, "Conventions", 0);
+		key(editor, "Enter");
+		const headingStart = editor.state.selection.$from.before();
+		editor.commands.setTextSelection(headingStart - 1);
+		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+
+		expect(key(editor, "Backspace")).toBe(true);
 		expect(editor.state.selection.$from.parent.type.name).toBe("tableCell");
 		expect(editor.state.selection.$from.parent.textContent).toBe("Notes");
-		expect(editor.state.selection.$from.parentOffset).toBe(5);
 	});
 
 	test("Backspace removes the inserted line inside a quote", () => {

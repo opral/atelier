@@ -11,7 +11,7 @@ import { createAtelier, getAtelierConfiguration } from "./atelier-instance";
 import { Atelier } from "./create-atelier";
 import { selectAppliedFileDiffSnapshot } from "./queries";
 import { createCheckpoint } from "./lib/lix-diff-commands";
-import type { AtelierDiffApi } from "./extension-api";
+import type { AtelierDiffApi, AtelierViewsApi } from "./extension-api";
 
 for (const decision of ["keep", "undo", "stale"] as const) {
 	test(`applied review ${decision} uses the pinned span and preserves other edits`, async () => {
@@ -123,3 +123,82 @@ for (const decision of ["keep", "undo", "stale"] as const) {
 		}
 	});
 }
+
+test("revealing an applied review opens beside the agent's terminal tab", async () => {
+	const lix = await openLix();
+	let rendered: ReturnType<typeof render> | undefined;
+	let diff: AtelierDiffApi | undefined;
+	let views: AtelierViewsApi | undefined;
+	const encode = (s: string) => new TextEncoder().encode(s);
+	const head = async () =>
+		String(
+			(await lix.execute("SELECT lix_active_branch_commit_id() AS commit_id"))
+				.rows[0]!.commit_id,
+		);
+	try {
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			"/note.md",
+			encode("original"),
+		]);
+		await createCheckpoint(lix);
+		const instance = createAtelier({
+			lix,
+			defaultOpenPanels: ["right"],
+			extensions: [
+				{
+					id: "atelier_history",
+					placement: ["right"],
+					Component: ({ atelier }) => {
+						diff = atelier.diff;
+						views = atelier.views;
+						return <span>Review harness</span>;
+					},
+				},
+				{
+					id: "test_terminal",
+					name: "Terminal",
+					placement: ["main"],
+					Component: () => <span>Agent terminal</span>,
+				},
+			],
+		});
+		await act(async () => {
+			rendered = render(
+				<Atelier lix={lix} {...getAtelierConfiguration(instance)} />,
+			);
+		});
+		await screen.findByText("Review harness");
+		await act(async () => {
+			await views!.open("test_terminal");
+		});
+		await screen.findByText("Agent terminal");
+		// The agent running in that tab edits a file.
+		const before = await head();
+		await lix.execute(
+			"UPDATE lix_file SET content = $1 WHERE path = '/note.md'",
+			[encode("after agent")],
+		);
+		const after = await head();
+		await act(async () => {
+			await diff!.open({
+				base: { commitId: before },
+				target: { commitId: after },
+				intent: "review-applied",
+				reveal: true,
+			});
+		});
+		await screen.findByRole("button", { name: "Keep" });
+		const tabs = () =>
+			Array.from(
+				document.querySelectorAll<HTMLButtonElement>(
+					'header [data-slot="main-tab-strip"] button[data-view-instance]',
+				),
+			).map((button) => button.dataset.viewKey);
+		// The reveal must not navigate the terminal tab away.
+		await waitFor(() => expect(tabs()).toContain("test_terminal"));
+		expect(tabs().filter((key) => key !== "test_terminal")).not.toHaveLength(0);
+	} finally {
+		await act(async () => rendered?.unmount());
+		await lix.close();
+	}
+});

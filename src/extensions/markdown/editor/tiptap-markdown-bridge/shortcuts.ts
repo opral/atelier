@@ -1384,18 +1384,67 @@ export const MarkdownWcShortcuts = Extension.create({
 				// A heading turns back into text first, like Notion; the merge
 				// into the block above is the next keystroke.
 				// An empty line above goes before that, so Backspace undoes Enter
-				// at the start of a heading.
+				// at the start of a heading, in a quote as well as at the top.
 				if (
 					$from.parent?.type?.name === "heading" &&
 					$from.parentOffset === 0 &&
 					$from.parent.content.size > 0
 				) {
+					const index = $from.index(-1);
+					const previous = index > 0 ? $from.node(-1).child(index - 1) : null;
+					// An item's first line is one it cannot lose: in "- ## Title" it
+					// is the empty line the editor keeps before the heading.
+					// Deleting it put a fresh one back that saved as <span></span>,
+					// so there the heading turns into the item's text instead,
+					// after an empty item above goes, as it does for a text line.
+					if (
+						previous?.type.name === "paragraph" &&
+						previous.content.size === 0 &&
+						index === 1 &&
+						$from.node(-1).type.name === "listItem"
+					) {
+						const itemStart = $from.before(-1);
+						const itemIndex = $from.index(-2);
+						const itemAbove =
+							itemIndex > 0 ? $from.node(-2).child(itemIndex - 1) : null;
+						if (isEmptyItem(itemAbove)) {
+							this.editor.view.dispatch(
+								state.tr
+									.delete(itemStart - itemAbove.nodeSize, itemStart)
+									.scrollIntoView(),
+							);
+							return true;
+						}
+						const from = $from.before() - previous.nodeSize;
+						const tr = state.tr.replaceWith(
+							from,
+							$from.after(),
+							previous.type.create(null, $from.parent.content),
+						);
+						tr.setSelection(TextSelection.create(tr.doc, from + 1));
+						this.editor.view.dispatch(tr.scrollIntoView());
+						return true;
+					}
+					if (
+						previous?.type.name === "paragraph" &&
+						previous.content.size === 0
+					) {
+						const headingStart = $from.before();
+						this.editor.view.dispatch(
+							state.tr
+								.delete(headingStart - previous.nodeSize, headingStart)
+								.scrollIntoView(),
+						);
+						return true;
+					}
 					if (removeEmptyBlockAbove($from, -1)) return true;
 					return this.editor.commands.setNode("paragraph");
 				}
-				// Enter at the start of a heading leaves the caret in the newly
-				// inserted paragraph. Backspace there should undo that insertion,
-				// including when it is the first block in the document.
+				// Backspace on an empty line that opens its container, right
+				// above a heading, removes that line and leaves the caret on the
+				// heading: there is no line above for it to go to. With a block
+				// above, the line goes the way any empty line does and the caret
+				// ends on that block; jumping down to the heading lost its place.
 				if (
 					$from.parent?.type?.name === "paragraph" &&
 					$from.parent.content.size === 0 &&
@@ -1405,15 +1454,7 @@ export const MarkdownWcShortcuts = Extension.create({
 					const parent = $from.node(parentDepth);
 					const index = $from.index(parentDepth);
 					const following = parent.maybeChild(index + 1);
-					if (following?.type.name === "heading") {
-						// Preserve table navigation: removing a blank line after a
-						// table enters its last cell, even when the next block is a heading.
-						if (
-							index > 0 &&
-							parent.child(index - 1).type.name === "table" &&
-							backspaceAcrossBlockAbove($from)
-						)
-							return true;
+					if (index === 0 && following?.type.name === "heading") {
 						const paragraphStart = $from.before();
 						const tr = state.tr.delete(
 							paragraphStart,
@@ -1679,7 +1720,8 @@ export const MarkdownWcShortcuts = Extension.create({
 							const $at = tr.selection.$from;
 							const block = $at.parent;
 							// Enter at the start of a line opens an empty line above it
-							// and leaves the line as it was: a heading stays a heading.
+							// and leaves the line as it was: a heading stays a heading,
+							// and the caret stays at its start, like Notion and Docs.
 							if (
 								block.type.name === "heading" &&
 								$at.parentOffset === 0 &&
@@ -1689,10 +1731,15 @@ export const MarkdownWcShortcuts = Extension.create({
 								const index = $at.index(-1);
 								if ($at.node(-1).canReplaceWith(index, index, paragraph)) {
 									const paragraphStart = $at.before();
-									tr.insert(paragraphStart, paragraph.create());
+									const empty = paragraph.create();
+									tr.insert(paragraphStart, empty);
 									tr.setSelection(
-										TextSelection.create(tr.doc, paragraphStart + 1),
+										TextSelection.create(
+											tr.doc,
+											paragraphStart + empty.nodeSize + 1,
+										),
 									);
+									tr.scrollIntoView();
 									return true;
 								}
 							}
@@ -1759,9 +1806,19 @@ export const MarkdownWcShortcuts = Extension.create({
 				const newItemAttrs = isTask
 					? { ...item.attrs, checked: false }
 					: item.attrs;
+				// In "- ## Title" the heading is the item's text: the empty line
+				// before it is only the one an item must start with.
+				const headingLine =
+					para.type.name === "heading" && para.content.size > 0;
+				const leadsItem =
+					paragraphIndex === 0 ||
+					(paragraphIndex === 1 &&
+						headingLine &&
+						item.firstChild.type.name === "paragraph" &&
+						item.firstChild.content.size === 0);
 				if (
 					state.selection.empty &&
-					paragraphIndex > 0 &&
+					!leadsItem &&
 					$from.parentOffset === 0 &&
 					$from.depth === itemDepth + 1
 				) {
@@ -1776,12 +1833,24 @@ export const MarkdownWcShortcuts = Extension.create({
 						);
 						return true;
 					}
+					// A heading's item starts with the empty line "- ## Title"
+					// keeps out of the file.
+					if (headingLine) {
+						const tr = state.tr.insert(
+							at,
+							state.schema.nodes.paragraph.create({
+								data: { [LIST_LEADING_PARAGRAPH_DATA_KEY]: true },
+							}),
+						);
+						if (canSplit(tr.doc, at, 1, types)) {
+							this.editor.view.dispatch(
+								tr.split(at, 1, types).scrollIntoView(),
+							);
+							return true;
+						}
+					}
 				}
-				if (
-					state.selection.empty &&
-					paragraphIndex === 0 &&
-					$from.parentOffset === 0
-				) {
+				if (state.selection.empty && leadsItem && $from.parentOffset === 0) {
 					// Enter at the start of an item's text opens an empty item above
 					// and keeps the caret with the text. Splitting there would move
 					// the item's attributes (a task's check) onto the empty item.

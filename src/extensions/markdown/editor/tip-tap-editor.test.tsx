@@ -1060,7 +1060,7 @@ test("keeps the editor selection when adding frontmatter", async () => {
 	expect(editor.state.selection.$from.parent.textContent).toBe("Hello");
 });
 
-test("keeps the caret in the new paragraph when Enter is pressed before a heading", async () => {
+test("keeps the caret on the heading when Enter is pressed before it", async () => {
 	const fileId = fakeUuid("file_enter_before_heading_caret");
 	const { lix, editor } = await renderEditorForMarkdownFile({
 		fileId,
@@ -1083,7 +1083,8 @@ test("keeps the caret in the new paragraph when Enter is pressed before a headin
 		fireEvent.keyDown(editor.view.dom, { key: "Enter" });
 	});
 	const immediateCaret = editor.state.selection.$from;
-	expect(immediateCaret.parent.type.name).toBe("paragraph");
+	expect(immediateCaret.parent.type.name).toBe("heading");
+	expect(immediateCaret.parent.textContent).toBe("Conventions");
 	expect(immediateCaret.parentOffset).toBe(0);
 
 	await waitFor(async () => {
@@ -1092,7 +1093,8 @@ test("keeps the caret in the new paragraph when Enter is pressed before a headin
 		);
 	});
 	const caret = editor.state.selection.$from;
-	expect(caret.parent.type.name).toBe("paragraph");
+	expect(caret.parent.type.name).toBe("heading");
+	expect(caret.parent.textContent).toBe("Conventions");
 	expect(caret.parentOffset).toBe(0);
 });
 
