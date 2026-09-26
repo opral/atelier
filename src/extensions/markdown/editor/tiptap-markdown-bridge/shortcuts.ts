@@ -1392,6 +1392,39 @@ export const MarkdownWcShortcuts = Extension.create({
 				) {
 					const index = $from.index(-1);
 					const previous = index > 0 ? $from.node(-1).child(index - 1) : null;
+					// An item's first line is one it cannot lose: in "- ## Title" it
+					// is the empty line the editor keeps before the heading.
+					// Deleting it put a fresh one back that saved as <span></span>,
+					// so there the heading turns into the item's text instead,
+					// after an empty item above goes, as it does for a text line.
+					if (
+						previous?.type.name === "paragraph" &&
+						previous.content.size === 0 &&
+						index === 1 &&
+						$from.node(-1).type.name === "listItem"
+					) {
+						const itemStart = $from.before(-1);
+						const itemIndex = $from.index(-2);
+						const itemAbove =
+							itemIndex > 0 ? $from.node(-2).child(itemIndex - 1) : null;
+						if (isEmptyItem(itemAbove)) {
+							this.editor.view.dispatch(
+								state.tr
+									.delete(itemStart - itemAbove.nodeSize, itemStart)
+									.scrollIntoView(),
+							);
+							return true;
+						}
+						const from = $from.before() - previous.nodeSize;
+						const tr = state.tr.replaceWith(
+							from,
+							$from.after(),
+							previous.type.create(null, $from.parent.content),
+						);
+						tr.setSelection(TextSelection.create(tr.doc, from + 1));
+						this.editor.view.dispatch(tr.scrollIntoView());
+						return true;
+					}
 					if (
 						previous?.type.name === "paragraph" &&
 						previous.content.size === 0
@@ -1773,9 +1806,19 @@ export const MarkdownWcShortcuts = Extension.create({
 				const newItemAttrs = isTask
 					? { ...item.attrs, checked: false }
 					: item.attrs;
+				// In "- ## Title" the heading is the item's text: the empty line
+				// before it is only the one an item must start with.
+				const headingLine =
+					para.type.name === "heading" && para.content.size > 0;
+				const leadsItem =
+					paragraphIndex === 0 ||
+					(paragraphIndex === 1 &&
+						headingLine &&
+						item.firstChild.type.name === "paragraph" &&
+						item.firstChild.content.size === 0);
 				if (
 					state.selection.empty &&
-					paragraphIndex > 0 &&
+					!leadsItem &&
 					$from.parentOffset === 0 &&
 					$from.depth === itemDepth + 1
 				) {
@@ -1790,12 +1833,24 @@ export const MarkdownWcShortcuts = Extension.create({
 						);
 						return true;
 					}
+					// A heading's item starts with the empty line "- ## Title"
+					// keeps out of the file.
+					if (headingLine) {
+						const tr = state.tr.insert(
+							at,
+							state.schema.nodes.paragraph.create({
+								data: { [LIST_LEADING_PARAGRAPH_DATA_KEY]: true },
+							}),
+						);
+						if (canSplit(tr.doc, at, 1, types)) {
+							this.editor.view.dispatch(
+								tr.split(at, 1, types).scrollIntoView(),
+							);
+							return true;
+						}
+					}
 				}
-				if (
-					state.selection.empty &&
-					paragraphIndex === 0 &&
-					$from.parentOffset === 0
-				) {
+				if (state.selection.empty && leadsItem && $from.parentOffset === 0) {
 					// Enter at the start of an item's text opens an empty item above
 					// and keeps the caret with the text. Splitting there would move
 					// the item's attributes (a task's check) onto the empty item.
