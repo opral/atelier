@@ -2297,6 +2297,7 @@ function LayoutShellLoadedContentResolved({
 			documentOrigin = "existing",
 			navigationCause = "foreground",
 			newTab,
+			preserveActiveView = false,
 		}: {
 			area: Area;
 			fileId: string;
@@ -2308,6 +2309,8 @@ function LayoutShellLoadedContentResolved({
 			documentOrigin?: "existing" | "new";
 			navigationCause?: "foreground" | "route" | "restoration";
 			newTab?: boolean;
+			/** Open beside, never over, an active tab that is not a document. */
+			preserveActiveView?: boolean;
 		}) => {
 			const handler =
 				fileViewExtension(extensionMap.values(), filePath) ?? undefined;
@@ -2340,8 +2343,15 @@ function LayoutShellLoadedContentResolved({
 			};
 			updateWorkspace((current) => {
 				const areas = current.areas;
+				const active = areas.main.views.find(
+					(view) => view.instance === areas.main.activeInstance,
+				);
 				const main = mainBehavior.place(areas.main, documentView, {
-					newTab,
+					newTab:
+						newTab ??
+						(preserveActiveView && active && !isDocumentView(active)
+							? true
+							: undefined),
 					documentOrigin,
 				});
 				return {
@@ -2357,11 +2367,15 @@ function LayoutShellLoadedContentResolved({
 	);
 	const openAutoRevealedFile = useCallback(
 		(file: { fileId: string; filePath: string }) => {
+			// A reveal the user did not ask for must not navigate away from a
+			// terminal or other host view: the agent whose edit triggered it is
+			// often running in that very tab.
 			openResolvedFileView({
 				area: "main",
 				fileId: file.fileId,
 				filePath: file.filePath,
 				focus: true,
+				preserveActiveView: true,
 			});
 		},
 		[openResolvedFileView],
