@@ -134,7 +134,9 @@ describe("markdown QA round 8", () => {
 		if (!toggle) throw new Error("paragraph must support toggling");
 		toggle(editor);
 		expect(md(editor)).toBe("a\n\nb\n\nc\n");
-		expect(editor.state.selection.$from.parent.textContent).toBe("a");
+		// The caret was at the start of the line "b" and stays there.
+		expect(editor.state.selection.$from.parent.textContent).toBe("b");
+		expect(editor.state.selection.$from.parentOffset).toBe(0);
 	});
 
 	test("/Divider leaves the caret in a paragraph below the rule", () => {

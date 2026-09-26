@@ -1407,8 +1407,11 @@ export const MarkdownWcShortcuts = Extension.create({
 					if (removeEmptyBlockAbove($from, -1)) return true;
 					return this.editor.commands.setNode("paragraph");
 				}
-				// Backspace on an empty line right above a heading removes that
-				// line, including when it is the first block in the document.
+				// Backspace on an empty line that opens its container, right
+				// above a heading, removes that line and leaves the caret on the
+				// heading: there is no line above for it to go to. With a block
+				// above, the line goes the way any empty line does and the caret
+				// ends on that block; jumping down to the heading lost its place.
 				if (
 					$from.parent?.type?.name === "paragraph" &&
 					$from.parent.content.size === 0 &&
@@ -1418,15 +1421,7 @@ export const MarkdownWcShortcuts = Extension.create({
 					const parent = $from.node(parentDepth);
 					const index = $from.index(parentDepth);
 					const following = parent.maybeChild(index + 1);
-					if (following?.type.name === "heading") {
-						// Preserve table navigation: removing a blank line after a
-						// table enters its last cell, even when the next block is a heading.
-						if (
-							index > 0 &&
-							parent.child(index - 1).type.name === "table" &&
-							backspaceAcrossBlockAbove($from)
-						)
-							return true;
+					if (index === 0 && following?.type.name === "heading") {
 						const paragraphStart = $from.before();
 						const tr = state.tr.delete(
 							paragraphStart,

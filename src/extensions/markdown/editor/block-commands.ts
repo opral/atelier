@@ -244,21 +244,40 @@ function isListScaffold(node: ProseMirrorNode | null | undefined): boolean {
 	);
 }
 
-/** A code block becomes one paragraph per line; blank lines are dropped. */
+/**
+ * A code block becomes one paragraph per line; blank lines are dropped.
+ * The caret stays beside the same character on its line; on a dropped
+ * blank line it ends where the line above it ended. Putting it at the
+ * start of the first line sent it away from where the user was.
+ */
 function codeBlockToParagraphs(editor: Editor): boolean {
 	const { state } = editor;
 	const $from = state.selection.$from;
 	if ($from.parent.type.name !== "codeBlock") return false;
 	const paragraph = state.schema.nodes.paragraph;
-	const lines = $from.parent.textContent
-		.split("\n")
-		.filter((line) => line.trim());
-	const nodes = (lines.length ? lines : [""]).map((line) =>
-		paragraph.create(null, line ? state.schema.text(line) : undefined),
-	);
+	const text = $from.parent.textContent;
+	const caretLine = text.slice(0, $from.parentOffset).split("\n").length - 1;
+	const caretColumn =
+		$from.parentOffset - (text.lastIndexOf("\n", $from.parentOffset - 1) + 1);
 	const from = $from.before();
+	const nodes: ProseMirrorNode[] = [];
+	let caret = from + 1;
+	let at = from;
+	text.split("\n").forEach((line, index) => {
+		const blank = !line.trim();
+		if (!blank) {
+			nodes.push(paragraph.create(null, state.schema.text(line)));
+			at += line.length + 2;
+		}
+		if (index === caretLine) {
+			caret = blank
+				? Math.max(from + 1, at - 1)
+				: at - 1 - line.length + caretColumn;
+		}
+	});
+	if (nodes.length === 0) nodes.push(paragraph.create());
 	const tr = state.tr.replaceWith(from, $from.after(), nodes);
-	tr.setSelection(TextSelection.create(tr.doc, from + 1));
+	tr.setSelection(TextSelection.create(tr.doc, caret));
 	editor.view.dispatch(tr.scrollIntoView());
 	return true;
 }
@@ -488,11 +507,19 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 		isAvailable: outsideTableCell,
 		insert: (editor) => {
 			// The caret continues in a paragraph below; leaving the rule selected
-			// would let the next keystroke replace it.
+			// would let the next keystroke replace it. Text after the caret is
+			// that paragraph: the caret stays with it, and no empty line is
+			// opened between the rule and it.
+			const { $from } = editor.state.selection;
+			const textAfter = $from.parentOffset < $from.parent.content.size;
 			editor
 				.chain()
 				.focus()
-				.insertContent([{ type: "horizontalRule" }, { type: "paragraph" }])
+				.insertContent(
+					textAfter
+						? [{ type: "horizontalRule" }]
+						: [{ type: "horizontalRule" }, { type: "paragraph" }],
+				)
 				.run();
 		},
 	},
@@ -523,12 +550,21 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
 				.run();
 			if (!inserted) return;
 
+			// Enter the table, its first row, and its first cell. Inserted at
+			// the end of a line, the table already holds the caret; inserted
+			// before text, it goes above that text and the caret was left
+			// behind in the text below it, as if nothing had been inserted.
 			const { $from } = editor.state.selection;
 			for (let depth = $from.depth; depth > 0; depth--) {
 				if ($from.node(depth).type.name !== "table") continue;
-				// Enter the table, its first row, and its first cell.
 				editor.commands.setTextSelection($from.before(depth) + 3);
-				break;
+				return;
+			}
+			if ($from.depth === 0) return;
+			const $block = editor.state.doc.resolve($from.before());
+			const above = $block.nodeBefore;
+			if (above?.type.name === "table") {
+				editor.commands.setTextSelection($block.pos - above.nodeSize + 3);
 			}
 		},
 	},
