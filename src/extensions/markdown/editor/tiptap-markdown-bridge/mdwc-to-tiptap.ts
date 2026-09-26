@@ -1,5 +1,6 @@
 // Avoid tight compile-time coupling to mdast types; operate on structural shape
 import { serializeInlineNode } from "../markdown";
+import { parseCalloutMarker } from "./callout";
 
 const SPREAD_META_KEY = "__mdwc_spread";
 export const EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY = "__atelier_empty_scaffold";
@@ -160,10 +161,11 @@ function astBlockToPM(
 		case "blockquote": {
 			const n = node as any;
 			const content = (n.children || []).map(astBlockToPM);
-			const alert = alertKind(content);
+			const callout = calloutFromQuote(buildNodeData(n.data), content);
+			if (callout) return callout;
 			return {
 				type: "blockquote",
-				attrs: { data: buildNodeData(n.data), ...(alert ? { alert } : {}) },
+				attrs: { data: buildNodeData(n.data) },
 				// A bare > marker still needs an editable text block.
 				content: content.length > 0 ? content : [{ type: "paragraph" }],
 			};
@@ -506,15 +508,55 @@ function addMark(active: PMMark[], mark: PMMark): PMMark[] {
 }
 
 /**
- * A GitHub alert is a blockquote whose first line is a `[!NOTE]`-style
- * marker. The marker stays in the text (it is the source), and the kind
- * rides along as an attribute so the view can draw the callout.
+ * A quote whose first line is a `[!NOTE]`-style marker is a callout. The
+ * marker becomes attributes, the rest of that line the title, and the lines
+ * after it the body: the first paragraph's text after its first line break
+ * keeps the paragraph's data, so its block id and comments stay with it.
  */
-function alertKind(content: readonly any[]): string | null {
+function calloutFromQuote(
+	data: Record<string, any> | null,
+	content: PMNode[],
+): PMNode | null {
 	const first = content[0];
 	if (first?.type !== "paragraph") return null;
-	const text = first.content?.[0];
-	if (text?.type !== "text" || typeof text.text !== "string") return null;
-	const match = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i.exec(text.text);
-	return match ? match[1]!.toLowerCase() : null;
+	const inline = first.content ?? [];
+	const lead = inline[0];
+	if (lead?.type !== "text" || typeof lead.text !== "string") return null;
+	if (lead.marks?.length) return null;
+	const marker = parseCalloutMarker(lead.text);
+	if (!marker) return null;
+	const rest = lead.text.slice(marker.length);
+	const line = [...(rest ? [{ ...lead, text: rest }] : []), ...inline.slice(1)];
+	const breakAt = line.findIndex((child) => child.type === "hardBreak");
+	const title = breakAt < 0 ? line : line.slice(0, breakAt);
+	const bodyInline = breakAt < 0 ? [] : line.slice(breakAt + 1);
+	const body: PMNode[] = [];
+	if (bodyInline.length > 0) {
+		body.push({ type: "paragraph", attrs: first.attrs, content: bodyInline });
+	}
+	body.push(...content.slice(1));
+	return {
+		type: "callout",
+		attrs: {
+			data,
+			kind: marker.kind,
+			marker: marker.marker,
+			fold: marker.fold,
+		},
+		content: [
+			{
+				type: "calloutTitle",
+				...(title.length > 0 ? { content: trimLeadingSpace(title) } : {}),
+			},
+			// A callout with only its marker line still has a line to type in.
+			...(body.length > 0 ? body : [{ type: "paragraph" }]),
+		],
+	};
+}
+
+function trimLeadingSpace(nodes: PMNode[]): PMNode[] {
+	const [head, ...tail] = nodes;
+	if (head?.type !== "text") return nodes;
+	const text = head.text!.replace(/^[ \t]+/, "");
+	return text ? [{ ...head, text }, ...tail] : tail;
 }

@@ -1166,6 +1166,59 @@
 			}
 		}
 
+		/* A callout's icon opens its menu and its chevron folds it for the
+		   reader; both are buttons that tint on hover in the callout's ink. */
+		.markdown-view .ProseMirror .markdown-callout-icon,
+		.markdown-view .ProseMirror .markdown-callout-fold {
+			cursor: pointer;
+			transition: background-color 100ms ease-out;
+		}
+
+		.markdown-view .ProseMirror .markdown-callout-icon:hover,
+		.markdown-view .ProseMirror .markdown-callout-icon[aria-expanded="true"],
+		.markdown-view .ProseMirror .markdown-callout-fold:hover {
+			background: color-mix(
+				in srgb,
+				var(--markdown-callout-ink) 12%,
+				transparent
+			);
+		}
+
+		.markdown-view .ProseMirror .markdown-callout-icon:focus-visible,
+		.markdown-view .ProseMirror .markdown-callout-fold:focus-visible {
+			outline: 2px solid var(--atelier-ring);
+			outline-offset: 1px;
+		}
+
+		.markdown-view .ProseMirror .markdown-callout-fold {
+			display: flex;
+			flex: none;
+			align-items: center;
+			justify-content: center;
+			width: 1.75em;
+			height: 1.75em;
+			margin-right: -0.5em;
+			padding: 0;
+			border: 0;
+			border-radius: var(--markdown-radius);
+			background: transparent;
+			color: var(--markdown-callout-ink);
+			transition:
+				background-color 100ms ease-out,
+				transform 120ms ease-out;
+		}
+
+		.markdown-view .ProseMirror .markdown-callout-fold[hidden] {
+			display: none;
+		}
+
+		.markdown-view
+			.ProseMirror
+			.markdown-callout[data-folded]
+			> .markdown-callout-fold {
+			transform: rotate(-90deg);
+		}
+
 		/* Standalone media is selectable and movable. Selection reuses the embed's
 		   existing edge; hover reveals a compact, undoable delete action. */
 		.markdown-view .ProseMirror [data-markdown-image-block] {

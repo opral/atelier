@@ -9,6 +9,11 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { codeLanguageLabel } from "./code-language-label";
+import { CALLOUT_ICON_PATHS, calloutFamily, calloutLabel } from "./callout";
+import {
+	createCalloutNodeView,
+	createCalloutTitleNodeView,
+} from "./callout-node-view";
 import { isSafeHref } from "../normalize-url";
 import { createCodeBlockNodeView } from "./mermaid-code-block-node-view";
 import { mediaKindSource } from "../extensions/host-media-files";
@@ -416,17 +421,87 @@ export function markdownWcNodes(
 			content: "block+",
 			defining: true,
 			addAttributes() {
-				return { data: { default: null }, alert: { default: null } };
+				return { data: { default: null } };
 			},
 			renderHTML({ node }) {
+				return ["blockquote", diffAttrs(node, "element"), 0];
+			},
+		}),
+		// callout: a quote whose first line is a `[!NOTE]` marker
+		Node.create({
+			name: "callout",
+			group: "block",
+			content: "calloutTitle block+",
+			defining: true,
+			addAttributes() {
+				return {
+					data: { default: null },
+					kind: { default: "note" },
+					marker: { default: null },
+					fold: { default: null },
+				};
+			},
+			renderHTML({ node }) {
+				const family = calloutFamily(node.attrs.kind);
+				const svg = "http://www.w3.org/2000/svg";
 				return [
-					"blockquote",
+					"div",
 					{
 						...diffAttrs(node, "element"),
-						...(node.attrs.alert ? { "data-alert": node.attrs.alert } : {}),
+						class: "markdown-callout",
+						role: "note",
+						"data-callout-family": family,
+						"data-callout-kind": String(node.attrs.kind ?? "note"),
+						style: `--markdown-callout-label: ${JSON.stringify(calloutLabel(node.attrs.kind))}`,
+						...(node.attrs.fold === "-" ? { "data-folded": "" } : {}),
+					},
+					[
+						"span",
+						{ class: "markdown-callout-icon", "aria-hidden": "true" },
+						[
+							`${svg} svg`,
+							{
+								viewBox: "0 0 24 24",
+								width: "18",
+								height: "18",
+								fill: "none",
+								stroke: "currentColor",
+								"stroke-width": "2",
+								"stroke-linecap": "round",
+								"stroke-linejoin": "round",
+							},
+							...CALLOUT_ICON_PATHS[family].map((d) => [`${svg} path`, { d }]),
+						],
+					],
+					["div", { class: "markdown-callout-content" }, 0],
+				] as any;
+			},
+			addNodeView() {
+				return ({ node, editor, getPos }) =>
+					createCalloutNodeView({
+						node,
+						editor,
+						getPos: getPos as () => number | undefined,
+					});
+			},
+		}),
+		// callout title: one line, like a heading; empty shows the kind's name
+		Node.create({
+			name: "calloutTitle",
+			content: "inline*",
+			defining: true,
+			renderHTML({ node }) {
+				return [
+					"div",
+					{
+						class: "markdown-callout-title",
+						...(node.content.size === 0 ? { "data-empty": "" } : {}),
 					},
 					0,
 				];
+			},
+			addNodeView() {
+				return ({ node }) => createCalloutTitleNodeView({ node });
 			},
 		}),
 		// code block

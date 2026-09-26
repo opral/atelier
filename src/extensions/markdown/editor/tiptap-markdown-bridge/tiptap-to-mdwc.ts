@@ -6,6 +6,7 @@ import {
 	EMPTY_MARKDOWN_SCAFFOLD_DATA_KEY,
 	HTML_BREAK_DATA_KEY,
 } from "./mdwc-to-tiptap";
+import { calloutMarkerText } from "./callout";
 
 const SPREAD_META_KEY = "__mdwc_spread";
 
@@ -240,6 +241,8 @@ function pmBlockToAst(
 					}),
 				),
 			};
+		case "callout":
+			return calloutToAst(node);
 		case "codeBlock": {
 			const text = collectText(node.content || []);
 			const lang = node.attrs?.language;
@@ -620,4 +623,46 @@ function collectText(nodes: PMNode[]): string {
 	return (nodes || [])
 		.map((n) => (n.type === "text" ? n.text || "" : ""))
 		.join("");
+}
+
+/**
+ * A callout is saved as the quote it was read from: the marker and title on
+ * the first line, the body below. The marker goes out as raw text (an html
+ * leaf), since the serializer would otherwise escape its bracket and write
+ * `\[!NOTE]`. A body that starts with a paragraph continues the marker's
+ * line, the way GitHub writes an alert; any other block follows it.
+ */
+function calloutToAst(node: PMNode): any {
+	const { data } = extractNodeData(node.attrs);
+	const [titleNode, ...bodyNodes] = node.content || [];
+	const title = pmInlineToMd(titleNode?.content || []);
+	const markerLine: any[] = [
+		{ type: "html", value: calloutMarkerText(node.attrs ?? {}) },
+		...(title.length > 0 ? [{ type: "text", value: " " }, ...title] : []),
+	];
+	const body =
+		bodyNodes.length === 1 &&
+		bodyNodes[0]!.type === "paragraph" &&
+		!pmInlineToMd(bodyNodes[0]!.content || []).length
+			? []
+			: bodyNodes;
+	const children = body.map((child, _index, items) =>
+		pmBlockToAst(child, {
+			preserveEmptyParagraph:
+				items.length > 1 &&
+				child.type === "paragraph" &&
+				!pmInlineToMd(child.content || []).length,
+		}),
+	);
+	const lead = children[0];
+	if (lead?.type === "paragraph" && lead.children.length > 0) {
+		lead.children = [
+			...markerLine,
+			{ type: "text", value: "\n" },
+			...lead.children,
+		];
+	} else {
+		children.unshift({ type: "paragraph", children: markerLine });
+	}
+	return { type: "blockquote", data, children };
 }

@@ -198,26 +198,83 @@ background: transparent;
 color: inherit;
 margin: var(--atelier-doc-gap) 0;
 }
-.atelier-document blockquote[data-alert] {
-border-left: 0;
+.atelier-document .markdown-callout {
+--markdown-callout-ink: var(--atelier-tag-gray-fg);
+display: flex;
+gap: 0.5em;
+margin: var(--atelier-doc-gap) 0;
+padding: 0.75em 1.125em 0.75em 0.625em;
 border-radius: var(--atelier-doc-radius);
-padding: 1em 1em 1em 0.75em;
 background: var(--atelier-tag-gray);
+color: var(--atelier-fg);
 }
-.atelier-document blockquote[data-alert="note"] {
+.atelier-document .markdown-callout[data-callout-family="note"] {
+--markdown-callout-ink: var(--atelier-tag-blue-fg);
 background: var(--atelier-tag-blue);
 }
-.atelier-document blockquote[data-alert="tip"] {
+.atelier-document .markdown-callout[data-callout-family="tip"] {
+--markdown-callout-ink: var(--atelier-tag-green-fg);
 background: var(--atelier-tag-green);
 }
-.atelier-document blockquote[data-alert="important"] {
+.atelier-document .markdown-callout[data-callout-family="important"] {
+--markdown-callout-ink: var(--atelier-tag-purple-fg);
 background: var(--atelier-tag-purple);
 }
-.atelier-document blockquote[data-alert="warning"] {
+.atelier-document .markdown-callout[data-callout-family="warning"] {
+--markdown-callout-ink: var(--atelier-tag-yellow-fg);
 background: var(--atelier-tag-yellow);
 }
-.atelier-document blockquote[data-alert="caution"] {
+.atelier-document .markdown-callout[data-callout-family="caution"] {
+--markdown-callout-ink: var(--atelier-tag-red-fg);
 background: var(--atelier-tag-red);
+}
+.atelier-document .markdown-callout-icon {
+display: flex;
+flex: none;
+align-items: center;
+justify-content: center;
+width: 1.75em;
+height: 1.75em;
+padding: 0;
+border: 0;
+border-radius: var(--atelier-doc-radius);
+background: transparent;
+color: var(--markdown-callout-ink);
+}
+.atelier-document .markdown-callout-icon svg {
+width: 1.125em;
+height: 1.125em;
+}
+.atelier-document .markdown-callout-content {
+display: flex;
+flex: 1 1 auto;
+flex-direction: column;
+gap: calc(var(--atelier-doc-gap) * 0.5);
+min-width: 0;
+}
+.atelier-document .markdown-callout-content > * {
+margin-top: 0;
+margin-bottom: 0;
+}
+.atelier-document .markdown-callout-title {
+position: relative;
+min-height: 1.75em;
+color: var(--markdown-callout-ink);
+font-size: 0.9375em;
+font-weight: 600;
+line-height: 1.8667;
+}
+.atelier-document .markdown-callout-title[data-empty]::before {
+content: var(--markdown-callout-label, "Note");
+position: absolute;
+inset: 0 auto auto 0;
+pointer-events: none;
+}
+.atelier-document
+.markdown-callout[data-folded]
+> .markdown-callout-content
+> :not(.markdown-callout-title) {
+display: none;
 }
 .atelier-document blockquote p {
 margin-top: 0;
