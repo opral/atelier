@@ -1384,18 +1384,31 @@ export const MarkdownWcShortcuts = Extension.create({
 				// A heading turns back into text first, like Notion; the merge
 				// into the block above is the next keystroke.
 				// An empty line above goes before that, so Backspace undoes Enter
-				// at the start of a heading.
+				// at the start of a heading, in a quote as well as at the top.
 				if (
 					$from.parent?.type?.name === "heading" &&
 					$from.parentOffset === 0 &&
 					$from.parent.content.size > 0
 				) {
+					const index = $from.index(-1);
+					const previous = index > 0 ? $from.node(-1).child(index - 1) : null;
+					if (
+						previous?.type.name === "paragraph" &&
+						previous.content.size === 0
+					) {
+						const headingStart = $from.before();
+						this.editor.view.dispatch(
+							state.tr
+								.delete(headingStart - previous.nodeSize, headingStart)
+								.scrollIntoView(),
+						);
+						return true;
+					}
 					if (removeEmptyBlockAbove($from, -1)) return true;
 					return this.editor.commands.setNode("paragraph");
 				}
-				// Enter at the start of a heading leaves the caret in the newly
-				// inserted paragraph. Backspace there should undo that insertion,
-				// including when it is the first block in the document.
+				// Backspace on an empty line right above a heading removes that
+				// line, including when it is the first block in the document.
 				if (
 					$from.parent?.type?.name === "paragraph" &&
 					$from.parent.content.size === 0 &&
@@ -1679,7 +1692,8 @@ export const MarkdownWcShortcuts = Extension.create({
 							const $at = tr.selection.$from;
 							const block = $at.parent;
 							// Enter at the start of a line opens an empty line above it
-							// and leaves the line as it was: a heading stays a heading.
+							// and leaves the line as it was: a heading stays a heading,
+							// and the caret stays at its start, like Notion and Docs.
 							if (
 								block.type.name === "heading" &&
 								$at.parentOffset === 0 &&
@@ -1689,10 +1703,15 @@ export const MarkdownWcShortcuts = Extension.create({
 								const index = $at.index(-1);
 								if ($at.node(-1).canReplaceWith(index, index, paragraph)) {
 									const paragraphStart = $at.before();
-									tr.insert(paragraphStart, paragraph.create());
+									const empty = paragraph.create();
+									tr.insert(paragraphStart, empty);
 									tr.setSelection(
-										TextSelection.create(tr.doc, paragraphStart + 1),
+										TextSelection.create(
+											tr.doc,
+											paragraphStart + empty.nodeSize + 1,
+										),
 									);
+									tr.scrollIntoView();
 									return true;
 								}
 							}

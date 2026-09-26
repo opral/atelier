@@ -341,7 +341,7 @@ describe("Markdown typing shortcuts (input rules)", () => {
 });
 
 describe("Keyboard shortcuts (keymap)", () => {
-	test("Enter at the start of a heading keeps the caret in the new paragraph above", () => {
+	test("Enter at the start of a heading opens a line above and keeps the caret on the heading", () => {
 		const editor = createEditor({
 			type: "doc",
 			content: [
@@ -363,9 +363,10 @@ describe("Keyboard shortcuts (keymap)", () => {
 		expect(editor.state.doc.child(0).type.name).toBe("paragraph");
 		expect(editor.state.doc.child(0).content.size).toBe(0);
 		expect(editor.state.doc.child(1).type.name).toBe("heading");
-		expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+		expect(editor.state.selection.$from.parent.type.name).toBe("heading");
+		expect(editor.state.selection.$from.parent.textContent).toBe("Conventions");
 		expect(editor.state.selection.$from.parentOffset).toBe(0);
-		expect(editor.state.selection.$from.before()).toBe(0);
+		expect(editor.state.selection.$from.before()).toBe(2);
 	});
 
 	test("--- immediately creates a divider and following paragraph", () => {
