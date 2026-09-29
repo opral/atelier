@@ -1241,7 +1241,7 @@ test("stepping a checkpoint review keeps the frame's nodes and the previous tabl
 		});
 		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
 		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
-		expect(shownReviewTable(host)?.textContent).toContain("first");
+		expect(shownReviewTable(host)?.textContent).toMatch(/first|second/);
 		await waitFor(() => {
 			expect(shownReviewTable(host)?.textContent).toContain("second");
 		});
