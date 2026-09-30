@@ -35,6 +35,10 @@
 		rgb(250 250 249),
 		rgb(35 31 28)
 	); /* wells inside a panel: code blocks, muted rows */
+	--atelier-field-well: light-dark(
+		rgb(243 241 237),
+		rgb(38 34 31)
+	); /* a text field at rest on a panel: a well sunk into it, no edge */
 	--atelier-bg-hover: light-dark(
 		rgb(245 242 237),
 		rgb(41 37 34)

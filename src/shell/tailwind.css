@@ -20,6 +20,7 @@
 	--color-bg: var(--atelier-bg);
 	--color-panel: var(--atelier-panel);
 	--color-bg-subtle: var(--atelier-bg-subtle);
+	--color-field-well: var(--atelier-field-well);
 	--color-bg-hover: var(--atelier-bg-hover);
 	--color-bg-hover-strong: var(--atelier-bg-hover-strong);
 	--color-bg-active: var(--atelier-bg-active);

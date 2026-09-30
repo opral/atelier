@@ -15,6 +15,10 @@ rgb(28 25 23)
 rgb(250 250 249),
 rgb(35 31 28)
 );
+--atelier-field-well: light-dark(
+rgb(243 241 237),
+rgb(38 34 31)
+);
 --atelier-bg-hover: light-dark(
 rgb(245 242 237),
 rgb(41 37 34)
