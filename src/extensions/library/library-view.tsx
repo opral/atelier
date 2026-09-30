@@ -2,6 +2,7 @@ import {
 	forwardRef,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -102,6 +103,11 @@ import {
 import { LibraryPreview } from "./preview";
 import { KindIcon } from "./kind-icon";
 import { isNewTabClick, useTrackRecentDocuments } from "./sidebar";
+import {
+	hiddenRecentFileIds,
+	recentFileIds,
+	visibleRecentFiles,
+} from "./library-state";
 import { formatLibraryTime } from "./time";
 
 type Dialog =
@@ -671,9 +677,35 @@ export function LibraryView({
 				/>
 			);
 	} else if (kind === "home" && HomeSection) {
-		// Home is the host's page: the repository's README and its status.
-		// Recent is in the sidebar; it is not repeated here.
-		body = <HomeSection atelier={atelier} />;
+		// Home: what was opened last, as the grid shows it, then the host's
+		// page — the README and the repository's control plane.
+		const recent = visibleRecentFiles(
+			data,
+			recentFileIds(view.preferences),
+			hiddenRecentFileIds(view.preferences),
+		);
+		body = (
+			<div className="flex flex-col gap-10">
+				{recent.length > 0 ? (
+					<section aria-labelledby="library-home-recent">
+						<h2
+							id="library-home-recent"
+							className="m-0 pb-3 text-[13px] font-semibold text-fg-muted"
+						>
+							Recent
+						</h2>
+						<FileGrid
+							singleRow
+							files={recent}
+							marks={marks}
+							actions={itemActions}
+							onOpen={openFile}
+						/>
+					</section>
+				) : null}
+				<HomeSection atelier={atelier} />
+			</div>
+		);
 	} else if (mode === "grid") {
 		const files = gridFiles(data, kind);
 		body =
@@ -1455,23 +1487,58 @@ function itemKeyDown(
 	return false;
 }
 
+/** How many grid columns of at least `minWidth` fit the element, live. */
+function useFittingColumns(
+	ref: React.RefObject<HTMLElement | null>,
+	minWidth: number,
+	gap: number,
+	enabled: boolean,
+): number {
+	const [columns, setColumns] = useState(Infinity);
+	useLayoutEffect(() => {
+		const element = ref.current;
+		if (!enabled || !element) return;
+		const measure = () =>
+			setColumns(
+				Math.max(1, Math.floor((element.clientWidth + gap) / (minWidth + gap))),
+			);
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [enabled, gap, minWidth, ref]);
+	return columns;
+}
+
 function FileGrid({
 	files,
 	marks,
 	actions,
 	onOpen,
+	singleRow = false,
 }: {
+	/** One row: as many cards as fit the width, the rest left out. */
+	readonly singleRow?: boolean;
 	readonly files: readonly LibraryFile[];
 	readonly marks: LibraryReviewMarks;
 	readonly actions: ItemActions;
 	readonly onOpen: (file: LibraryFile, newTab: boolean) => void;
 }) {
+	const ref = useRef<HTMLUListElement>(null);
+	const columns = useFittingColumns(ref, 164, 16, singleRow);
+	const shown = singleRow ? files.slice(0, columns) : files;
 	return (
 		<ul
-			className="grid grid-cols-[repeat(auto-fill,minmax(188px,1fr))] gap-4"
+			ref={ref}
+			className={
+				singleRow
+					? "grid grid-cols-[repeat(auto-fill,minmax(164px,1fr))] gap-4"
+					: "grid grid-cols-[repeat(auto-fill,minmax(188px,1fr))] gap-4"
+			}
 			data-testid="library-grid"
 		>
-			{files.map((file) => (
+			{shown.map((file) => (
 				<li key={file.id} className="min-w-0">
 					<GridCard
 						file={file}
