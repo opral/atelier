@@ -181,12 +181,14 @@ export function LibrarySidebar({
 	}, []);
 	const dismissToast = useCallback(() => setToast(null), []);
 
-	// ⌘. with nothing open in the main area makes a page, as the empty
-	// state offers. (With a Library tab in front, that view handles it.)
+	// ⌘. makes a page wherever the main area is not a Library tab (which
+	// handles it itself, for its own kind and folder): with nothing open, as
+	// the empty state offers, or over a document — unless typing in it.
 	const { folders: defaultFolders } = useDefaultFolders(atelier);
-	const mainEmpty = atelier.views.activeMain == null;
+	const libraryInFront =
+		atelier.views.activeMain?.extensionId === LIBRARY_EXTENSION_ID;
 	useEffect(() => {
-		if (!mainEmpty || readOnly || !data) return;
+		if (libraryInFront || readOnly || !data) return;
 		const isMac = isMacPlatform();
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.defaultPrevented || event.altKey || event.shiftKey) return;
@@ -227,17 +229,13 @@ export function LibrarySidebar({
 		window.addEventListener("keydown", onKeyDown, { capture: true });
 		return () =>
 			window.removeEventListener("keydown", onKeyDown, { capture: true });
-	}, [atelier.documents, data, defaultFolders, lix, mainEmpty, readOnly]);
+	}, [atelier.documents, data, defaultFolders, lix, libraryInFront, readOnly]);
 
-	const openFile = (file: LibraryFile, newTab: boolean) => {
-		// Over a Library tab a file opens beside it, never in its place.
-		const overLibrary =
-			atelier.views.activeMain?.extensionId === LIBRARY_EXTENSION_ID;
+	const openFile = (file: LibraryFile) => {
+		// A file opens in a tab of its own (activated if already open), never
+		// in the place of what is in front.
 		void atelier.documents
-			.open(file.path, {
-				fileId: file.id,
-				...(newTab || overLibrary ? { newTab: true } : {}),
-			})
+			.open(file.path, { fileId: file.id, newTab: true })
 			.catch((error: unknown) => {
 				console.error("library: unable to open", error);
 			});
@@ -281,11 +279,9 @@ export function LibrarySidebar({
 									if (kind === "database") {
 										void atelier.views
 											.open(ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer, {
-												// Beside a Library tab, never in its place.
-												...(isNewTabClick(event) ||
-												active?.extensionId === LIBRARY_EXTENSION_ID
-													? { newTab: true }
-													: {}),
+												// Activated if open; otherwise beside what is in
+												// front, never in its place.
+												newTab: true,
 											})
 											.catch((error: unknown) => {
 												console.error(
@@ -370,9 +366,7 @@ export function LibrarySidebar({
 												trailing={
 													glyph ? <DiffGlyph kind={glyph} size={10} /> : null
 												}
-												onClick={(event) =>
-													openFile(file, isNewTabClick(event))
-												}
+												onClick={() => openFile(file)}
 												{...(readOnly
 													? {}
 													: { onDoubleClick: () => setRenamingId(file.id) })}
@@ -382,7 +376,7 @@ export function LibrarySidebar({
 											className="min-w-44 text-[13px]"
 											data-testid="library-recent-menu"
 										>
-											<ContextMenuItem onSelect={() => openFile(file, true)}>
+											<ContextMenuItem onSelect={() => openFile(file)}>
 												<SquareArrowOutUpRight aria-hidden="true" />
 												Open in new tab
 											</ContextMenuItem>
