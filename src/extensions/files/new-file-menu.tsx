@@ -34,7 +34,13 @@ export type NewFileMenuProps = {
 	readonly align?: "start" | "end";
 	readonly onNewCsv: () => void;
 	readonly onNewExcalidraw: () => void;
-	readonly onNewFile: () => void;
+	/** Absent in the Library, which creates things of a kind, not files. */
+	readonly onNewFile?: () => void;
+	/**
+	 * Name the rows by what they make — New Page, New Table, New Drawing —
+	 * rather than by format. The Library's word for them.
+	 */
+	readonly kindNames?: boolean;
 	/** Absent where folders are not shown, e.g. the Library's Grid. */
 	readonly onNewFolder?: () => void;
 	readonly onNewMarkdown: () => void;
@@ -67,6 +73,7 @@ export function NewFileMenu({
 	onNewCsv,
 	onNewExcalidraw,
 	onNewFile,
+	kindNames = false,
 	onNewFolder,
 	onNewMarkdown,
 	onUpload,
@@ -116,14 +123,16 @@ export function NewFileMenu({
 				className="w-72 p-1.5 text-xs"
 				sideOffset={3}
 			>
-				<NewMenuItem
-					dataAttr="file-new-file"
-					iconUrl={fileNewIconUrl}
-					label="New file"
-					shortcut={shortcutHint("⌘ .")}
-					onSelect={chose(onNewFile)}
-					trailing={slotFor("generic", "file-new-file")}
-				/>
+				{onNewFile ? (
+					<NewMenuItem
+						dataAttr="file-new-file"
+						iconUrl={fileNewIconUrl}
+						label="New file"
+						shortcut={shortcutHint("⌘ .")}
+						onSelect={chose(onNewFile)}
+						trailing={slotFor("generic", "file-new-file")}
+					/>
+				) : null}
 				{/* No default folder for New folder: a folder is not a file type,
 				    and "always nest one level in" is not a thing anyone wants. */}
 				{onNewFolder ? (
@@ -135,18 +144,23 @@ export function NewFileMenu({
 						onSelect={onNewFolder}
 					/>
 				) : null}
-				<DropdownMenuSeparator className="my-1.5" />
+				{onNewFile || onNewFolder ? (
+					<DropdownMenuSeparator className="my-1.5" />
+				) : null}
 				<NewMenuItem
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
-					label="New Markdown"
+					label={kindNames ? "New Page" : "New Markdown"}
+					{...(kindNames && !onNewFile
+						? { shortcut: shortcutHint("⌘ .") }
+						: {})}
 					onSelect={chose(onNewMarkdown)}
 					trailing={slotFor("markdown", "file-new-markdown")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
-					label="New CSV"
+					label={kindNames ? "New Table" : "New CSV"}
 					onSelect={chose(onNewCsv)}
 					trailing={slotFor("csv", "file-new-csv")}
 				/>

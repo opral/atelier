@@ -881,10 +881,7 @@ export function LibraryView({
 								hereDirectory={ensureDirectoryPath(hereDirectory)}
 								existingDirectories={existingDirectories}
 								onSetDefaultFolder={setDefaultFolder}
-								// In a kind, a new file is one of that kind.
-								onNewFile={() =>
-									void createTyped(KIND_FILE_TYPE[kind] ?? "generic")
-								}
+								kindNames
 								{...(mode === "folders"
 									? {
 											onNewFolder: () => {
