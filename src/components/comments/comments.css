@@ -10,7 +10,12 @@
 	 */
 	.comment-surface {
 		--comment-secondary: var(--atelier-history-selected-secondary);
-		--comment-field-edge: var(--atelier-history-input-border);
+		/* A quiet hairline at rest: the field's edge at half strength. */
+		--comment-field-edge: color-mix(
+			in srgb,
+			var(--atelier-history-input-border) 50%,
+			transparent
+		);
 		--comment-field-bg: color-mix(
 			in srgb,
 			var(--atelier-panel) 72%,
@@ -40,7 +45,7 @@
 	.comment-surface[data-tone="neutral"] {
 		--comment-secondary: var(--atelier-history-secondary);
 		--comment-field-edge: var(--atelier-border-strong);
-		--comment-field-bg: var(--atelier-bg-subtle);
+		--comment-field-bg: var(--atelier-panel);
 		--comment-fold-bg: var(--atelier-bg-hover);
 		--comment-avatar-ring: var(--atelier-panel);
 		--comment-action-bg: var(--atelier-panel);
@@ -55,14 +60,12 @@
 	}
 	/*
 	 * The conversation view's reading column: a 14px body in the page's text
-	 * colour, and a reply box whose resting edge is the quietest grey that
-	 * still keeps 3:1 against white (the checkpoint flag's), as a field's
-	 * edge must.
+	 * colour, and a reply box with a quiet hairline edge at rest.
 	 */
 	.comment-surface[data-size="view"] {
 		--comment-body-size: 14px;
 		--comment-body-line-height: 21px;
-		--comment-field-edge: var(--atelier-history-flag);
+		--comment-field-edge: var(--atelier-border-strong);
 		--comment-field-bg: var(--atelier-panel);
 		--comment-avatar-ring: var(--atelier-panel);
 		--comment-actions-top: -4px;
@@ -130,16 +133,20 @@
 		box-shadow: 0 0 0 1.5px var(--comment-avatar-ring);
 	}
 
+	/*
+	 * At rest a hairline edge. Writing, the edge warms to the accent and a
+	 * soft halo of it sits outside, instead of a heavy 2px ring.
+	 */
 	.comment-field {
 		background: var(--comment-field-bg);
 		box-shadow: inset 0 0 0 1px var(--comment-field-edge);
+		transition: box-shadow 120ms ease;
 	}
-	/* Writing: solid white, and the accent edge doubled into a 2px ring. */
 	.comment-field[data-state="writing"] {
 		background: var(--atelier-panel);
 		box-shadow:
 			inset 0 0 0 1px var(--atelier-accent),
-			0 0 0 1px var(--atelier-accent);
+			0 0 0 3px color-mix(in srgb, var(--atelier-accent) 16%, transparent);
 	}
 	.comment-field-placeholder,
 	.comment-secondary {
