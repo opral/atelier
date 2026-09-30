@@ -1599,7 +1599,7 @@ function GridCard({
 								<div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-bg-subtle to-transparent" />
 							)}
 						</div>
-						<div className="flex h-10 items-center gap-2 px-3">
+						<div className="flex h-10 items-center gap-1.5 px-2.5">
 							<img
 								src={fileIconUrl(file.path)}
 								alt=""
@@ -1607,14 +1607,14 @@ function GridCard({
 								className="size-3.5 shrink-0"
 							/>
 							<span
-								className={`min-w-0 truncate text-[13px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
+								className={`min-w-0 flex-1 truncate text-[12.5px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
 							>
 								{file.displayName}
 							</span>
 							{glyph ? (
 								<DiffGlyph kind={glyph} size={11} className="shrink-0" />
 							) : null}
-							<span className="min-w-0 flex-1" />
+
 							{hint ? (
 								<span className="min-w-0 shrink-[12] truncate text-[11.5px] text-fg-faint @max-[220px]:hidden">
 									{hint}
