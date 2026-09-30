@@ -1506,17 +1506,27 @@ function TabBar({
 		).find((button) => button.dataset.viewInstance === activeInstance);
 		if (!tab) return;
 		lastEnsuredInstanceRef.current = activeInstance;
-		const behavior = hasScrolledRef.current
-			? ("smooth" as const)
-			: ("auto" as const);
+		const firstScroll = !hasScrolledRef.current;
 		hasScrolledRef.current = true;
 		// The margin only widens a scroll that is needed anyway (so the next
 		// chip peeks out); a fully visible tab never triggers scrolling.
 		const margin = 28;
-		const tabStart = tab.offsetLeft;
+		// Measured against the scroller: offsetLeft is relative to the tab
+		// bar (the offset parent), which does not scroll.
+		const tabStart =
+			tab.getBoundingClientRect().left -
+			container.getBoundingClientRect().left +
+			container.scrollLeft;
 		const tabEnd = tabStart + tab.offsetWidth;
 		const viewStart = container.scrollLeft;
 		const viewEnd = viewStart + container.clientWidth;
+		// A tab wholly out of view jumps in: a smooth scroll that far is
+		// cancelled by the focus and layout work of switching views, and left
+		// the active tab off-screen.
+		const behavior =
+			firstScroll || tabEnd <= viewStart || tabStart >= viewEnd
+				? ("auto" as const)
+				: ("smooth" as const);
 		if (tabStart < viewStart) {
 			container.scrollTo({ left: Math.max(0, tabStart - margin), behavior });
 		} else if (tabEnd > viewEnd) {

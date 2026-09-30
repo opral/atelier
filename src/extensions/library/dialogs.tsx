@@ -274,6 +274,12 @@ export function MoveDialog({
 		if (open) setDestination(currentDirectory);
 	}, [currentDirectory, open]);
 	const segments = destination.split("/").filter(Boolean);
+	// The folder being chosen is the last crumb: keep it in view.
+	const crumbsRef = useRef<HTMLElement>(null);
+	useEffect(() => {
+		const nav = crumbsRef.current;
+		if (nav) nav.scrollLeft = nav.scrollWidth;
+	}, [destination, open]);
 	const crumbs = [
 		{ path: "/", name: "Home" },
 		...segments.map((name, index) => ({
@@ -300,6 +306,7 @@ export function MoveDialog({
 		>
 			<div className="px-6 pb-5">
 				<nav
+					ref={crumbsRef}
 					aria-label="Destination location"
 					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto text-[13px]"
 				>

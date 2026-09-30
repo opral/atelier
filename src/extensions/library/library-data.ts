@@ -266,12 +266,7 @@ export function folderListing(
 		.slice()
 		// By name, as a filesystem reads: predictable, and stable while files
 		// change. The grids are where "newest first" lives.
-		.sort((left, right) =>
-			left.name.localeCompare(right.name, undefined, {
-				numeric: true,
-				sensitivity: "base",
-			}),
-		);
+		.sort((left, right) => compareFileNames(left.name, right.name));
 	return { folders, files, exists };
 }
 
@@ -359,6 +354,24 @@ export function useLibraryReviewMarks(
 }
 
 /** The id prefix of a file a review removed, listed so it can be opened. */
+/**
+ * Name order with the stem first, so a numbered twin follows its original
+ * (plans.csv, plans-2.csv) instead of "-" sorting before ".".
+ */
+export function compareFileNames(left: string, right: string): number {
+	const split = (name: string) => {
+		const dot = name.lastIndexOf(".");
+		return dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+	};
+	const [leftStem, leftExtension] = split(left);
+	const [rightStem, rightExtension] = split(right);
+	const options = { numeric: true, sensitivity: "base" } as const;
+	return (
+		leftStem.localeCompare(rightStem, undefined, options) ||
+		leftExtension.localeCompare(rightExtension, undefined, options)
+	);
+}
+
 export const REMOVED_FILE_PREFIX = "removed:";
 
 export function isRemovedFile(file: { readonly id: string }): boolean {
@@ -395,8 +408,31 @@ export function useWithRemovedFiles(
 				hidden: isHiddenPath(file.path),
 			});
 		}
-		return removed.length === 0
-			? data
-			: { ...data, files: [...data.files, ...removed] };
+		if (removed.length === 0) return data;
+		// A removed file's folder may be gone too (deleted, or renamed away):
+		// list it where it was, so the file can be reached.
+		const directories = new Set(data.directories.map((dir) => dir.path));
+		const missing: LibraryDirectory[] = [];
+		for (const file of removed) {
+			let prefix = "";
+			for (const segment of file.directory.split("/").filter(Boolean)) {
+				prefix = `${prefix}/${segment}`;
+				if (directories.has(prefix)) continue;
+				directories.add(prefix);
+				missing.push({
+					id: `${REMOVED_FILE_PREFIX}${prefix}`,
+					path: prefix,
+					name: segment,
+					updatedAt: "",
+					hidden: isHiddenPath(prefix),
+				});
+			}
+		}
+		return {
+			files: [...data.files, ...removed],
+			directories: [...data.directories, ...missing].sort((left, right) =>
+				left.name.localeCompare(right.name),
+			),
+		};
 	}, [data, extensionMap, session]);
 }

@@ -287,7 +287,7 @@ function HtmlPreview({ html }: { readonly html: string }) {
 			srcDoc={html}
 			tabIndex={-1}
 			aria-hidden="true"
-			className="pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 bg-panel"
+			className="pointer-events-none absolute top-0 left-0 h-[200%] w-[200%] origin-top-left scale-50 border-0 bg-panel"
 		/>
 	);
 }

@@ -212,6 +212,7 @@ export function LibrarySidebar({
 								dimmed={
 									marks.active &&
 									rollup === undefined &&
+									kind !== "database" &&
 									kind !== "all" &&
 									kind !== "home"
 								}
@@ -223,7 +224,11 @@ export function LibrarySidebar({
 									if (kind === "database") {
 										void atelier.views
 											.open(ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer, {
-												...(isNewTabClick(event) ? { newTab: true } : {}),
+												// Beside a Library tab, never in its place.
+												...(isNewTabClick(event) ||
+												active?.extensionId === LIBRARY_EXTENSION_ID
+													? { newTab: true }
+													: {}),
 											})
 											.catch((error: unknown) => {
 												console.error(

@@ -39,6 +39,7 @@ export function validateEntryName(name: string): string | null {
 	if (trimmed.length === 0) return "Enter a name.";
 	if (trimmed === "." || trimmed === "..") return "Choose another name.";
 	if (trimmed.includes("/")) return "Names can’t contain “/”.";
+	if (trimmed.includes("\\")) return "Names can’t contain “\\”.";
 	// A name starting with "." is hidden everywhere: the item would vanish.
 	if (trimmed.startsWith("."))
 		return "Names starting with “.” are hidden. Choose another name.";

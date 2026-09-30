@@ -778,7 +778,7 @@ export function LibraryView({
 							(undo) => {
 								setSelection(new Set());
 								showToast({
-									message: `Moved ${describeEntries(entries)} to ${destination.split("/").at(-1) ?? "Home"}`,
+									message: `Moved ${describeEntries(entries)} to ${destination.split("/").filter(Boolean).at(-1) ?? "Home"}`,
 									undo,
 								});
 							},
@@ -819,7 +819,6 @@ export function LibraryView({
 	// While rows are selected, the header's Search and New make way for what
 	// can be done with them — in the same place, so the list never moves.
 	const selecting = mode === "folders" && selection.size > 0 && !readOnly;
-	const reviewDim = marks.active ? " opacity-[0.35] hover:opacity-100" : "";
 
 	return (
 		<div
@@ -910,7 +909,7 @@ export function LibraryView({
 								) : null}
 							</label>
 							{readOnly ? null : (
-								<div className={`shrink-0 transition-opacity${reviewDim}`}>
+								<div className="shrink-0">
 									<NewFileMenu
 										align="end"
 										defaultFolders={defaultFolders}
@@ -1045,7 +1044,7 @@ export function LibraryView({
 							void runDialogAction(async () => {
 								const undo = await moveEntries(lix, data, entries, destination);
 								showToast({
-									message: `Moved ${describeEntries(entries)} to ${destination.split("/").at(-1) ?? "Home"}`,
+									message: `Moved ${describeEntries(entries)} to ${destination.split("/").filter(Boolean).at(-1) ?? "Home"}`,
 									undo,
 								});
 								return null;
@@ -1642,7 +1641,7 @@ function GridCard({
 							) : null}
 
 							{hint ? (
-								<span className="min-w-0 shrink-[12] truncate text-[11.5px] text-fg-faint @max-[220px]:hidden">
+								<span className="min-w-0 shrink-[12] truncate text-[11.5px] text-fg-faint @max-[170px]:hidden">
 									{hint}
 								</span>
 							) : null}
@@ -1771,6 +1770,7 @@ function RowList({
 		entry,
 		file,
 		isFolder,
+		removed = false,
 	}: {
 		path: string;
 		name: string;
@@ -1782,10 +1782,11 @@ function RowList({
 		entry: LibraryEntry;
 		file?: LibraryFile;
 		isFolder: boolean;
+		removed?: boolean;
 	}) => {
-		// A file a review removed can be opened (to its diff), nothing else.
+		// What a review removed can be opened (to its diff), nothing else.
 		const actions =
-			file && isRemovedFile(file)
+			removed || (file && isRemovedFile(file))
 				? { ...listActions, readOnly: true }
 				: listActions;
 		const selected = selection.has(path);
@@ -1978,6 +1979,7 @@ function RowList({
 					glyph: status === "added" ? "added" : status ? "contains" : null,
 					dim: (marks.active && !status) || folder.directory.hidden,
 					open: (newTab) => onOpenFolder(folder.directory.path, { newTab }),
+					removed: isRemovedFile(folder.directory),
 					entry: {
 						type: "directory",
 						path: folder.directory.path,
