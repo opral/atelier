@@ -4962,6 +4962,11 @@ function LayoutShellLoadedContentResolved({
 						groupRef={panelGroupRef}
 						onLayoutChanged={handleLayoutChanged}
 						className="atelier-panel-group"
+						// Clip, not hide: a hidden box can still be scrolled, and a
+						// click that focused something near its edge scrolled the
+						// whole row of panels a few pixels sideways, cutting the left
+						// panel under the group's edge. A clipped box never scrolls.
+						style={{ overflow: "clip" }}
 					>
 						<Panel
 							id="left"
