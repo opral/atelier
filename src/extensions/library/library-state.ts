@@ -153,8 +153,13 @@ export function recordRecentFile(
 	const visible = visibleRecentFiles(data, stored, hidden).map(
 		(file) => file.id,
 	);
+	// Recent shows the stored ids in order, then fillers. Keeping the stored
+	// order (appending fillers up to this one) keeps the screen as it is,
+	// and keeps a file that is briefly gone (deleted, then undone) in its
+	// place for when it returns.
+	const fillers = visible.filter((id) => !stored.includes(id));
 	const next = visible.includes(fileId)
-		? [...visible, ...stored.filter((id) => !visible.includes(id))]
+		? [...stored, ...fillers.slice(0, fillers.indexOf(fileId) + 1)]
 		: [fileId, ...stored.filter((id) => id !== fileId)];
 	const trimmed = next.slice(0, 24);
 	if (
