@@ -51,8 +51,9 @@ export function KindIcon({
 				</>
 			) : kind === "drawings" ? (
 				<>
-					<path d="M4 20c3-1 4-4 7-9s5-6 9-7" />
-					<path d="M4 20h6" />
+					<path d="M8.3 10a.7.7 0 0 1-.63-1.08L11.4 3a.7.7 0 0 1 1.2-.04L16.3 8.9a.7.7 0 0 1-.57 1.1Z" />
+					<rect x="3" y="14" width="7" height="7" rx="1.5" />
+					<circle cx="17.5" cy="17.5" r="3.5" />
 				</>
 			) : kind === "media" ? (
 				<>

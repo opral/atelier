@@ -1694,10 +1694,12 @@ function RowList({
 						aria-checked={selected}
 						aria-label={`Select ${name}`}
 						onClick={(event) => toggle(path, event.shiftKey)}
-						className={`absolute top-1/2 -left-8 grid size-7 -translate-y-1/2 place-items-center rounded transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-sm:hidden ${
+						// Sits in the icon's slot and takes its place on hover or while
+						// anything is selected, so it is never outside the row.
+						className={`absolute top-1/2 left-[7px] z-10 grid size-7 -translate-y-1/2 place-items-center rounded transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
 							selectionActive || selected
 								? "opacity-100"
-								: "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+								: "opacity-0 group-hover:opacity-100"
 						}`}
 					>
 						<span
@@ -1802,7 +1804,13 @@ function RowList({
 								alt=""
 								aria-hidden="true"
 								draggable={false}
-								className="size-[18px] shrink-0"
+								className={`size-[18px] shrink-0 transition-opacity ${
+									actions.readOnly || flat
+										? ""
+										: selectionActive || selected
+											? "opacity-0"
+											: "group-hover:opacity-0"
+								}`}
 							/>
 							<span
 								className={`min-w-0 flex-1 truncate font-medium ${
@@ -1851,7 +1859,7 @@ function RowList({
 	};
 
 	return (
-		<ul className="flex flex-col gap-px" data-testid="library-rows">
+		<ul className="-mx-3 flex flex-col gap-px" data-testid="library-rows">
 			{folders.map((folder) => {
 				const status = marks.directories.get(folder.directory.path);
 				return row({
