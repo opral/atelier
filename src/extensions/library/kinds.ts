@@ -6,12 +6,13 @@ import type { ExtensionDefinition } from "../../extension-runtime/types";
 export type FileKind = AtelierLibraryKind | "other";
 
 /**
- * A Library section. The kinds are grids of one kind of thing; Files is the
- * filesystem itself, one folder at a time, every kind in it.
+ * A Library section. All is a grid of everything; the kinds are grids of one
+ * kind of thing; Files is the filesystem itself, one folder at a time.
  */
-export type LibraryKind = FileKind | "files";
+export type LibraryKind = "all" | FileKind | "files";
 
 export const LIBRARY_KINDS: readonly LibraryKind[] = [
+	"all",
 	"pages",
 	"tables",
 	"drawings",
@@ -32,6 +33,13 @@ export type LibraryKindCopy = {
 };
 
 export const LIBRARY_KIND_COPY: Record<LibraryKind, LibraryKindCopy> = {
+	all: {
+		label: "All",
+		one: "item",
+		many: "items",
+		emptyTitle: "Nothing here yet",
+		emptyBody: "Create something with New, or drop files here.",
+	},
 	files: {
 		label: "Files",
 		one: "item",
@@ -107,7 +115,7 @@ export function matchesLibraryKind(
 	kind: LibraryKind,
 	fileKind: FileKind,
 ): boolean {
-	return kind === "files" || kind === fileKind;
+	return kind === "all" || kind === "files" || kind === fileKind;
 }
 
 /** Dotfiles and anything under a dot-folder (`.lix/`) stay out of Grid. */

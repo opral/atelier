@@ -11,11 +11,18 @@ import { isLibraryKind, LIBRARY_KIND_COPY, type LibraryKind } from "./kinds";
 
 export const LIBRARY_EXTENSION_ID = "atelier_library";
 
+/**
+ * The Library tab the sidebar and a host's routes reuse: an ordinary,
+ * closable tab. Closed, the next sidebar click opens it again; ⌘-click opens
+ * further ones beside it.
+ */
+export const LIBRARY_PRIMARY_INSTANCE = "library";
+
 /** Kinds are grids; Files is the folders. The mode follows the section. */
 export type LibraryMode = "grid" | "folders";
 
 /** The section a Library tab opens on when nothing says otherwise. */
-export const DEFAULT_LIBRARY_KIND: LibraryKind = "pages";
+export const DEFAULT_LIBRARY_KIND: LibraryKind = "all";
 
 /** What a Library tab is showing. It lives in the tab, so reload restores it. */
 export type LibraryLocation = {
@@ -30,15 +37,18 @@ export function modeOfKind(kind: LibraryKind): LibraryMode {
 }
 
 /**
- * Reads a tab's state. Tabs saved before Files was its own section said
- * "all", or a kind in folders mode; both open as Files now.
+ * Reads a tab's state. A tab saved while the kinds had a folders mode opens
+ * that way as Files, the section that is folders now.
  */
 export function libraryLocationFromState(
 	state: AtelierExtensionState | undefined,
 ): LibraryLocation {
 	const raw = state?.kind;
 	const kind: LibraryKind =
-		raw === "all" || (!isLibraryKind(raw) && state?.mode === "folders")
+		state?.mode === "folders" &&
+		raw !== "files" &&
+		typeof state.dirPath === "string" &&
+		state.dirPath !== "/"
 			? "files"
 			: isLibraryKind(raw)
 				? raw

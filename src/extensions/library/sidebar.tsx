@@ -38,6 +38,7 @@ import {
 } from "./library-data";
 import {
 	LIBRARY_EXTENSION_ID,
+	LIBRARY_PRIMARY_INSTANCE,
 	forgetRecentFile,
 	hiddenRecentFileIds,
 	libraryLocationFromState,
@@ -55,6 +56,7 @@ import {
 import { DeleteDialog, ToastLine, type LibraryToast } from "./dialogs";
 
 const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
+	"all",
 	"pages",
 	"tables",
 	"drawings",
@@ -104,8 +106,13 @@ export function openLibraryLocation(
 	void atelier.views
 		.open(LIBRARY_EXTENSION_ID, {
 			state: libraryState({ kind, dirPath: "/" }),
-			...(options.newTab ? { newTab: true } : {}),
-			...(inLibraryTab ? { instanceId: active.instanceId } : {}),
+			...(options.newTab
+				? { newTab: true }
+				: {
+						instanceId: inLibraryTab
+							? active.instanceId
+							: LIBRARY_PRIMARY_INSTANCE,
+					}),
 		})
 		.catch((error: unknown) => {
 			console.error("library: unable to open the Library", error);
@@ -174,9 +181,9 @@ export function LibrarySidebar({
 					const isActive = activeKind === kind;
 					const label =
 						kind === "database" ? "Database" : LIBRARY_KIND_COPY[kind].label;
-					// Files holds everything, so it carries no roll-up of its own.
+					// All and Files hold everything, so they carry no roll-up.
 					const rollup =
-						kind !== "database" && kind !== "files"
+						kind !== "database" && kind !== "files" && kind !== "all"
 							? marks.kinds.get(kind)
 							: undefined;
 					return (
@@ -184,7 +191,10 @@ export function LibrarySidebar({
 							<SidebarRow
 								active={isActive}
 								dimmed={
-									marks.active && rollup === undefined && kind !== "files"
+									marks.active &&
+									rollup === undefined &&
+									kind !== "files" &&
+									kind !== "all"
 								}
 								icon={<KindIcon kind={kind} />}
 								label={label}

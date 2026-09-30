@@ -619,9 +619,9 @@ export function LibraryView({
 		!results &&
 		EmptyWorkspace &&
 		!readOnly &&
-		(kind === "pages" || kind === "files") &&
+		(kind === "all" || kind === "pages" || kind === "files") &&
 		data.files.every((file) => file.hidden) &&
-		(kind === "pages" ||
+		(kind !== "files" ||
 			(dirPath === "/" &&
 				data.directories.every((directory) => directory.hidden))),
 	);
