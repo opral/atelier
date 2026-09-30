@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Upload } from "lucide-react";
 import {
 	DropdownMenu,
@@ -95,10 +95,22 @@ export function NewFileMenu({
 				onCreateFolder={onCreateFolder}
 			/>
 		) : null;
+	// A row that created something opens it, focused: the menu must not hand
+	// focus back to its button as it closes and take it from the new file.
+	const choseRef = useRef(false);
+	const chose = (action: () => void) => (): void => {
+		choseRef.current = true;
+		action();
+	};
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
 			<DropdownMenuContent
+				onCloseAutoFocus={(event) => {
+					if (!choseRef.current) return;
+					choseRef.current = false;
+					event.preventDefault();
+				}}
 				align={align}
 				aria-label="Create"
 				className="w-72 p-1.5 text-xs"
@@ -109,7 +121,7 @@ export function NewFileMenu({
 					iconUrl={fileNewIconUrl}
 					label="New file"
 					shortcut={shortcutHint("⌘ .")}
-					onSelect={onNewFile}
+					onSelect={chose(onNewFile)}
 					trailing={slotFor("generic", "file-new-file")}
 				/>
 				{/* No default folder for New folder: a folder is not a file type,
@@ -128,21 +140,21 @@ export function NewFileMenu({
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
 					label="New Markdown"
-					onSelect={onNewMarkdown}
+					onSelect={chose(onNewMarkdown)}
 					trailing={slotFor("markdown", "file-new-markdown")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
 					label="New CSV"
-					onSelect={onNewCsv}
+					onSelect={chose(onNewCsv)}
 					trailing={slotFor("csv", "file-new-csv")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-excalidraw"
 					iconUrl={fileExcalidrawIconUrl}
 					label="New Drawing"
-					onSelect={onNewExcalidraw}
+					onSelect={chose(onNewExcalidraw)}
 					trailing={slotFor("excalidraw", "file-new-excalidraw")}
 				/>
 				{onUpload ? (
@@ -151,7 +163,7 @@ export function NewFileMenu({
 						<DropdownMenuItem
 							className="gap-2 py-1.75 text-xs"
 							data-attr="file-new-upload"
-							onSelect={onUpload}
+							onSelect={chose(onUpload)}
 						>
 							<Upload
 								aria-hidden="true"
