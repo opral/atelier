@@ -91,6 +91,11 @@ export function NameDialog({
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState(initialName);
 	const [emptyError, setEmptyError] = useState(false);
+	// An error answers the name that was submitted; editing the name dismisses
+	// it until the next attempt.
+	const [errorDismissed, setErrorDismissed] = useState(false);
+	useEffect(() => setErrorDismissed(false), [error]);
+	const shownError = errorDismissed ? null : error;
 	useEffect(() => {
 		if (!open) return;
 		setValue(initialName);
@@ -129,16 +134,17 @@ export function NameDialog({
 						onChange={(event) => {
 							setValue(event.target.value);
 							setEmptyError(false);
+							setErrorDismissed(true);
 						}}
 						aria-label="Name"
 						disabled={busy}
 						maxLength={255}
-						aria-invalid={error ? true : undefined}
+						aria-invalid={shownError || emptyError ? true : undefined}
 						className="h-10 w-full rounded-lg border border-border bg-panel px-3 text-[14px] font-normal text-fg outline-none focus:ring-2 focus:ring-ring"
 					/>
-					{error || emptyError ? (
+					{shownError || emptyError ? (
 						<span role="alert" className="text-[13px] font-normal text-danger">
-							{emptyError ? "Enter a name." : error}
+							{emptyError ? "Enter a name." : shownError}
 						</span>
 					) : null}
 				</label>

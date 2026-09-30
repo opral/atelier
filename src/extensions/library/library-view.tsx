@@ -1538,7 +1538,7 @@ function FileGrid({
 			className={
 				singleRow
 					? "grid grid-cols-[repeat(auto-fill,minmax(164px,1fr))] gap-4"
-					: "grid grid-cols-[repeat(auto-fill,minmax(188px,1fr))] gap-4"
+					: "grid grid-cols-[repeat(auto-fill,minmax(204px,1fr))] gap-4"
 			}
 			data-testid="library-grid"
 		>
