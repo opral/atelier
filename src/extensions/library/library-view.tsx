@@ -11,11 +11,8 @@ import {
 	type ReactNode,
 } from "react";
 import {
-	ArrowLeft,
-	ArrowRight,
 	Check,
 	ChevronDown,
-	ChevronRight,
 	Download,
 	FileUp,
 	FolderInput,
@@ -613,8 +610,6 @@ export function LibraryView({
 	const copy = LIBRARY_KIND_COPY[kind];
 	const folderSegments = dirPath.split("/").filter(Boolean);
 	const inSubfolder = mode === "folders" && folderSegments.length > 0;
-	const canGoBack = history.back.length > 0 || dirPath !== "/";
-	const canGoForward = history.forward.length > 0;
 
 	// An empty workspace gets the host's onboarding in place of the listing,
 	// in the sections a first visit lands on: Pages, and Files at the top.
@@ -800,77 +795,14 @@ export function LibraryView({
 			/>
 			<div className="mx-auto flex w-[min(1080px,calc(100%-64px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
 				<header className="flex items-center gap-3 pb-6">
-					{inSubfolder ? (
-						<div className="flex min-w-0 shrink-[0.1] items-center gap-1.5">
-							<HistoryButton
-								label={`Back (${isMac ? "⌘" : "Ctrl+"}[)`}
-								disabled={!canGoBack}
-								onClick={goBack}
-							>
-								<ArrowLeft className="size-3.5" aria-hidden="true" />
-							</HistoryButton>
-							<HistoryButton
-								label={`Forward (${isMac ? "⌘" : "Ctrl+"}])`}
-								disabled={!canGoForward}
-								onClick={goForward}
-							>
-								<ArrowRight className="size-3.5" aria-hidden="true" />
-							</HistoryButton>
-							<nav
-								aria-label="Folder"
-								className="ml-1 flex min-w-0 items-center gap-1 text-[22px] font-semibold tracking-[-0.01em]"
-							>
-								<button
-									type="button"
-									className="shrink-0 rounded-md text-fg-faint hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-									onClick={(event) =>
-										openFolder("/", { newTab: isNewTabClick(event) })
-									}
-								>
-									{copy.label}
-								</button>
-								{folderSegments.map((segment, index) => {
-									const path = `/${folderSegments.slice(0, index + 1).join("/")}`;
-									const last = index === folderSegments.length - 1;
-									return (
-										<span
-											key={path}
-											className="flex min-w-0 items-center gap-1"
-										>
-											<ChevronRight
-												className="size-4 shrink-0 text-fg-faint"
-												aria-hidden="true"
-											/>
-											{last ? (
-												<h1
-													className="truncate text-fg"
-													aria-current="location"
-												>
-													{segment}
-												</h1>
-											) : (
-												<button
-													type="button"
-													className="truncate rounded-md text-fg-faint hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-													onClick={(event) =>
-														openFolder(path, { newTab: isNewTabClick(event) })
-													}
-												>
-													{segment}
-												</button>
-											)}
-										</span>
-									);
-								})}
-							</nav>
-						</div>
-					) : (
-						<h1 className="min-w-0 truncate text-[22px] font-semibold tracking-[-0.01em] text-fg">
-							{copy.label}
-						</h1>
-					)}
-					<span className="flex-1" />
-					<label className="relative flex h-8 w-56 min-w-24 shrink-[6] items-center">
+					<div className="flex min-w-0 flex-auto">
+						<FolderBreadcrumb
+							rootLabel={copy.label}
+							segments={inSubfolder ? folderSegments : []}
+							onOpen={(path, newTab) => openFolder(path, { newTab })}
+						/>
+					</div>
+					<label className="relative flex h-8 w-56 min-w-24 shrink-[4] items-center @max-[760px]:w-40">
 						<Search
 							className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
 							aria-hidden="true"
@@ -1194,28 +1126,112 @@ const NewButton = forwardRef<
 	);
 });
 
-function HistoryButton({
-	label,
-	disabled,
-	onClick,
-	children,
+/**
+ * Where a Files tab is: the section, then each folder down to the open one.
+ * Ancestors are quiet links; the current folder is the page title. A deep
+ * path folds its middle into "…", which lists what it hides.
+ */
+function FolderBreadcrumb({
+	rootLabel,
+	segments,
+	onOpen,
 }: {
-	readonly label: string;
-	readonly disabled: boolean;
-	readonly onClick: () => void;
-	readonly children: ReactNode;
+	readonly rootLabel: string;
+	readonly segments: readonly string[];
+	readonly onOpen: (path: string, newTab: boolean) => void;
 }) {
-	return (
-		<button
-			type="button"
-			aria-label={label}
-			title={label}
-			disabled={disabled}
-			onClick={onClick}
-			className="grid size-7 shrink-0 place-items-center rounded-md border border-border text-fg-muted hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent"
+	const crumbs = [
+		{ path: "/", label: rootLabel },
+		...segments.map((segment, index) => ({
+			path: `/${segments.slice(0, index + 1).join("/")}`,
+			label: segment,
+		})),
+	];
+	if (crumbs.length === 1)
+		return (
+			<h1 className="min-w-0 truncate text-[22px] font-semibold tracking-[-0.01em] text-fg">
+				{rootLabel}
+			</h1>
+		);
+	// Root, the fold, and the last two folders.
+	const folded = crumbs.length > 4 ? crumbs.slice(1, -2) : [];
+	const shown = folded.length > 0 ? [crumbs[0]!, ...crumbs.slice(-2)] : crumbs;
+	const separator = (
+		<span
+			aria-hidden="true"
+			className="shrink-0 px-0.5 text-[20px] font-normal text-fg-faint select-none"
 		>
-			{children}
-		</button>
+			/
+		</span>
+	);
+	return (
+		<nav
+			aria-label="Folder path"
+			data-testid="library-breadcrumb"
+			className="flex min-w-0 items-center text-[22px] font-semibold tracking-[-0.01em]"
+		>
+			{shown.map((crumb, index) => {
+				const isCurrent = index === shown.length - 1;
+				return (
+					<span
+						key={crumb.path}
+						className={`flex items-center ${isCurrent ? "min-w-0" : "min-w-0 shrink-[3]"}`}
+					>
+						{index > 0 ? separator : null}
+						{index === 1 && folded.length > 0 ? (
+							<>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button
+											type="button"
+											aria-label="Show hidden folders"
+											className="-mx-0.5 shrink-0 rounded-[7px] px-1.5 text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+										>
+											…
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="start"
+										className="min-w-44 text-[13px]"
+									>
+										{folded.map((hidden) => (
+											<DropdownMenuItem
+												key={hidden.path}
+												onSelect={() => onOpen(hidden.path, false)}
+											>
+												{hidden.label}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+								{separator}
+							</>
+						) : null}
+						{isCurrent ? (
+							<h1
+								aria-current="location"
+								className="min-w-0 truncate px-1 text-fg"
+								title={crumb.label}
+							>
+								{crumb.label}
+							</h1>
+						) : (
+							<button
+								type="button"
+								title={crumb.label}
+								onClick={(event) => onOpen(crumb.path, isNewTabClick(event))}
+								onAuxClick={(event) => {
+									if (event.button === 1) onOpen(crumb.path, true);
+								}}
+								className="-mx-0.5 max-w-[12rem] min-w-0 truncate rounded-[7px] px-1.5 text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+							>
+								{crumb.label}
+							</button>
+						)}
+					</span>
+				);
+			})}
+		</nav>
 	);
 }
 
@@ -1302,64 +1318,106 @@ type ItemActions = {
 };
 
 /** The one item menu: Grid cards and Folders rows offer the same actions. */
+/**
+ * The one item menu: Grid cards and Files rows offer the same actions, from a
+ * right-click or from their "⋯" button.
+ */
 function ItemMenuContent({
 	entry,
 	file,
 	actions,
 	onOpenFolderInNewTab,
+	variant = "context",
 }: {
 	readonly entry: LibraryEntry;
 	readonly file?: LibraryFile;
 	readonly actions: ItemActions;
 	readonly onOpenFolderInNewTab?: () => void;
+	readonly variant?: "context" | "dropdown";
 }) {
+	const Content =
+		variant === "context" ? ContextMenuContent : DropdownMenuContent;
+	const Item = variant === "context" ? ContextMenuItem : DropdownMenuItem;
+	const Separator =
+		variant === "context" ? ContextMenuSeparator : DropdownMenuSeparator;
 	return (
-		<ContextMenuContent
+		<Content
 			className="min-w-44 text-[13px]"
 			data-testid="library-item-menu"
+			{...(variant === "dropdown" ? { align: "end" as const } : {})}
 		>
 			{file ? (
-				<ContextMenuItem onSelect={() => actions.openInNewTab(file)}>
+				<Item onSelect={() => actions.openInNewTab(file)}>
 					<SquareArrowOutUpRight aria-hidden="true" />
 					Open in new tab
-				</ContextMenuItem>
+				</Item>
 			) : onOpenFolderInNewTab ? (
-				<ContextMenuItem onSelect={onOpenFolderInNewTab}>
+				<Item onSelect={onOpenFolderInNewTab}>
 					<SquareArrowOutUpRight aria-hidden="true" />
 					Open in new tab
-				</ContextMenuItem>
+				</Item>
 			) : null}
 			{actions.readOnly ? null : (
 				<>
-					<ContextMenuItem onSelect={() => actions.rename(entry)}>
+					<Item onSelect={() => actions.rename(entry)}>
 						<PencilLine aria-hidden="true" />
 						Rename
 						<MenuShortcut>F2</MenuShortcut>
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={() => actions.move([entry])}>
+					</Item>
+					<Item onSelect={() => actions.move([entry])}>
 						<FolderInput aria-hidden="true" />
 						Move…
-					</ContextMenuItem>
+					</Item>
 				</>
 			)}
-			<ContextMenuItem onSelect={() => actions.download([entry])}>
+			<Item onSelect={() => actions.download([entry])}>
 				<Download aria-hidden="true" />
 				Download
-			</ContextMenuItem>
+			</Item>
 			{actions.readOnly ? null : (
 				<>
-					<ContextMenuSeparator />
-					<ContextMenuItem
+					<Separator />
+					<Item
 						className="text-danger focus:text-danger [&_svg:not([class*='text-'])]:text-danger"
 						onSelect={() => actions.remove([entry])}
 					>
 						<Trash2 aria-hidden="true" />
 						Delete
 						<MenuShortcut>⌫</MenuShortcut>
-					</ContextMenuItem>
+					</Item>
 				</>
 			)}
-		</ContextMenuContent>
+		</Content>
+	);
+}
+
+/** The "⋯" that opens an item's menu, for people who do not right-click. */
+function ItemMenuButton({
+	label,
+	className,
+	children,
+}: {
+	readonly label: string;
+	readonly className: string;
+	readonly children: ReactNode;
+}) {
+	return (
+		<DropdownMenu modal={false}>
+			<DropdownMenuTrigger asChild>
+				<button
+					type="button"
+					aria-label={label}
+					title="More actions"
+					data-testid="library-item-menu-button"
+					onClick={(event) => event.stopPropagation()}
+					onPointerDown={(event) => event.stopPropagation()}
+					className={`grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle transition-opacity hover:bg-bg-hover-strong hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-bg-hover-strong data-[state=open]:text-fg data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100 ${className}`}
+				>
+					<MoreHorizontal className="size-4" aria-hidden="true" />
+				</button>
+			</DropdownMenuTrigger>
+			{children}
+		</DropdownMenu>
 	);
 }
 
@@ -1442,60 +1500,77 @@ function GridCard({
 	const hint =
 		file.directory === "/" ? "" : `${file.directory.split("/").at(-1)}/`;
 	return (
-		<ContextMenu>
-			<ContextMenuTrigger asChild>
-				<button
-					type="button"
-					data-testid="library-card"
-					data-path={file.path}
-					data-changed={glyph ?? undefined}
-					title={file.path}
-					onClick={(event) => onOpen(file, isNewTabClick(event))}
-					onAuxClick={(event) => {
-						if (event.button === 1) onOpen(file, true);
-					}}
-					onKeyDown={(event) => {
-						itemKeyDown(event, fileEntry(file), actions);
-					}}
-					className={`group flex w-full flex-col overflow-hidden rounded-[12px] border border-border bg-panel text-left transition-[border-color,box-shadow,opacity] hover:border-border-strong hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:border-border-strong${
-						dimmed ? " opacity-[0.35] hover:opacity-100" : ""
-					}`}
-				>
-					<div className="relative aspect-[4/3] w-full overflow-hidden border-b border-border-subtle bg-bg-subtle">
-						<LibraryPreview file={file} />
-						{file.kind === "media" ? null : (
-							<div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-bg-subtle to-transparent" />
-						)}
-					</div>
-					<div className="flex h-10 items-center gap-2 px-3">
-						<img
-							src={fileIconUrl(file.path)}
-							alt=""
-							aria-hidden="true"
-							className="size-3.5 shrink-0"
-						/>
-						<span
-							className={`min-w-0 truncate text-[13px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
-						>
-							{file.displayName}
-						</span>
-						{glyph ? (
-							<DiffGlyph kind={glyph} size={11} className="shrink-0" />
-						) : null}
-						<span className="min-w-0 flex-1" />
-						{hint ? (
-							<span className="min-w-0 shrink-[2] truncate text-[11.5px] text-fg-faint">
-								{hint}
+		<div className="group/card relative">
+			<ContextMenu>
+				<ContextMenuTrigger asChild>
+					<button
+						type="button"
+						data-testid="library-card"
+						data-path={file.path}
+						data-changed={glyph ?? undefined}
+						title={file.path}
+						onClick={(event) => onOpen(file, isNewTabClick(event))}
+						onAuxClick={(event) => {
+							if (event.button === 1) onOpen(file, true);
+						}}
+						onKeyDown={(event) => {
+							itemKeyDown(event, fileEntry(file), actions);
+						}}
+						className={`group flex w-full flex-col overflow-hidden rounded-[12px] border border-border bg-panel text-left transition-[border-color,box-shadow,opacity] hover:border-border-strong hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:border-border-strong${
+							dimmed ? " opacity-[0.35] hover:opacity-100" : ""
+						}`}
+					>
+						<div className="relative aspect-[4/3] w-full overflow-hidden border-b border-border-subtle bg-bg-subtle">
+							<LibraryPreview file={file} />
+							{file.kind === "media" ? null : (
+								<div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-bg-subtle to-transparent" />
+							)}
+						</div>
+						<div className="flex h-10 items-center gap-2 px-3">
+							<img
+								src={fileIconUrl(file.path)}
+								alt=""
+								aria-hidden="true"
+								className="size-3.5 shrink-0"
+							/>
+							<span
+								className={`min-w-0 truncate text-[13px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
+							>
+								{file.displayName}
 							</span>
-						) : null}
-						<span className="shrink-0 text-[11.5px] text-fg-subtle">
-							{formatLibraryTime(file.updatedAt)}
-						</span>
-					</div>
-				</button>
-			</ContextMenuTrigger>
-			<ItemMenuContent entry={fileEntry(file)} file={file} actions={actions} />
-		</ContextMenu>
+							{glyph ? (
+								<DiffGlyph kind={glyph} size={11} className="shrink-0" />
+							) : null}
+							<span className="min-w-0 flex-1" />
+							{hint ? (
+								<span className="min-w-0 shrink-[2] truncate text-[11.5px] text-fg-faint">
+									{hint}
+								</span>
+							) : null}
+							<span className="shrink-0 text-[11.5px] text-fg-subtle">
+								{formatLibraryTime(file.updatedAt)}
+							</span>
+						</div>
+					</button>
+				</ContextMenuTrigger>
+				<ItemMenuContent
+					entry={fileEntry(file)}
+					file={file}
+					actions={actions}
+				/>
+			</ContextMenu>
+			<ItemMenuButton
+				label={`More actions for ${file.name}`}
+				className="absolute top-2 right-2 border border-border bg-panel opacity-0 shadow-sm group-hover/card:opacity-100"
+			>
+				<ItemMenuContent
+					variant="dropdown"
+					entry={fileEntry(file)}
+					file={file}
+					actions={actions}
+				/>
+			</ItemMenuButton>
+		</div>
 	);
 }
 
@@ -1719,7 +1794,7 @@ function RowList({
 								}
 								itemKeyDown(event, entry, actions);
 							}}
-							className={`relative flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] transition-[background-color,opacity] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-bg-hover ${
+							className={`relative flex min-h-11 w-full items-center gap-3 rounded-lg py-2 pr-11 pl-3 text-left text-[14px] transition-[background-color,opacity] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-bg-hover ${
 								selected
 									? "bg-bg-active"
 									: dropTarget === path
@@ -1755,14 +1830,6 @@ function RowList({
 								/>
 							) : null}
 							<span className="shrink-0 text-[12px] text-fg-faint">{meta}</span>
-							{actions.readOnly ? null : (
-								<span
-									aria-hidden="true"
-									className="grid size-6 shrink-0 place-items-center rounded text-fg-faint opacity-0 group-hover:opacity-100"
-								>
-									<MoreHorizontal className="size-3.5" />
-								</span>
-							)}
 						</button>
 					</ContextMenuTrigger>
 					<ItemMenuContent
@@ -1772,6 +1839,18 @@ function RowList({
 						{...(isFolder ? { onOpenFolderInNewTab: () => open(true) } : {})}
 					/>
 				</ContextMenu>
+				<ItemMenuButton
+					label={`More actions for ${name}`}
+					className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
+				>
+					<ItemMenuContent
+						variant="dropdown"
+						entry={entry}
+						{...(file ? { file } : {})}
+						actions={actions}
+						{...(isFolder ? { onOpenFolderInNewTab: () => open(true) } : {})}
+					/>
+				</ItemMenuButton>
 			</li>
 		);
 	};
