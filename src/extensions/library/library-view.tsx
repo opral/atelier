@@ -835,7 +835,7 @@ export function LibraryView({
 				}}
 			/>
 			<div className="mx-auto flex w-[min(1080px,calc(100%-112px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
-				<header className="flex items-end gap-3 pb-6">
+				<header className="flex items-center gap-3 pb-6 @max-[520px]:flex-wrap">
 					<div className="flex min-w-0 flex-auto">
 						<FolderBreadcrumb
 							rootLabel={copy.label}
@@ -843,7 +843,7 @@ export function LibraryView({
 							onOpen={(path, newTab) => openFolder(path, { newTab })}
 						/>
 					</div>
-					<label className="relative flex h-8 w-56 min-w-24 shrink-[4] items-center @max-[760px]:w-40">
+					<label className="relative flex h-8 w-56 min-w-24 shrink-[4] items-center @max-[760px]:w-40 @max-[520px]:order-last @max-[520px]:w-full">
 						<Search
 							className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
 							aria-hidden="true"
@@ -1033,6 +1033,9 @@ export function LibraryView({
 					<DeleteDialog
 						open={dialog?.type === "delete"}
 						count={dialog?.type === "delete" ? dialog.entries.length : 0}
+						{...(dialog?.type === "delete" && dialog.entries.length === 1
+							? { name: dialog.entries[0]!.name }
+							: {})}
 						hasFolders={
 							dialog?.type === "delete" &&
 							dialog.entries.some((entry) => entry.type === "directory")
@@ -1199,12 +1202,14 @@ function FolderBreadcrumb({
 		</span>
 	);
 	return (
-		<div className="flex min-w-0 flex-col">
+		<div className="relative flex min-w-0 flex-col">
 			{trail.length > 0 ? (
 				<nav
 					aria-label="Folder path"
 					data-testid="library-breadcrumb"
-					className="-ml-1 flex min-w-0 items-center gap-0.5 pb-0.5 text-[13px] font-medium"
+					// Above the title, out of flow: the header keeps one height inside
+					// a folder and out of it, so Search and New never move.
+					className="absolute bottom-full left-0 -ml-1 flex max-w-full min-w-0 items-center gap-0.5 pb-0.5 text-[13px] font-medium"
 				>
 					{shownTrail.map((crumb, index) => (
 						<span

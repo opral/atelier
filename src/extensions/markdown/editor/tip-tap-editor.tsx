@@ -998,11 +998,19 @@ function TipTapEditorLoadingState({
 	);
 }
 
+/** A destroyed editor keeps its object but loses its schema and view. */
+function isEditorGone(editor: Editor): boolean {
+	return editor.isDestroyed || !editor.schema;
+}
+
 function editorTextMatchesMarkdown(
 	editor: Editor,
 	markdown: string,
 	defaultBlock: EmptyMarkdownDefaultBlock | undefined,
 ): boolean {
+	// A sync that outlived its editor (the file was renamed and the view
+	// rebuilt) has nothing to compare against: treat it as settled.
+	if (isEditorGone(editor)) return true;
 	const ast = parseMarkdown(markdown) as any;
 	const canonical = editor.schema.nodeFromJSON(
 		astToTiptapDoc(ast, { defaultBlock }),
@@ -1026,6 +1034,7 @@ function setEditorMarkdown(
 		readonly preserveFileEquivalentEditorState?: boolean;
 	} = {},
 ): void {
+	if (isEditorGone(editor)) return;
 	const ast = parseMarkdown(markdown) as any;
 	const content = astToTiptapDoc(ast, { defaultBlock });
 	// Apply authoritative file content as the smallest change to the document

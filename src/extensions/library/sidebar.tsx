@@ -139,6 +139,11 @@ export function LibrarySidebar({
 	const { data } = useLibraryData();
 	useTrackRecentDocuments(atelier, view, data);
 	const marks = useLibraryReviewMarks(atelier, data);
+	const filesRollup: "added" | "modified" | undefined = !marks.active
+		? undefined
+		: [...marks.kinds.values()].every((status) => status === "added")
+			? "added"
+			: "modified";
 	const active = atelier.views.activeMain;
 	const activeKind: LibraryKind | "database" | null =
 		active?.extensionId === LIBRARY_EXTENSION_ID
@@ -186,14 +191,14 @@ export function LibrarySidebar({
 					const isActive = activeKind === kind;
 					const label =
 						kind === "database" ? "Database" : LIBRARY_KIND_COPY[kind].label;
-					// Home, All and Files hold everything: no roll-up of their own.
+					// Files holds everything, so it rolls up every change; Home and
+					// All sum the workspace up and carry no mark of their own.
 					const rollup =
-						kind !== "database" &&
-						kind !== "files" &&
-						kind !== "all" &&
-						kind !== "home"
-							? marks.kinds.get(kind)
-							: undefined;
+						kind === "files"
+							? filesRollup
+							: kind !== "database" && kind !== "all" && kind !== "home"
+								? marks.kinds.get(kind)
+								: undefined;
 					return (
 						<li key={kind}>
 							<SidebarRow
@@ -201,7 +206,6 @@ export function LibrarySidebar({
 								dimmed={
 									marks.active &&
 									rollup === undefined &&
-									kind !== "files" &&
 									kind !== "all" &&
 									kind !== "home"
 								}
@@ -371,6 +375,7 @@ export function LibrarySidebar({
 				<DeleteDialog
 					open={deleting !== null}
 					count={1}
+					{...(deleting ? { name: deleting.name } : {})}
 					hasFolders={false}
 					busy={busy}
 					error={deleteError}

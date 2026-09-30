@@ -314,6 +314,16 @@ export function useLibraryReviewMarks(
 					? "added"
 					: "modified",
 			);
+			// A move also changed the folder it left.
+			if (file.movedFromPath) {
+				const from = file.movedFromPath.split("/").filter(Boolean);
+				from.pop();
+				let fromPrefix = "";
+				for (const segment of from) {
+					fromPrefix = `${fromPrefix}/${segment}`;
+					directories.set(fromPrefix, "modified");
+				}
+			}
 			const segments = file.path.split("/").filter(Boolean);
 			segments.pop();
 			let prefix = "";

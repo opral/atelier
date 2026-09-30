@@ -163,6 +163,7 @@ export function NameDialog({
 export function DeleteDialog({
 	open,
 	count,
+	name,
 	hasFolders,
 	busy,
 	error,
@@ -171,6 +172,8 @@ export function DeleteDialog({
 }: {
 	readonly open: boolean;
 	readonly count: number;
+	/** The one item's name, when there is one: the dialog says what it deletes. */
+	readonly name?: string;
 	readonly hasFolders: boolean;
 	readonly busy: boolean;
 	readonly error: string | null;
@@ -182,7 +185,11 @@ export function DeleteDialog({
 		<LibraryDialog
 			open={open}
 			busy={busy}
-			title={`Delete ${count} ${count === 1 ? "item" : "items"}`}
+			title={
+				count === 1 && name
+					? `Delete “${name}”?`
+					: `Delete ${count} ${count === 1 ? "item" : "items"}?`
+			}
 			description={
 				hasFolders
 					? "Folders and everything inside them will be deleted. Their history remains available."
