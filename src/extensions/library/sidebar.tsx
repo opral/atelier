@@ -31,6 +31,7 @@ import type {
 import { ATELIER_BUILTIN_EXTENSION_IDS } from "../../extension-api";
 import { LIBRARY_KIND_COPY, type LibraryKind } from "./kinds";
 import {
+	canonicalDirectory,
 	useLibraryData,
 	useLibraryReviewMarks,
 	type LibraryData,
@@ -48,12 +49,20 @@ import {
 	visibleRecentFiles,
 } from "./library-state";
 import {
+	createFile,
 	deleteEntries,
 	downloadEntries,
 	renameEntry,
 	type LibraryEntry,
 } from "./library-ops";
+import { isMacPlatform } from "@/lib/platform";
+import { useDefaultFolders } from "../files/use-default-folders";
+import {
+	ensureDirectoryPath,
+	resolveCreateDirectory,
+} from "../files/default-folder";
 import { DeleteDialog, ToastLine, type LibraryToast } from "./dialogs";
+import { NEW_FILE, isTypingTarget } from "./new-file";
 
 /** With a host Home, Home takes All's place at the top. */
 const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
@@ -171,6 +180,54 @@ export function LibrarySidebar({
 		setToast({ ...next, id: toastId.current });
 	}, []);
 	const dismissToast = useCallback(() => setToast(null), []);
+
+	// ⌘. with nothing open in the main area makes a page, as the empty
+	// state offers. (With a Library tab in front, that view handles it.)
+	const { folders: defaultFolders } = useDefaultFolders(atelier);
+	const mainEmpty = atelier.views.activeMain == null;
+	useEffect(() => {
+		if (!mainEmpty || readOnly || !data) return;
+		const isMac = isMacPlatform();
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented || event.altKey || event.shiftKey) return;
+			const primary = isMac
+				? event.metaKey && !event.ctrlKey
+				: event.ctrlKey && !event.metaKey;
+			if (!primary || (event.key !== "." && event.code !== "Period")) return;
+			if (isTypingTarget(event.target)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const directory = canonicalDirectory(
+				resolveCreateDirectory({
+					hereDirectory: "/",
+					defaultFolder: defaultFolders.markdown,
+					existingDirectories: new Set(
+						data.directories.map((dir) => ensureDirectoryPath(dir.path)),
+					),
+				}),
+			);
+			void createFile(
+				lix,
+				data,
+				directory,
+				NEW_FILE.markdown.name,
+				NEW_FILE.markdown.content(),
+			)
+				.then((created) =>
+					atelier.documents.open(created.path, {
+						fileId: created.id,
+						documentOrigin: "new",
+						state: { focusOnLoad: true, defaultBlock: "heading1" },
+					}),
+				)
+				.catch((error: unknown) => {
+					console.error("library: unable to create a page", error);
+				});
+		};
+		window.addEventListener("keydown", onKeyDown, { capture: true });
+		return () =>
+			window.removeEventListener("keydown", onKeyDown, { capture: true });
+	}, [atelier.documents, data, defaultFolders, lix, mainEmpty, readOnly]);
 
 	const openFile = (file: LibraryFile, newTab: boolean) => {
 		// Over a Library tab a file opens beside it, never in its place.

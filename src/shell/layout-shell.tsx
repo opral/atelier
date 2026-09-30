@@ -2665,6 +2665,16 @@ function LayoutShellLoadedContentResolved({
 			}
 			const state = withoutDocumentIdentity(options.state);
 			const activeView = activeEntryFromPanel(panelStatesRef.current.main);
+			// A route (browser Back/Forward, a link) opens a document beside a
+			// non-document view in front, such as a Library or SQL tab, rather
+			// than closing it — as an auto-reveal does.
+			const newTab =
+				options.newTab ??
+				(options.navigationCause === "route" &&
+				activeView &&
+				!isDocumentView(activeView)
+					? true
+					: undefined);
 			if (
 				!options.newTab &&
 				!hasHistoricalEditorRevisionState(state) &&
@@ -2701,7 +2711,7 @@ function LayoutShellLoadedContentResolved({
 					focus: options.focus ?? true,
 					documentOrigin: options.documentOrigin ?? "existing",
 					navigationCause: options.navigationCause,
-					newTab: options.newTab,
+					newTab,
 				});
 				return historicalFile.path;
 			}
@@ -2714,7 +2724,7 @@ function LayoutShellLoadedContentResolved({
 				focus: options.focus ?? true,
 				documentOrigin: options.documentOrigin ?? "existing",
 				navigationCause: options.navigationCause,
-				newTab: options.newTab,
+				newTab,
 			});
 		},
 		[lix, openResolvedFileView, resolveAndOpenFile],
@@ -3493,8 +3503,14 @@ function LayoutShellLoadedContentResolved({
 			lastActivatedCentralViewRef.current = null;
 			return;
 		}
+		// A view's location is part of its name: a folder view moved to a new
+		// parent under the same label must still re-announce (`dirPath`).
 		const statePath =
-			typeof entry.state?.path === "string" ? entry.state.path : "";
+			typeof entry.state?.path === "string"
+				? entry.state.path
+				: typeof entry.state?.dirPath === "string"
+					? entry.state.dirPath
+					: "";
 		const filePath = documentPathFromView(entry) ?? "";
 		// A view that names itself once it has read its data (a conversation
 		// titles its tab) re-announces itself, so a host's URL can follow.

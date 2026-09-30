@@ -345,6 +345,10 @@ export function MoveDialog({
 		if (!open) return;
 		const nav = crumbsRef.current;
 		if (nav) nav.scrollLeft = nav.scrollWidth;
+		// Entering a folder from the list removes the row that had focus:
+		// the folder now being chosen takes it.
+		if (document.activeElement === document.body)
+			currentCrumbRef.current?.focus({ preventScroll: true });
 		const frame = requestAnimationFrame(() => {
 			const from = cameFrom.current;
 			const row = from

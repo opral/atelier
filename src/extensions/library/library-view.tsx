@@ -57,11 +57,12 @@ import {
 	resolveCreateDirectory,
 	type DefaultFolderFileType,
 } from "../files/default-folder";
-import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
+import { NEW_FILE, isTypingTarget } from "./new-file";
 import {
 	countLabel,
 	LIBRARY_KIND_COPY,
 	matchesLibraryKind,
+	parentDirectoryOf,
 	type LibraryKind,
 } from "./kinds";
 import {
@@ -117,18 +118,6 @@ type Dialog =
 	| { readonly type: "move"; readonly entries: readonly LibraryEntry[] }
 	| { readonly type: "delete"; readonly entries: readonly LibraryEntry[] }
 	| { readonly type: "new-folder" };
-
-const NEW_FILE: Record<
-	Exclude<DefaultFolderFileType, "generic">,
-	{ readonly name: string; readonly content: () => Uint8Array }
-> = {
-	markdown: { name: "untitled.md", content: () => new Uint8Array() },
-	csv: { name: "untitled.csv", content: () => new Uint8Array() },
-	excalidraw: {
-		name: "drawing.excalidraw",
-		content: () => new TextEncoder().encode(NEW_EXCALIDRAW_FILE_CONTENT),
-	},
-};
 
 const KIND_FILE_TYPE: Partial<
 	Record<LibraryKind, Exclude<DefaultFolderFileType, "generic">>
@@ -418,12 +407,49 @@ export function LibraryView({
 		return registerNewFileDraftHandler(() => createTyped("markdown"));
 	}, [createTyped, readOnly, registerNewFileDraftHandler]);
 
+	// Keyboard focus after a dialog's action: the renamed or created item
+	// where it now sorts, or the neighbour of what was deleted. Applied once
+	// the item is on screen.
+	const focusAfter = useRef<string | null>(null);
+	useEffect(() => {
+		const path = focusAfter.current;
+		if (!path) return;
+		const timer = setTimeout(() => {
+			const target = rootRef.current?.querySelector<HTMLElement>(
+				`[data-path="${CSS.escape(path)}"]`,
+			);
+			if (!target) return;
+			focusAfter.current = null;
+			const focusable =
+				target instanceof HTMLButtonElement
+					? target
+					: target.querySelector<HTMLElement>("button:not([role=checkbox])");
+			focusable?.focus({ preventScroll: false });
+		}, 0);
+		return () => clearTimeout(timer);
+	});
+	const neighbourOf = (entries: readonly LibraryEntry[]): string | null => {
+		const gone = new Set(entries.map((entry) => entry.path));
+		const paths = [
+			...(rootRef.current?.querySelectorAll<HTMLElement>("[data-path]") ?? []),
+		].map((element) => element.dataset.path!);
+		const first = paths.findIndex((path) => gone.has(path));
+		if (first < 0) return null;
+		return (
+			paths.slice(first).find((path) => !gone.has(path)) ??
+			paths
+				.slice(0, first)
+				.reverse()
+				.find((path) => !gone.has(path)) ??
+			null
+		);
+	};
 	const runDialogAction = useCallback(
 		async (action: () => Promise<string | null>) => {
 			setBusy(true);
 			setDialogError(null);
 			try {
-				await action();
+				focusAfter.current = await action();
 				setDialog(null);
 				setSelection(new Set());
 			} catch (caught) {
@@ -610,6 +636,30 @@ export function LibraryView({
 					file.path.toLowerCase().includes(search)),
 		);
 	}, [data, kind, search, showHidden]);
+	// Files is the filesystem: its search finds folders too.
+	const folderResults = useMemo(() => {
+		if (!data || !search || kind !== "files") return [];
+		return data.directories
+			.filter(
+				(directory) =>
+					(showHidden || !directory.hidden) &&
+					directory.path.toLowerCase().includes(search),
+			)
+			.map((directory) => ({
+				directory,
+				count:
+					data.files.filter(
+						(file) =>
+							file.directory === directory.path && (showHidden || !file.hidden),
+					).length +
+					data.directories.filter(
+						(child) =>
+							parentDirectoryOf(child.path) === directory.path &&
+							(showHidden || !child.hidden),
+					).length,
+			}));
+	}, [data, kind, search, showHidden]);
+	const resultCount = (results?.length ?? 0) + folderResults.length;
 
 	const itemActions: ItemActions = useMemo(
 		() => ({
@@ -670,7 +720,7 @@ export function LibraryView({
 		);
 	} else if (results) {
 		body =
-			results.length === 0 ? (
+			resultCount === 0 ? (
 				<EmptyState
 					title={`No matches for “${query.trim()}”`}
 					body="Search looks at names and folders. Try fewer letters."
@@ -685,7 +735,7 @@ export function LibraryView({
 			) : (
 				<RowList
 					files={results}
-					folders={[]}
+					folders={folderResults}
 					kind={kind}
 					flat
 					marks={marks}
@@ -981,9 +1031,7 @@ export function LibraryView({
 					<div className="flex min-h-8 items-center gap-2 pb-4">
 						{results ? (
 							<p className="text-[12.5px] text-fg-subtle" aria-live="polite">
-								{results.length === 1
-									? "1 result"
-									: `${results.length} results`}
+								{resultCount === 1 ? "1 result" : `${resultCount} results`}
 								{mode === "folders" ? " from every folder" : ""}
 							</p>
 						) : null}
@@ -1088,6 +1136,7 @@ export function LibraryView({
 						onConfirm={() => {
 							if (dialog?.type !== "delete") return;
 							const entries = dialog.entries;
+							const neighbour = neighbourOf(entries);
 							void runDialogAction(async () => {
 								const undo = await deleteEntries(lix, data, entries);
 								for (const entry of entries)
@@ -1099,23 +1148,13 @@ export function LibraryView({
 									message: `Deleted ${describeEntries(entries)}`,
 									undo,
 								});
-								return null;
+								return neighbour;
 							});
 						}}
 					/>
 				</>
 			) : null}
 		</div>
-	);
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-	if (!(target instanceof HTMLElement)) return false;
-	return (
-		target.isContentEditable ||
-		target.tagName === "INPUT" ||
-		target.tagName === "TEXTAREA" ||
-		target.tagName === "SELECT"
 	);
 }
 
