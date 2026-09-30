@@ -404,7 +404,10 @@ function LiveConversation({
 					readOnly={atelier.readOnly}
 					onSave={(next) => setConversationTitle(lix, conversation, next)}
 				/>
-				<ResolvedState atelier={atelier} conversation={conversation} />
+				{/* A checkpoint's conversation is its record: never resolved. */}
+				{resolved?.kind === "checkpoint" ? null : (
+					<ResolvedState atelier={atelier} conversation={conversation} />
+				)}
 				{anchor.value ? (
 					<ContextLine
 						anchor={anchor.value}
@@ -455,6 +458,7 @@ function LiveConversation({
 				</>
 			) : null}
 			<LiveThread
+				resolvable={resolved?.kind !== "checkpoint"}
 				atelier={atelier}
 				conversation={conversation}
 				rows={threadResult.rows}
@@ -498,12 +502,15 @@ function LiveThread({
 	atelier,
 	conversation,
 	rows,
+	resolvable,
 	draft,
 	onDraftChange,
 }: {
 	readonly atelier: Runtime;
 	readonly conversation: ConversationRow;
 	readonly rows: readonly ConversationCommentRow[];
+	/** False on a checkpoint's conversation, which is its record. */
+	readonly resolvable: boolean;
 	readonly draft: Document;
 	readonly onDraftChange: (draft: Document) => void;
 }) {
@@ -537,6 +544,7 @@ function LiveThread({
 				/>
 			)}
 			{atelier.readOnly ||
+			!resolvable ||
 			conversation.resolved ||
 			comments.length === 0 ? null : (
 				<ResolveButton
@@ -933,6 +941,53 @@ function ContextLine({
 	);
 }
 
+/** How many of a checkpoint's files show before "Show N more files". */
+const CHECKPOINT_FILES_SHOWN = 5;
+
+function CheckpointFiles({
+	files,
+	onOpen,
+}: {
+	readonly files: Extract<Anchor, { kind: "checkpoint" }>["files"];
+	readonly onOpen: (path?: string) => void;
+}) {
+	const [showAll, setShowAll] = useState(false);
+	const shown = showAll ? files : files.slice(0, CHECKPOINT_FILES_SHOWN);
+	const hiddenCount = files.length - shown.length;
+	return (
+		<ul
+			aria-label="Files in this checkpoint"
+			className="-mx-2 -mt-1 flex flex-col"
+		>
+			{shown.map((file) => (
+				<li key={file.id}>
+					<button
+						type="button"
+						onClick={() => onOpen(file.path)}
+						className="conversation-row flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-0 text-left text-[12.5px] text-fg-muted"
+					>
+						<FileIcon path={file.path} />
+						<span className="min-w-0 truncate">{fileName(file.path)}</span>
+						<span className="flex-1" />
+						<DiffGlyph kind={file.changeKind} size={11} />
+					</button>
+				</li>
+			))}
+			{hiddenCount > 0 ? (
+				<li>
+					<button
+						type="button"
+						onClick={() => setShowAll(true)}
+						className="cursor-pointer rounded-[6px] px-2 py-1 text-[12.5px] font-medium text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						Show {hiddenCount} more files
+					</button>
+				</li>
+			) : null}
+		</ul>
+	);
+}
+
 function AnchorDetail({
 	anchor,
 	onOpen,
@@ -945,27 +1000,7 @@ function AnchorDetail({
 }) {
 	if (anchor.kind === "checkpoint") {
 		if (anchor.files.length === 0) return null;
-		return (
-			<ul
-				aria-label="Files in this checkpoint"
-				className="-mx-2 -mt-1 flex flex-col"
-			>
-				{anchor.files.map((file) => (
-					<li key={file.id}>
-						<button
-							type="button"
-							onClick={() => onOpen(file.path)}
-							className="conversation-row flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-0 text-left text-[12.5px] text-fg-muted"
-						>
-							<FileIcon path={file.path} />
-							<span className="min-w-0 truncate">{fileName(file.path)}</span>
-							<span className="flex-1" />
-							<DiffGlyph kind={file.changeKind} size={11} />
-						</button>
-					</li>
-				))}
-			</ul>
-		);
+		return <CheckpointFiles files={anchor.files} onOpen={onOpen} />;
 	}
 	if (anchor.kind === "markdown_block") {
 		const placeholder = blockKindLabel(anchor.blockKind).replace(/^./, (c) =>

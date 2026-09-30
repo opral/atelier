@@ -68,47 +68,6 @@ export function ResolveButton({
 	);
 }
 
-/**
- * A resolved conversation folded to one line where it was (History's open
- * checkpoint), so it is not lost: "✓ Resolved · 3 comments · Reopen".
- */
-export function ResolvedLine({
-	commentCount,
-	onReopen,
-	className = "",
-}: {
-	readonly commentCount: number;
-	/** Absent where nothing may be written (read-only). */
-	readonly onReopen?: () => void;
-	readonly className?: string;
-}) {
-	return (
-		<p
-			data-attr="resolved-conversation"
-			className={`comment-secondary flex items-center gap-1 text-[11.5px] leading-4 font-semibold ${className}`}
-		>
-			<CheckIcon className="size-3" />
-			Resolved
-			{commentCount > 0
-				? ` · ${commentCount} ${commentCount === 1 ? "comment" : "comments"}`
-				: null}
-			{onReopen ? (
-				<>
-					<span aria-hidden="true">·</span>
-					<button
-						type="button"
-						data-attr="reopen-conversation"
-						onClick={onReopen}
-						className="cursor-pointer rounded-[4px] text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					>
-						Reopen
-					</button>
-				</>
-			) : null}
-		</p>
-	);
-}
-
 /** The conversation page's state under its title: "✓ Resolved", "Reopen". */
 export function ResolvedChip({ onReopen }: { readonly onReopen?: () => void }) {
 	return (
