@@ -2941,6 +2941,19 @@
 		.markdown-comment-popover .comment-surface[data-tone] {
 			--comment-body-size: 13px;
 			--comment-body-line-height: 19px;
+			--comment-field-edge: var(--atelier-border);
+		}
+
+		/* Writing: the accent ring outside, the accent edge's tint inside. */
+		.markdown-comment-card
+			.comment-surface
+			.comment-field[data-state="writing"],
+		.markdown-comment-popover
+			.comment-surface
+			.comment-field[data-state="writing"] {
+			box-shadow:
+				inset 0 0 0 1px var(--atelier-accent-border),
+				0 0 0 1px var(--atelier-accent);
 		}
 
 		.markdown-comment-card {
