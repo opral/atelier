@@ -166,7 +166,7 @@ export function LibrarySidebar({
 	return (
 		<nav
 			aria-label="Library"
-			className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2"
+			className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-1 pr-1.5 pb-2 pl-0.5"
 			data-testid="library-sidebar"
 		>
 			<ul className="flex flex-col gap-px">
@@ -215,7 +215,7 @@ export function LibrarySidebar({
 			</ul>
 			{recent.length > 0 && data ? (
 				<>
-					<p className="mt-4 mb-1 px-1.5 text-[11px] font-semibold tracking-[0.06em] text-fg-subtle uppercase select-none">
+					<p className="mt-4 mb-1 px-1 text-[11px] font-semibold tracking-[0.06em] text-fg-subtle uppercase select-none">
 						Recent
 					</p>
 					<ul className="flex flex-col gap-px" data-testid="library-recent">
@@ -425,7 +425,7 @@ function RecentRename({
 	};
 	return (
 		<div className="flex flex-col">
-			<div className="flex h-7 items-center gap-2 rounded-control bg-panel px-1.5 ring-2 ring-ring">
+			<div className="flex h-7 items-center gap-2 rounded-control bg-panel px-1 ring-2 ring-ring">
 				{icon}
 				<input
 					ref={inputRef}
@@ -454,7 +454,7 @@ function RecentRename({
 				/>
 			</div>
 			{error ? (
-				<p role="alert" className="px-1.5 pt-1 text-[11.5px] text-danger">
+				<p role="alert" className="px-1 pt-1 text-[11.5px] text-danger">
 					{error}
 				</p>
 			) : null}
@@ -492,7 +492,7 @@ function SidebarRow({
 			title={title}
 			aria-current={active ? "page" : undefined}
 			data-testid={testId}
-			className={`flex h-7 w-full select-none items-center gap-2 rounded-control px-1.5 text-left text-[13px] transition-[background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-bg-hover-strong ${
+			className={`flex h-7 w-full select-none items-center gap-2 rounded-control px-1 text-left text-[13px] transition-[background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-bg-hover-strong ${
 				active
 					? "bg-bg-active font-medium text-fg"
 					: "text-fg-muted hover:bg-bg-hover-strong"

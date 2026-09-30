@@ -793,7 +793,7 @@ export function LibraryView({
 					);
 				}}
 			/>
-			<div className="mx-auto flex w-[min(1080px,calc(100%-64px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
+			<div className="mx-auto flex w-[min(1080px,calc(100%-112px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
 				<header className="flex items-end gap-3 pb-6">
 					<div className="flex min-w-0 flex-auto">
 						<FolderBreadcrumb
@@ -1694,16 +1694,16 @@ function RowList({
 						aria-checked={selected}
 						aria-label={`Select ${name}`}
 						onClick={(event) => toggle(path, event.shiftKey)}
-						// Sits in the icon's slot and takes its place on hover or while
-						// anything is selected, so it is never outside the row.
-						className={`absolute top-1/2 left-[7px] z-10 grid size-7 -translate-y-1/2 place-items-center rounded transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+						// In the gutter left of the row, level with it: rows stay aligned
+						// with the title, and the page margin is wide enough to hold it.
+						className={`absolute top-1/2 -left-7 grid size-7 -translate-y-1/2 place-items-center rounded-md transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-sm:hidden ${
 							selectionActive || selected
 								? "opacity-100"
 								: "opacity-0 group-hover:opacity-100"
 						}`}
 					>
 						<span
-							className={`grid size-4 place-items-center rounded border ${
+							className={`grid size-4 place-items-center rounded-[5px] border transition-colors ${
 								selected
 									? "border-link bg-link text-accent-on"
 									: "border-border-strong bg-panel"
@@ -1804,13 +1804,7 @@ function RowList({
 								alt=""
 								aria-hidden="true"
 								draggable={false}
-								className={`size-[18px] shrink-0 transition-opacity ${
-									actions.readOnly || flat
-										? ""
-										: selectionActive || selected
-											? "opacity-0"
-											: "group-hover:opacity-0"
-								}`}
+								className="size-[18px] shrink-0"
 							/>
 							<span
 								className={`min-w-0 flex-1 truncate font-medium ${
