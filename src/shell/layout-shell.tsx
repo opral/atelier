@@ -3836,6 +3836,17 @@ function LayoutShellLoadedContentResolved({
 
 	const activeCentralFileId =
 		activeFileIdFromExtensionInstance(activeCentralEntry);
+	// The files open in the main area, as a stable list: a navigation surface
+	// tells a file opened from one that came to front as a tab closed.
+	const openFileIdsKey = mainArea.views
+		.filter(isDocumentView)
+		.map((view) => activeFileIdFromExtensionInstance(view))
+		.filter((id): id is string => id !== null)
+		.join("\n");
+	const openFileIds = useMemo(
+		() => (openFileIdsKey ? openFileIdsKey.split("\n") : []),
+		[openFileIdsKey],
+	);
 
 	const activeFileName = useMemo(() => {
 		if (!activeCentralEntry) return null;
@@ -4813,6 +4824,7 @@ function LayoutShellLoadedContentResolved({
 				...effectiveAtelierInstance.documents,
 				activeFileId: activeCentralFileId,
 				activeFilePath: activeDocumentPath,
+				openFileIds,
 			},
 			views: {
 				...effectiveAtelierInstance.views,
@@ -4863,6 +4875,7 @@ function LayoutShellLoadedContentResolved({
 			activeMainInstance,
 			activeMainState,
 			activeCentralFileId,
+			openFileIds,
 			activeDocumentPath,
 			lix,
 		],

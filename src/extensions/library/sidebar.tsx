@@ -97,11 +97,28 @@ export function useTrackRecentDocuments(
 	const dataRef = useRef(data);
 	dataRef.current = data;
 	const ready = data !== null;
+	// A file that comes to front because the tab in front closed was not
+	// opened: Recent holds still for it.
+	const openFileIds = atelier.documents.openFileIds;
+	const previous = useRef<{
+		active: string | null;
+		open: readonly string[] | undefined;
+	}>({ active: null, open: undefined });
 	useEffect(() => {
+		const before = previous.current;
+		previous.current = { active: activeFileId, open: openFileIds };
 		const current = dataRef.current;
 		if (!activeFileId || reviewing || !current) return;
+		if (activeFileId === before.active) return;
+		const closedInFront =
+			before.active !== null &&
+			openFileIds !== undefined &&
+			before.open?.includes(before.active) === true &&
+			!openFileIds.includes(before.active) &&
+			before.open.includes(activeFileId);
+		if (closedInFront) return;
 		recordRecentFile(preferences, current, activeFileId);
-	}, [activeFileId, preferences, reviewing, ready]);
+	}, [activeFileId, openFileIds, preferences, reviewing, ready]);
 }
 
 /** Opens a Library section in the Library tab in front, or the home one. */

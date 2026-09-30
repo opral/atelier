@@ -446,6 +446,8 @@ export type AtelierExtensionRuntime = {
 	readonly documents: AtelierDocumentsApi & {
 		readonly activeFileId: string | null;
 		readonly activeFilePath: string | null;
+		/** Files open in the main area, in tab order. */
+		readonly openFileIds?: readonly string[];
 	};
 	readonly views: AtelierViewsApi & {
 		/** The main view in front: what a navigation surface marks as current. */
