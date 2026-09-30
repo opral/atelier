@@ -277,8 +277,11 @@ function MountedFile(
 			afterCommitId,
 			beforeExists,
 			sourceCommitId: afterCommitId,
+			// The host asked for a read-only view, whatever revision it shows:
+			// a file embedded in a page (a README) takes no editing chrome.
+			...(readOnly ? { hostReadOnly: true } : {}),
 		}),
-		[fileId, path, beforeCommitId, afterCommitId, beforeExists],
+		[fileId, path, beforeCommitId, afterCommitId, beforeExists, readOnly],
 	);
 	const extensionView = useMemo<ExtensionView>(
 		() => ({

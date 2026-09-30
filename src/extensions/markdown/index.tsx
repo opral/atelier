@@ -1239,7 +1239,8 @@ export const extension = createReactExtensionDefinition({
 		// a review it stays where it is, disabled, so nothing on the page moves
 		// when a review opens or closes.
 		const hostReadOnly =
-			atelier.readOnly && !hasHistoricalEditorRevisionState(view.state);
+			(atelier.readOnly && !hasHistoricalEditorRevisionState(view.state)) ||
+			view.state.hostReadOnly === true;
 		// A file under review, or stepped to inside a checkpoint, is opened for
 		// its diff: the prepared text is one revision, the wrong picture. The
 		// placeholder keeps the frame — toolbar strip, column — and paints no

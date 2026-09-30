@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { CommitSpan, Lix } from "@lix-js/sdk";
 
 export type AtelierArea = "left" | "main" | "right";
@@ -492,6 +492,11 @@ export type AtelierLibraryOptions = {
 	 */
 	readonly Home?: ComponentType<{
 		readonly atelier: AtelierExtensionRuntime;
+		/**
+		 * The Library's Recent row (a heading and a row of cards), for the host
+		 * to place in its page; null when nothing has been opened or changed.
+		 */
+		readonly recent: ReactNode;
 	}>;
 	/**
 	 * Shown in All when the workspace has no files yet: the host's own

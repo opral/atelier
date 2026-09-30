@@ -685,26 +685,28 @@ export function LibraryView({
 			hiddenRecentFileIds(view.preferences),
 		);
 		body = (
-			<div className="flex flex-col gap-10">
-				{recent.length > 0 ? (
-					<section aria-labelledby="library-home-recent">
-						<h2
-							id="library-home-recent"
-							className="m-0 pb-3 text-[13px] font-semibold text-fg-muted"
-						>
-							Recent
-						</h2>
-						<FileGrid
-							singleRow
-							files={recent}
-							marks={marks}
-							actions={itemActions}
-							onOpen={openFile}
-						/>
-					</section>
-				) : null}
-				<HomeSection atelier={atelier} />
-			</div>
+			<HomeSection
+				atelier={atelier}
+				recent={
+					recent.length > 0 ? (
+						<section aria-labelledby="library-home-recent">
+							<h2
+								id="library-home-recent"
+								className="m-0 pb-3 text-[13px] font-semibold text-fg-muted"
+							>
+								Recent
+							</h2>
+							<FileGrid
+								singleRow
+								files={recent}
+								marks={marks}
+								actions={itemActions}
+								onOpen={openFile}
+							/>
+						</section>
+					) : null
+				}
+			/>
 		);
 	} else if (mode === "grid") {
 		const files = gridFiles(data, kind);
