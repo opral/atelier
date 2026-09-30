@@ -479,6 +479,17 @@ export function LibraryView({
 	// ⌘F search, Esc clears search then selection.
 	useEffect(() => {
 		if (!isActive) return;
+		// The Library is where the user is: focus in this view, on nothing,
+		// or on the Library sidebar (a section was just clicked).
+		const libraryHasFocus = () => {
+			const active = document.activeElement;
+			return (
+				active === document.body ||
+				active === null ||
+				rootRef.current?.contains(active) === true ||
+				active.closest('[data-testid="library-sidebar"]') !== null
+			);
+		};
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.defaultPrevented) return;
 			if (dialog) return;
@@ -499,11 +510,7 @@ export function LibraryView({
 			}
 			if (primary && !event.altKey && event.key.toLowerCase() === "f") {
 				// Only while the Library itself is where the user is.
-				if (
-					!rootRef.current?.contains(document.activeElement) &&
-					document.activeElement !== document.body
-				)
-					return;
+				if (!libraryHasFocus()) return;
 				event.preventDefault();
 				searchRef.current?.focus();
 				searchRef.current?.select();
@@ -515,11 +522,7 @@ export function LibraryView({
 				(event.key === "." || event.code === "Period")
 			) {
 				if (inField || readOnly) return;
-				if (
-					!rootRef.current?.contains(document.activeElement) &&
-					document.activeElement !== document.body
-				)
-					return;
+				if (!libraryHasFocus()) return;
 				event.preventDefault();
 				event.stopPropagation();
 				if (event.shiftKey) {
