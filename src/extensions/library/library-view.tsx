@@ -794,7 +794,7 @@ export function LibraryView({
 				}}
 			/>
 			<div className="mx-auto flex w-[min(1080px,calc(100%-64px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
-				<header className="flex items-center gap-3 pb-6">
+				<header className="flex items-end gap-3 pb-6">
 					<div className="flex min-w-0 flex-auto">
 						<FolderBreadcrumb
 							rootLabel={copy.label}
@@ -1127,9 +1127,9 @@ const NewButton = forwardRef<
 });
 
 /**
- * Where a Files tab is: the section, then each folder down to the open one.
- * Ancestors are quiet links; the current folder is the page title. A deep
- * path folds its middle into "…", which lists what it hides.
+ * Where a Library tab is. The open folder is the page title; the folders
+ * above it are a quiet trail on the line over it, each one a link back up.
+ * A deep trail folds its middle into "…", which lists what it hides.
  */
 function FolderBreadcrumb({
 	rootLabel,
@@ -1147,91 +1147,86 @@ function FolderBreadcrumb({
 			label: segment,
 		})),
 	];
-	if (crumbs.length === 1)
-		return (
-			<h1 className="min-w-0 truncate text-[22px] font-semibold tracking-[-0.01em] text-fg">
-				{rootLabel}
-			</h1>
-		);
-	// Root, the fold, and the last two folders.
-	const folded = crumbs.length > 4 ? crumbs.slice(1, -2) : [];
-	const shown = folded.length > 0 ? [crumbs[0]!, ...crumbs.slice(-2)] : crumbs;
+	const current = crumbs.at(-1)!;
+	const trail = crumbs.slice(0, -1);
+	// The section, the fold, and the two folders closest to this one.
+	const folded = trail.length > 3 ? trail.slice(1, -2) : [];
+	const shownTrail =
+		folded.length > 0 ? [trail[0]!, ...trail.slice(-2)] : trail;
+	const crumbClass =
+		"min-w-0 max-w-[14rem] truncate rounded-[6px] px-1 py-0.5 text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 	const separator = (
-		<span
-			aria-hidden="true"
-			className="shrink-0 px-0.5 text-[20px] font-normal text-fg-faint select-none"
-		>
+		<span aria-hidden="true" className="shrink-0 text-fg-faint select-none">
 			/
 		</span>
 	);
 	return (
-		<nav
-			aria-label="Folder path"
-			data-testid="library-breadcrumb"
-			className="flex min-w-0 items-center text-[22px] font-semibold tracking-[-0.01em]"
-		>
-			{shown.map((crumb, index) => {
-				const isCurrent = index === shown.length - 1;
-				return (
-					<span
-						key={crumb.path}
-						className={`flex items-center ${isCurrent ? "min-w-0" : "min-w-0 shrink-[3]"}`}
-					>
-						{index > 0 ? separator : null}
-						{index === 1 && folded.length > 0 ? (
-							<>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<button
-											type="button"
-											aria-label="Show hidden folders"
-											className="-mx-0.5 shrink-0 rounded-[7px] px-1.5 text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-										>
-											…
-										</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent
-										align="start"
-										className="min-w-44 text-[13px]"
-									>
-										{folded.map((hidden) => (
-											<DropdownMenuItem
-												key={hidden.path}
-												onSelect={() => onOpen(hidden.path, false)}
+		<div className="flex min-w-0 flex-col">
+			{trail.length > 0 ? (
+				<nav
+					aria-label="Folder path"
+					data-testid="library-breadcrumb"
+					className="-ml-1 flex min-w-0 items-center gap-0.5 pb-0.5 text-[13px] font-medium"
+				>
+					{shownTrail.map((crumb, index) => (
+						<span
+							key={crumb.path}
+							className="flex min-w-0 items-center gap-0.5"
+						>
+							{index > 0 ? separator : null}
+							{index === 1 && folded.length > 0 ? (
+								<>
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												aria-label="Show hidden folders"
+												className={crumbClass}
 											>
-												{hidden.label}
-											</DropdownMenuItem>
-										))}
-									</DropdownMenuContent>
-								</DropdownMenu>
-								{separator}
-							</>
-						) : null}
-						{isCurrent ? (
-							<h1
-								aria-current="location"
-								className="min-w-0 truncate px-1 text-fg"
-								title={crumb.label}
-							>
-								{crumb.label}
-							</h1>
-						) : (
+												…
+											</button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent
+											align="start"
+											className="min-w-44 text-[13px]"
+										>
+											{folded.map((hidden) => (
+												<DropdownMenuItem
+													key={hidden.path}
+													onSelect={() => onOpen(hidden.path, false)}
+												>
+													{hidden.label}
+												</DropdownMenuItem>
+											))}
+										</DropdownMenuContent>
+									</DropdownMenu>
+									{separator}
+								</>
+							) : null}
 							<button
 								type="button"
 								title={crumb.label}
+								className={crumbClass}
 								onClick={(event) => onOpen(crumb.path, isNewTabClick(event))}
 								onAuxClick={(event) => {
 									if (event.button === 1) onOpen(crumb.path, true);
 								}}
-								className="-mx-0.5 max-w-[12rem] min-w-0 truncate rounded-[7px] px-1.5 text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 							>
 								{crumb.label}
 							</button>
-						)}
-					</span>
-				);
-			})}
-		</nav>
+						</span>
+					))}
+					{separator}
+				</nav>
+			) : null}
+			<h1
+				aria-current={trail.length > 0 ? "location" : undefined}
+				title={current.label}
+				className="min-w-0 truncate text-[22px] leading-8 font-semibold tracking-[-0.01em] text-fg"
+			>
+				{current.label}
+			</h1>
+		</div>
 	);
 }
 

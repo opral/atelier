@@ -166,7 +166,7 @@ export function LibrarySidebar({
 	return (
 		<nav
 			aria-label="Library"
-			className="relative flex min-h-0 flex-1 flex-col overflow-y-auto pt-1 pb-2 pr-1"
+			className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2"
 			data-testid="library-sidebar"
 		>
 			<ul className="flex flex-col gap-px">
