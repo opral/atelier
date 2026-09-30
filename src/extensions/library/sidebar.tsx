@@ -423,12 +423,31 @@ function RecentRename({
 	const [value, setValue] = useState(file.name);
 	const [error, setError] = useState<string | null>(null);
 	const submitting = useRef(false);
+	// A double-click also opened the file, and its editor takes focus a
+	// moment later. Until the person does something themselves, focus that
+	// goes elsewhere comes back here, so typing renames rather than edits.
+	const guarding = useRef(true);
 	useEffect(() => {
 		const input = inputRef.current;
 		if (!input) return;
 		input.focus();
 		const dot = file.name.lastIndexOf(".");
 		input.setSelectionRange(0, dot > 0 ? dot : file.name.length);
+		const stopGuarding = () => {
+			guarding.current = false;
+		};
+		const reclaim = (event: FocusEvent) => {
+			if (!guarding.current || event.target === input) return;
+			input.focus();
+		};
+		const timer = setTimeout(stopGuarding, 1500);
+		window.addEventListener("pointerdown", stopGuarding, true);
+		document.addEventListener("focusin", reclaim, true);
+		return () => {
+			clearTimeout(timer);
+			window.removeEventListener("pointerdown", stopGuarding, true);
+			document.removeEventListener("focusin", reclaim, true);
+		};
 	}, [file.name]);
 	const submit = async () => {
 		if (submitting.current) return;
@@ -472,6 +491,8 @@ function RecentRename({
 						}
 					}}
 					onBlur={() => {
+						// Focus taken by the file this double-click opened comes back.
+						if (guarding.current) return;
 						// Leaving a name that was refused gives up on it.
 						if (error) onCancel();
 						else void submit();

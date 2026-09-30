@@ -807,6 +807,9 @@ export function LibraryView({
 		return entries;
 	}, [data, selection]);
 
+	// While rows are selected, the header's Search and New make way for what
+	// can be done with them — in the same place, so the list never moves.
+	const selecting = mode === "folders" && selection.size > 0 && !readOnly;
 	const reviewDim = marks.active ? " opacity-[0.35] hover:opacity-100" : "";
 
 	return (
@@ -843,84 +846,8 @@ export function LibraryView({
 							onOpen={(path, newTab) => openFolder(path, { newTab })}
 						/>
 					</div>
-					<label className="relative flex h-8 w-56 min-w-24 shrink-[4] items-center @max-[760px]:w-40 @max-[520px]:order-last @max-[520px]:w-full">
-						<Search
-							className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
-							aria-hidden="true"
-						/>
-						<input
-							ref={searchRef}
-							type="search"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							placeholder="Search"
-							aria-label={`Search ${copy.label}`}
-							data-testid="library-search"
-							className="h-8 w-full rounded-lg border border-border bg-panel pr-7 pl-8 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-border-strong focus:ring-2 focus:ring-ring/25 [&::-webkit-search-cancel-button]:hidden"
-						/>
-						{query ? (
-							<button
-								type="button"
-								aria-label="Clear search"
-								className="absolute right-1.5 grid size-5 place-items-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg"
-								onClick={() => {
-									setQuery("");
-									searchRef.current?.focus();
-								}}
-							>
-								<X className="size-3" aria-hidden="true" />
-							</button>
-						) : null}
-					</label>
-					{readOnly ? null : (
-						<div className={`shrink-0 transition-opacity${reviewDim}`}>
-							<NewFileMenu
-								align="end"
-								defaultFolders={defaultFolders}
-								folderOptions={folderOptions}
-								hereDirectory={ensureDirectoryPath(hereDirectory)}
-								existingDirectories={existingDirectories}
-								onSetDefaultFolder={setDefaultFolder}
-								kindNames
-								{...(mode === "folders"
-									? {
-											onNewFolder: () => {
-												setDialogError(null);
-												setDialog({ type: "new-folder" });
-											},
-										}
-									: {})}
-								onNewMarkdown={() => void createTyped("markdown")}
-								onNewCsv={() => void createTyped("csv")}
-								onNewExcalidraw={() => void createTyped("excalidraw")}
-								onCreateHereOnce={(fileType) =>
-									void createTyped(fileType, { here: true })
-								}
-								onCreateFolder={async (parent, name) => {
-									if (!data) return null;
-									try {
-										return (
-											await createFolder(
-												lix,
-												data,
-												canonicalDirectory(parent),
-												name,
-											)
-										).path;
-									} catch {
-										return null;
-									}
-								}}
-								onUpload={startUpload}
-							>
-								<NewButton />
-							</NewFileMenu>
-						</div>
-					)}
-				</header>
-				{(mode === "folders" && selection.size > 0 && !readOnly) || results ? (
-					<div className="flex min-h-8 items-center gap-2 pb-4">
-						{mode === "folders" && selection.size > 0 && !readOnly ? (
+					{selecting ? (
+						<div className="flex shrink-0 items-center">
 							<SelectionToolbar
 								count={selection.size}
 								onMove={() => {
@@ -941,7 +868,89 @@ export function LibraryView({
 									: {})}
 								onClear={() => setSelection(new Set())}
 							/>
-						) : results ? (
+						</div>
+					) : (
+						<>
+							<label className="relative flex h-8 w-56 min-w-24 shrink-[4] items-center @max-[760px]:w-40 @max-[520px]:order-last @max-[520px]:w-full">
+								<Search
+									className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
+									aria-hidden="true"
+								/>
+								<input
+									ref={searchRef}
+									type="search"
+									value={query}
+									onChange={(event) => setQuery(event.target.value)}
+									placeholder="Search"
+									aria-label={`Search ${copy.label}`}
+									data-testid="library-search"
+									className="h-8 w-full rounded-lg border border-border bg-panel pr-7 pl-8 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-border-strong focus:ring-2 focus:ring-ring/25 [&::-webkit-search-cancel-button]:hidden"
+								/>
+								{query ? (
+									<button
+										type="button"
+										aria-label="Clear search"
+										className="absolute right-1.5 grid size-5 place-items-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg"
+										onClick={() => {
+											setQuery("");
+											searchRef.current?.focus();
+										}}
+									>
+										<X className="size-3" aria-hidden="true" />
+									</button>
+								) : null}
+							</label>
+							{readOnly ? null : (
+								<div className={`shrink-0 transition-opacity${reviewDim}`}>
+									<NewFileMenu
+										align="end"
+										defaultFolders={defaultFolders}
+										folderOptions={folderOptions}
+										hereDirectory={ensureDirectoryPath(hereDirectory)}
+										existingDirectories={existingDirectories}
+										onSetDefaultFolder={setDefaultFolder}
+										kindNames
+										{...(mode === "folders"
+											? {
+													onNewFolder: () => {
+														setDialogError(null);
+														setDialog({ type: "new-folder" });
+													},
+												}
+											: {})}
+										onNewMarkdown={() => void createTyped("markdown")}
+										onNewCsv={() => void createTyped("csv")}
+										onNewExcalidraw={() => void createTyped("excalidraw")}
+										onCreateHereOnce={(fileType) =>
+											void createTyped(fileType, { here: true })
+										}
+										onCreateFolder={async (parent, name) => {
+											if (!data) return null;
+											try {
+												return (
+													await createFolder(
+														lix,
+														data,
+														canonicalDirectory(parent),
+														name,
+													)
+												).path;
+											} catch {
+												return null;
+											}
+										}}
+										onUpload={startUpload}
+									>
+										<NewButton />
+									</NewFileMenu>
+								</div>
+							)}
+						</>
+					)}
+				</header>
+				{results ? (
+					<div className="flex min-h-8 items-center gap-2 pb-4">
+						{results ? (
 							<p className="text-[12.5px] text-fg-subtle" aria-live="polite">
 								{results.length === 1
 									? "1 result"
@@ -1992,7 +2001,7 @@ function SelectionToolbar({
 			role="toolbar"
 			aria-label="Selection"
 			data-testid="library-selection-toolbar"
-			className="flex items-center gap-1 rounded-[9px] border border-border bg-panel py-0.5 pr-0.5 pl-3 shadow-sm"
+			className="box-border flex h-8 items-center gap-1 rounded-[9px] border border-border bg-panel pr-0.5 pl-3 shadow-sm"
 		>
 			<span className="pr-2 text-[12.5px] font-semibold text-fg">
 				{count} selected

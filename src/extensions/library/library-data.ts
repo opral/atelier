@@ -264,12 +264,14 @@ export function folderListing(
 				file.path.startsWith(prefix),
 		)
 		.slice()
-		.sort((left, right) => {
-			const leftReadme = left.name.toLowerCase() === "readme.md" ? 1 : 0;
-			const rightReadme = right.name.toLowerCase() === "readme.md" ? 1 : 0;
-			if (leftReadme !== rightReadme) return rightReadme - leftReadme;
-			return newestFirst(left, right);
-		});
+		// By name, as a filesystem reads: predictable, and stable while files
+		// change. The grids are where "newest first" lives.
+		.sort((left, right) =>
+			left.name.localeCompare(right.name, undefined, {
+				numeric: true,
+				sensitivity: "base",
+			}),
+		);
 	return { folders, files, exists };
 }
 
