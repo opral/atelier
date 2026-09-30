@@ -252,9 +252,9 @@ export function DeleteDialog({
 /** Browse to a folder one level at a time, then move there. */
 export function MoveDialog({
 	open,
-	count,
-	destinations,
-	currentDirectory,
+	count: openCount,
+	destinations: openDestinations,
+	currentDirectory: openCurrentDirectory,
 	busy,
 	error,
 	onClose,
@@ -269,6 +269,19 @@ export function MoveDialog({
 	readonly onClose: () => void;
 	readonly onMove: (destination: string) => void;
 }) {
+	// As DeleteDialog: hold the content while the dialog fades out.
+	const shown = useRef({
+		count: openCount,
+		destinations: openDestinations,
+		currentDirectory: openCurrentDirectory,
+	});
+	if (open)
+		shown.current = {
+			count: openCount,
+			destinations: openDestinations,
+			currentDirectory: openCurrentDirectory,
+		};
+	const { count, destinations, currentDirectory } = shown.current;
 	const [destination, setDestination] = useState(currentDirectory);
 	useEffect(() => {
 		if (open) setDestination(currentDirectory);
@@ -308,7 +321,7 @@ export function MoveDialog({
 				<nav
 					ref={crumbsRef}
 					aria-label="Destination location"
-					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto text-[13px]"
+					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto text-[13px] [scrollbar-width:none]"
 				>
 					{crumbs.map((crumb, index) => (
 						<span key={crumb.path} className="flex shrink-0 items-center gap-1">
@@ -458,7 +471,7 @@ export function ToastLine({
 					toast.tone === "danger" ? "ring-1 ring-danger" : ""
 				}`}
 			>
-				<span className="min-w-0 truncate">{toast.message}</span>
+				<span className="min-w-0 text-pretty">{toast.message}</span>
 				{toast.undo ? (
 					<button
 						type="button"

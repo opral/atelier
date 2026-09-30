@@ -1235,7 +1235,8 @@ function FolderBreadcrumb({
 					{shownTrail.map((crumb, index) => (
 						<span
 							key={crumb.path}
-							className="flex min-w-0 items-center gap-0.5"
+							// The section name never shrinks: folders give way first.
+							className={`flex items-center gap-0.5 ${index === 0 ? "shrink-0" : "min-w-0"}`}
 						>
 							{index > 0 ? separator : null}
 							{index === 1 && folded.length > 0 ? (
@@ -1245,7 +1246,7 @@ function FolderBreadcrumb({
 											<button
 												type="button"
 												aria-label="Show hidden folders"
-												className={crumbClass}
+												className={`${crumbClass} shrink-0`}
 											>
 												…
 											</button>
