@@ -357,3 +357,46 @@ export function useLibraryReviewMarks(
 		return { active: files.size > 0, files, directories, kinds };
 	}, [data, extensionMap, session]);
 }
+
+/** The id prefix of a file a review removed, listed so it can be opened. */
+export const REMOVED_FILE_PREFIX = "removed:";
+
+export function isRemovedFile(file: { readonly id: string }): boolean {
+	return file.id.startsWith(REMOVED_FILE_PREFIX);
+}
+
+/**
+ * While a review is open, the files it removed are listed too — where they
+ * were, marked removed — so a removed mark in the sidebar leads somewhere.
+ * Outside a review the data is returned as it is.
+ */
+export function useWithRemovedFiles(
+	atelier: ExtensionRuntime,
+	data: LibraryData | null,
+): LibraryData | null {
+	const session = atelier.diff?.session ?? null;
+	const { extensionMap } = useExtensionRegistry();
+	return useMemo(() => {
+		if (!data || !session) return data;
+		const present = new Set(data.files.map((file) => file.path));
+		const extensions = [...extensionMap.values()];
+		const removed: LibraryFile[] = [];
+		for (const file of session.files) {
+			if (file.changeKind !== "removed" || present.has(file.path)) continue;
+			const kind = libraryKindOfPath(extensions, file.path);
+			removed.push({
+				id: `${REMOVED_FILE_PREFIX}${file.path}`,
+				path: file.path,
+				name: file.path.split("/").filter(Boolean).at(-1) ?? file.path,
+				directory: parentDirectoryOf(file.path),
+				kind,
+				displayName: libraryDisplayName(file.path, kind),
+				updatedAt: "",
+				hidden: isHiddenPath(file.path),
+			});
+		}
+		return removed.length === 0
+			? data
+			: { ...data, files: [...data.files, ...removed] };
+	}, [data, extensionMap, session]);
+}

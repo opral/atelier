@@ -70,6 +70,8 @@ import {
 	gridFiles,
 	useLibraryData,
 	useLibraryReviewMarks,
+	useWithRemovedFiles,
+	isRemovedFile,
 	type LibraryData,
 	type LibraryFile,
 	type LibraryReviewMarks,
@@ -164,7 +166,8 @@ export function LibraryView({
 			: null;
 	const viewingHistory = historicalCommitId !== null;
 	// Viewing a checkpoint shows the workspace as it was then.
-	const { data, error } = useLibraryData(historicalCommitId);
+	const { data: liveData, error } = useLibraryData(historicalCommitId);
+	const data = useWithRemovedFiles(atelier, liveData);
 	useTrackRecentDocuments(atelier, view, data);
 	const marks = useLibraryReviewMarks(atelier, data);
 	const readOnly = atelier.readOnly || viewingHistory;
@@ -317,11 +320,9 @@ export function LibraryView({
 				atelier.diff.openFile(file.path);
 				return;
 			}
+			// A file opens beside the Library, so the Library stays a tab away.
 			void atelier.documents
-				.open(file.path, {
-					fileId: file.id,
-					...(newTab ? { newTab: true } : {}),
-				})
+				.open(file.path, { fileId: file.id, newTab: true })
 				.catch((caught: unknown) => {
 					console.error("library: unable to open", caught);
 				});
@@ -744,11 +745,19 @@ export function LibraryView({
 				</div>
 			) : listing.folders.length === 0 && listing.files.length === 0 ? (
 				<EmptyState
-					title={dirPath === "/" ? copy.emptyTitle : "This folder is empty"}
+					title={
+						viewingHistory && !listing.exists
+							? "This folder didn’t exist yet"
+							: dirPath === "/"
+								? copy.emptyTitle
+								: "This folder is empty"
+					}
 					body={
-						readOnly
-							? "Nothing here yet."
-							: "Create something with New, or drop files and folders here."
+						viewingHistory && !listing.exists
+							? "It was created after this checkpoint."
+							: readOnly
+								? "Nothing here yet."
+								: "Create something with New, or drop files and folders here."
 					}
 				/>
 			) : (
@@ -973,7 +982,11 @@ export function LibraryView({
 					</p>
 				</div>
 			) : null}
-			<ToastLine toast={toast} onDismiss={dismissToast} />
+			<ToastLine
+				toast={toast}
+				onDismiss={dismissToast}
+				raised={Boolean(atelier.diff?.session)}
+			/>
 			{data ? (
 				<>
 					<NameDialog
@@ -1570,7 +1583,7 @@ function GridCard({
 	file,
 	glyph,
 	dimmed,
-	actions,
+	actions: cardActions,
 	onOpen,
 }: {
 	readonly file: LibraryFile;
@@ -1579,6 +1592,10 @@ function GridCard({
 	readonly actions: ItemActions;
 	readonly onOpen: (file: LibraryFile, newTab: boolean) => void;
 }) {
+	// A file a review removed can be opened (to its diff), nothing else.
+	const actions = isRemovedFile(file)
+		? { ...cardActions, readOnly: true }
+		: cardActions;
 	const hint =
 		file.directory === "/" ? "" : `${file.directory.split("/").at(-1)}/`;
 	return (
@@ -1677,7 +1694,7 @@ function RowList({
 	kind,
 	flat = false,
 	marks,
-	actions,
+	actions: listActions,
 	selection,
 	onSelectionChange,
 	selectionAnchor,
@@ -1766,6 +1783,11 @@ function RowList({
 		file?: LibraryFile;
 		isFolder: boolean;
 	}) => {
+		// A file a review removed can be opened (to its diff), nothing else.
+		const actions =
+			file && isRemovedFile(file)
+				? { ...listActions, readOnly: true }
+				: listActions;
 		const selected = selection.has(path);
 		return (
 			<li
@@ -1907,13 +1929,18 @@ function RowList({
 									</span>
 								) : null}
 							</span>
-							{glyph ? (
-								<DiffGlyph
-									kind={glyph === "contains" ? "modified" : glyph}
-									className={`shrink-0${glyph === "contains" ? " opacity-60" : ""}`}
-								/>
-							) : null}
-							<span className="shrink-0 text-[12px] text-fg-faint">{meta}</span>
+							<span className="shrink-0 text-right text-[12px] text-fg-faint">
+								{meta}
+							</span>
+							{/* A fixed column, so the marks line up down the list. */}
+							<span className="grid w-3.5 shrink-0 place-items-center">
+								{glyph ? (
+									<DiffGlyph
+										kind={glyph === "contains" ? "modified" : glyph}
+										className={glyph === "contains" ? "opacity-60" : ""}
+									/>
+								) : null}
+							</span>
 						</button>
 					</ContextMenuTrigger>
 					<ItemMenuContent

@@ -20,6 +20,9 @@ const MAX_STEM_LENGTH = 80;
 export function fileNameStemFromTitle(title: string): string | null {
 	const cleaned = title
 		.replace(/[/\\]/g, "-")
+		// Characters no common filesystem allows in a name (Windows is the
+		// strictest): a title keeps its words, the file stays portable.
+		.replace(/[:*?"<>|]/g, "")
 		// eslint-disable-next-line no-control-regex
 		.replace(/[\u0000-\u001f]/g, "")
 		.replace(/\s+/g, " ")

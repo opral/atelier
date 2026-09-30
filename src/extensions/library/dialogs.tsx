@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Dialog } from "@base-ui/react/dialog";
 import { ChevronRight, FolderOpen, House, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -212,7 +213,9 @@ export function DeleteDialog({
 			}
 			description={
 				hasFolders
-					? "Folders and everything inside them will be deleted. Their history remains available."
+					? count === 1
+						? "The folder and everything inside it will be deleted. Its history remains available."
+						: "Folders and everything inside them will be deleted. Their history remains available."
 					: "History keeps every version, so this can be restored."
 			}
 			onClose={onClose}
@@ -412,9 +415,18 @@ export type LibraryToast = {
 export function ToastLine({
 	toast,
 	onDismiss,
+	placement = "container",
+	raised = false,
 }: {
 	readonly toast: LibraryToast | null;
 	readonly onDismiss: () => void;
+	/**
+	 * "viewport" floats at the foot of the window, over everything: for a
+	 * narrow surface (the sidebar) that cannot hold a readable toast.
+	 */
+	readonly placement?: "container" | "viewport";
+	/** Clears the review float, which sits at the same foot. */
+	readonly raised?: boolean;
 }) {
 	const [undoing, setUndoing] = useState(false);
 	useEffect(() => {
@@ -424,8 +436,14 @@ export function ToastLine({
 		return () => clearTimeout(timer);
 	}, [onDismiss, toast]);
 	if (!toast) return null;
-	return (
-		<div className="pointer-events-none absolute inset-x-0 bottom-5 z-30 flex justify-center px-4">
+	const line = (
+		<div
+			className={
+				placement === "viewport"
+					? `atelier-portal pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 font-sans ${raised ? "bottom-28" : "bottom-12"}`
+					: `pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4 ${raised ? "bottom-20" : "bottom-5"}`
+			}
+		>
 			<div
 				role="status"
 				data-testid="library-toast"
@@ -464,4 +482,7 @@ export function ToastLine({
 			</div>
 		</div>
 	);
+	return placement === "viewport" && typeof document !== "undefined"
+		? createPortal(line, document.body)
+		: line;
 }

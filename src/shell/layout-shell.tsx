@@ -2856,7 +2856,10 @@ function LayoutShellLoadedContentResolved({
 				openAutoRevealedFile({ fileId: file.id, filePath: file.path });
 				return;
 			}
+			// Like openAutoRevealedFile: a non-document tab stays where it is.
+			const active = activeEntryFromPanel(panelStatesRef.current.main);
 			void resolveAndOpenDocument(file.path, {
+				newTab: active && !isDocumentView(active) ? true : undefined,
 				state: historicalRevisionStateForPath(
 					file.path,
 					range.afterCommitId,

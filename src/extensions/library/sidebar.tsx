@@ -109,11 +109,11 @@ export function openLibraryLocation(
 			state: libraryState({ kind, dirPath: "/" }),
 			...(options.newTab
 				? { newTab: true }
-				: {
-						instanceId: inLibraryTab
-							? active.instanceId
-							: LIBRARY_PRIMARY_INSTANCE,
-					}),
+				: inLibraryTab
+					? { instanceId: active.instanceId }
+					: // The primary Library tab, activated if open; otherwise it
+						// opens beside the file in front rather than replacing it.
+						{ instanceId: LIBRARY_PRIMARY_INSTANCE, newTab: true }),
 		})
 		.catch((error: unknown) => {
 			console.error("library: unable to open the Library", error);
@@ -173,8 +173,14 @@ export function LibrarySidebar({
 	const dismissToast = useCallback(() => setToast(null), []);
 
 	const openFile = (file: LibraryFile, newTab: boolean) => {
+		// Over a Library tab a file opens beside it, never in its place.
+		const overLibrary =
+			atelier.views.activeMain?.extensionId === LIBRARY_EXTENSION_ID;
 		void atelier.documents
-			.open(file.path, { fileId: file.id, ...(newTab ? { newTab: true } : {}) })
+			.open(file.path, {
+				fileId: file.id,
+				...(newTab || overLibrary ? { newTab: true } : {}),
+			})
 			.catch((error: unknown) => {
 				console.error("library: unable to open", error);
 			});
@@ -399,7 +405,12 @@ export function LibrarySidebar({
 					}}
 				/>
 			) : null}
-			<ToastLine toast={toast} onDismiss={dismissToast} />
+			<ToastLine
+				toast={toast}
+				onDismiss={dismissToast}
+				placement="viewport"
+				raised={Boolean(atelier.diff?.session)}
+			/>
 		</nav>
 	);
 }
