@@ -1031,7 +1031,7 @@ export function LibraryView({
 							lastNameDialog.current === "new-folder" ? "New folder" : "Rename"
 						}
 						submitLabel={
-							dialog?.type === "new-folder" ? "Create folder" : "Save"
+							lastNameDialog.current === "new-folder" ? "Create folder" : "Save"
 						}
 						initialName={
 							dialog?.type === "rename" ? dialog.entry.name : "Untitled folder"
