@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Dialog } from "@base-ui/react/dialog";
 import { ChevronRight, FolderOpen, House, X } from "lucide-react";
@@ -348,7 +348,7 @@ export function MoveDialog({
 		// Entering a folder from the list removes the row that had focus:
 		// the folder now being chosen takes it.
 		if (document.activeElement === document.body)
-			currentCrumbRef.current?.focus({ preventScroll: true });
+			firstFocusable()?.focus({ preventScroll: true });
 		const frame = requestAnimationFrame(() => {
 			const from = cameFrom.current;
 			const row = from
@@ -360,6 +360,19 @@ export function MoveDialog({
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [destination, open]);
+	// Keyboard users walk down the list: it takes focus (its first folder),
+	// or the folder being chosen when there is none below.
+	const firstRowRef = useRef<HTMLButtonElement>(null);
+	const firstFocusable = () => firstRowRef.current ?? currentCrumbRef.current;
+	// Read when the popup opens, after its rows have mounted.
+	const initialFocusRef = useMemo<React.RefObject<HTMLElement | null>>(
+		() => ({
+			get current() {
+				return firstRowRef.current ?? currentCrumbRef.current;
+			},
+		}),
+		[],
+	);
 	const choose = (next: string) => {
 		cameFrom.current = destination;
 		setDestination(next);
@@ -385,9 +398,9 @@ export function MoveDialog({
 			open={open}
 			busy={busy}
 			title={`Move ${count} ${count === 1 ? "item" : "items"}`}
-			// The folder being chosen, not "Home": on a deep path Home is
-			// scrolled out of view, and its focus ring would be clipped.
-			initialFocus={currentCrumbRef}
+			// The list, or the folder being chosen — never "Home": on a deep
+			// path Home is scrolled out of view, its focus ring clipped.
+			initialFocus={initialFocusRef}
 			description="Choose where these items should live."
 			onClose={onClose}
 		>
@@ -450,9 +463,10 @@ export function MoveDialog({
 							</p>
 						</li>
 					) : (
-						folders.map((folder) => (
+						folders.map((folder, index) => (
 							<li key={folder.path} data-path={folder.path}>
 								<button
+									ref={index === 0 ? firstRowRef : undefined}
 									type="button"
 									disabled={busy}
 									onClick={() => choose(folder.path)}

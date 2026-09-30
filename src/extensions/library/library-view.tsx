@@ -216,7 +216,7 @@ export function LibraryView({
 	const navigate = useCallback(
 		(
 			next: Partial<Pick<LibraryLocation, "kind" | "dirPath">>,
-			options: { newTab?: boolean } = {},
+			options: { newTab?: boolean; quiet?: boolean } = {},
 		) => {
 			const target = { ...location, ...next };
 			void atelier.views
@@ -225,6 +225,9 @@ export function LibraryView({
 					...(options.newTab
 						? { newTab: true }
 						: { instanceId: view.instanceId }),
+					// A correction the user did not ask for (the folder moved
+					// under a tab in the background) must not bring it to front.
+					...(options.quiet ? { activate: false } : {}),
 				})
 				.catch((caught: unknown) => {
 					console.error("library: unable to navigate", caught);
@@ -296,7 +299,7 @@ export function LibraryView({
 			(directory) => directory.id === openDirectoryId.current,
 		);
 		if (moved) {
-			navigate({ dirPath: moved.path });
+			navigate({ dirPath: moved.path }, { quiet: true });
 			return;
 		}
 		const segments = dirPath.split("/").filter(Boolean);
@@ -312,7 +315,7 @@ export function LibraryView({
 				break;
 			}
 		}
-		navigate({ dirPath: next });
+		navigate({ dirPath: next }, { quiet: true });
 	}, [data, dirPath, mode, navigate, viewingHistory]);
 
 	const openFile = useCallback(
@@ -1110,13 +1113,20 @@ export function LibraryView({
 						onMove={(destination) => {
 							if (dialog?.type !== "move") return;
 							const entries = dialog.entries;
+							// In a folder the moved items leave the list: focus their
+							// neighbour. In a grid they stay: focus the first, moved.
+							const first = entries[0];
+							const focusTarget =
+								mode === "folders" || !first
+									? neighbourOf(entries)
+									: `${destination === "/" ? "" : destination}/${first.name}`;
 							void runDialogAction(async () => {
 								const undo = await moveEntries(lix, data, entries, destination);
 								showToast({
 									message: `Moved ${describeEntries(entries)} to ${destination.split("/").filter(Boolean).at(-1) ?? "Home"}`,
 									undo,
 								});
-								return null;
+								return focusTarget;
 							});
 						}}
 					/>
@@ -2002,9 +2012,9 @@ function RowList({
 								}`}
 							>
 								{name}
-								{flat && file && file.directory !== "/" ? (
+								{flat && parentDirectoryOf(path) !== "/" ? (
 									<span className="ml-2 font-normal text-fg-faint">
-										{file.directory.slice(1)}/
+										{parentDirectoryOf(path).slice(1)}/
 									</span>
 								) : null}
 							</span>
