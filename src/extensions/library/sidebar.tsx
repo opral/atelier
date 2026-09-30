@@ -55,6 +55,7 @@ import {
 } from "./library-ops";
 import { DeleteDialog, ToastLine, type LibraryToast } from "./dialogs";
 
+/** With a host Home, Home takes All's place at the top. */
 const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
 	"all",
 	"pages",
@@ -131,13 +132,17 @@ export function LibrarySidebar({
 	readonly view: ExtensionView;
 }) {
 	const lix = useLix();
+	const hasHome = atelier.library?.Home !== undefined;
+	const sections = hasHome
+		? SIDEBAR_KINDS.map((kind) => (kind === "all" ? "home" : kind))
+		: SIDEBAR_KINDS;
 	const { data } = useLibraryData();
 	useTrackRecentDocuments(atelier, view, data);
 	const marks = useLibraryReviewMarks(atelier, data);
 	const active = atelier.views.activeMain;
 	const activeKind: LibraryKind | "database" | null =
 		active?.extensionId === LIBRARY_EXTENSION_ID
-			? libraryLocationFromState(active.state).kind
+			? libraryLocationFromState(active.state, { hasHome }).kind
 			: active?.extensionId === ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer
 				? "database"
 				: null;
@@ -177,13 +182,16 @@ export function LibrarySidebar({
 			data-testid="library-sidebar"
 		>
 			<ul className="flex flex-col gap-px">
-				{SIDEBAR_KINDS.map((kind) => {
+				{sections.map((kind) => {
 					const isActive = activeKind === kind;
 					const label =
 						kind === "database" ? "Database" : LIBRARY_KIND_COPY[kind].label;
-					// All and Files hold everything, so they carry no roll-up.
+					// Home, All and Files hold everything: no roll-up of their own.
 					const rollup =
-						kind !== "database" && kind !== "files" && kind !== "all"
+						kind !== "database" &&
+						kind !== "files" &&
+						kind !== "all" &&
+						kind !== "home"
 							? marks.kinds.get(kind)
 							: undefined;
 					return (
@@ -194,7 +202,8 @@ export function LibrarySidebar({
 									marks.active &&
 									rollup === undefined &&
 									kind !== "files" &&
-									kind !== "all"
+									kind !== "all" &&
+									kind !== "home"
 								}
 								icon={<KindIcon kind={kind} />}
 								label={label}

@@ -4,6 +4,7 @@ export type LibraryNavKind = LibraryKind | "database";
 
 /** Each section's tint; Files wears the folder blue, Other stays neutral. */
 const KIND_TINT: Record<LibraryNavKind, string> = {
+	home: "text-fg-muted",
 	all: "text-fg-muted",
 	files: "text-folder",
 	pages: "text-kind-pages",
@@ -38,7 +39,12 @@ export function KindIcon({
 			data-kind-icon={kind}
 			className={`shrink-0 ${KIND_TINT[kind]} ${className}`}
 		>
-			{kind === "all" ? (
+			{kind === "home" ? (
+				<>
+					<path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z" />
+					<path d="M9.5 20.5v-6h5v6" />
+				</>
+			) : kind === "all" ? (
 				<>
 					<rect x="4" y="4" width="7" height="7" rx="1.5" />
 					<rect x="13" y="4" width="7" height="7" rx="1.5" />

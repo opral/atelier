@@ -42,8 +42,11 @@ export function modeOfKind(kind: LibraryKind): LibraryMode {
  */
 export function libraryLocationFromState(
 	state: AtelierExtensionState | undefined,
+	options: { readonly hasHome?: boolean } = {},
 ): LibraryLocation {
-	const raw = state?.kind;
+	const hasHome = options.hasHome ?? true;
+	// Home is the host's; without one its tabs open on All.
+	const raw = state?.kind === "home" && !hasHome ? "all" : state?.kind;
 	const kind: LibraryKind =
 		state?.mode === "folders" &&
 		raw !== "files" &&
@@ -52,7 +55,9 @@ export function libraryLocationFromState(
 			? "files"
 			: isLibraryKind(raw)
 				? raw
-				: DEFAULT_LIBRARY_KIND;
+				: hasHome
+					? "home"
+					: DEFAULT_LIBRARY_KIND;
 	const dirPath =
 		kind === "files" && typeof state?.dirPath === "string"
 			? canonicalDirectory(state.dirPath)

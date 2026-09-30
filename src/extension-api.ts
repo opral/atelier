@@ -486,6 +486,14 @@ export type AtelierExtensionRuntime = {
  */
 export type AtelierLibraryOptions = {
 	/**
+	 * The host's Home: a first section that sums up the workspace — its
+	 * README, activity, who and what is connected. With one, Home takes the
+	 * place of All at the top of the Library and is where a tab opens.
+	 */
+	readonly Home?: ComponentType<{
+		readonly atelier: AtelierExtensionRuntime;
+	}>;
+	/**
 	 * Shown in All when the workspace has no files yet: the host's own
 	 * onboarding (connect an agent, start writing). Without it the Library
 	 * shows its plain empty state.

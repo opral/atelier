@@ -9,9 +9,10 @@ export type FileKind = AtelierLibraryKind | "other";
  * A Library section. All is a grid of everything; the kinds are grids of one
  * kind of thing; Files is the filesystem itself, one folder at a time.
  */
-export type LibraryKind = "all" | FileKind | "files";
+export type LibraryKind = "home" | "all" | FileKind | "files";
 
 export const LIBRARY_KINDS: readonly LibraryKind[] = [
+	"home",
 	"all",
 	"pages",
 	"tables",
@@ -33,6 +34,13 @@ export type LibraryKindCopy = {
 };
 
 export const LIBRARY_KIND_COPY: Record<LibraryKind, LibraryKindCopy> = {
+	home: {
+		label: "Home",
+		one: "item",
+		many: "items",
+		emptyTitle: "Nothing here yet",
+		emptyBody: "Create something with New, or drop files here.",
+	},
 	all: {
 		label: "All",
 		one: "item",
@@ -115,7 +123,9 @@ export function matchesLibraryKind(
 	kind: LibraryKind,
 	fileKind: FileKind,
 ): boolean {
-	return kind === "all" || kind === "files" || kind === fileKind;
+	return (
+		kind === "home" || kind === "all" || kind === "files" || kind === fileKind
+	);
 }
 
 /** Dotfiles and anything under a dot-folder (`.lix/`) stay out of Grid. */
