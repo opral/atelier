@@ -162,9 +162,9 @@ export function NameDialog({
 
 export function DeleteDialog({
 	open,
-	count,
-	name,
-	hasFolders,
+	count: openCount,
+	name: openName,
+	hasFolders: openHasFolders,
 	busy,
 	error,
 	onClose,
@@ -181,6 +181,20 @@ export function DeleteDialog({
 	readonly onConfirm: () => void;
 }) {
 	const confirmRef = useRef<HTMLButtonElement>(null);
+	// The dialog fades out after its item is cleared: keep saying what it
+	// was about until it is gone.
+	const shown = useRef({
+		count: openCount,
+		name: openName,
+		hasFolders: openHasFolders,
+	});
+	if (open)
+		shown.current = {
+			count: openCount,
+			name: openName,
+			hasFolders: openHasFolders,
+		};
+	const { count, name, hasFolders } = shown.current;
 	return (
 		<LibraryDialog
 			open={open}

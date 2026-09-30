@@ -3483,6 +3483,10 @@ function LayoutShellLoadedContentResolved({
 	useEffect(() => {
 		const entry = activeCentralEntry;
 		if (!entry) {
+			// Only a close empties the area; a fresh workspace that never had a
+			// view in front has nothing to announce.
+			if (lastActivatedCentralViewRef.current !== null)
+				emitEvent({ type: "main_area_emptied" });
 			lastActivatedCentralViewRef.current = null;
 			return;
 		}

@@ -289,6 +289,13 @@ export type AtelierEvent =
 	  }
 	| {
 			/**
+			 * The last main view closed: nothing is in front. Hosts that map
+			 * the active view to a URL move it off the view that closed.
+			 */
+			type: "main_area_emptied";
+	  }
+	| {
+			/**
 			 * A diff session opened, changed shape, or exited. Hosts use this
 			 * to enter and leave review presentation (e.g. dimming chrome
 			 * outside the changes) without reaching into shell state.
