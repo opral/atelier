@@ -628,7 +628,7 @@ export function LibraryView({
 		!results &&
 		EmptyWorkspace &&
 		!readOnly &&
-		(kind === "all" || kind === "pages" || kind === "files") &&
+		(kind === "all" || kind === "files") &&
 		data.files.every((file) => file.hidden) &&
 		(kind !== "files" ||
 			(dirPath === "/" &&
@@ -1589,7 +1589,7 @@ function GridCard({
 						onKeyDown={(event) => {
 							itemKeyDown(event, fileEntry(file), actions);
 						}}
-						className={`group flex w-full flex-col overflow-hidden rounded-[12px] border border-border bg-panel text-left transition-[border-color,box-shadow,opacity] hover:border-border-strong hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:border-border-strong${
+						className={`group @container flex w-full flex-col overflow-hidden rounded-[12px] border border-border bg-panel text-left transition-[border-color,box-shadow,opacity] hover:border-border-strong hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:border-border-strong${
 							dimmed ? " opacity-[0.35] hover:opacity-100" : ""
 						}`}
 					>
@@ -1616,7 +1616,7 @@ function GridCard({
 							) : null}
 							<span className="min-w-0 flex-1" />
 							{hint ? (
-								<span className="min-w-0 shrink-[2] truncate text-[11.5px] text-fg-faint">
+								<span className="min-w-0 shrink-[12] truncate text-[11.5px] text-fg-faint @max-[220px]:hidden">
 									{hint}
 								</span>
 							) : null}

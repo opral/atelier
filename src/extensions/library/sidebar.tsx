@@ -472,7 +472,9 @@ function RecentRename({
 						}
 					}}
 					onBlur={() => {
-						if (!error) void submit();
+						// Leaving a name that was refused gives up on it.
+						if (error) onCancel();
+						else void submit();
 					}}
 					className="min-w-0 flex-1 bg-transparent text-[13px] text-fg outline-none"
 				/>

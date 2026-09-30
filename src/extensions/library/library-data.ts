@@ -232,23 +232,28 @@ export function folderListing(
 				parentDirectoryOf(candidate.path) === directory,
 		)
 		.map((candidate) => {
+			// Files counts what opening the folder shows: its direct children.
+			if (kind === "files") {
+				let direct = 0;
+				for (const file of data.files)
+					if (file.directory === candidate.path && visible(file.hidden))
+						direct += 1;
+				for (const nested of data.directories)
+					if (
+						parentDirectoryOf(nested.path) === candidate.path &&
+						visible(nested.hidden)
+					)
+						direct += 1;
+				return { directory: candidate, count: direct };
+			}
+			// A kind counts its things anywhere below: what the folder holds of it.
 			const inside = `${candidate.path}/`;
 			let count = 0;
-			let entries = 0;
 			for (const file of data.files) {
 				if (!file.path.startsWith(inside) || !visible(file.hidden)) continue;
-				entries += 1;
 				if (matchesLibraryKind(kind, file.kind)) count += 1;
 			}
-			if (kind === "files") {
-				for (const nested of data.directories)
-					if (nested.path.startsWith(inside) && visible(nested.hidden))
-						entries += 1;
-			}
-			return {
-				directory: candidate,
-				count: kind === "files" ? entries : count,
-			};
+			return { directory: candidate, count };
 		})
 		.filter((folder) => kind === "files" || folder.count > 0);
 	const files = data.files
