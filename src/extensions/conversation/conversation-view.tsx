@@ -973,14 +973,14 @@ function CheckpointFiles({
 					</button>
 				</li>
 			))}
-			{hiddenCount > 0 ? (
+			{files.length > CHECKPOINT_FILES_SHOWN ? (
 				<li>
 					<button
 						type="button"
-						onClick={() => setShowAll(true)}
+						onClick={() => setShowAll(!showAll)}
 						className="cursor-pointer rounded-[6px] px-2 py-1 text-[12.5px] font-medium text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
-						Show {hiddenCount} more files
+						{showAll ? "Show less" : `Show ${hiddenCount} more files`}
 					</button>
 				</li>
 			) : null}

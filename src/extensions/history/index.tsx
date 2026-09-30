@@ -495,6 +495,9 @@ function ReviewFileList({
 			? orderedFiles
 			: orderedFiles.slice(0, maxInitiallyVisible);
 	const hiddenCount = files.length - visibleFiles.length;
+	// Unfolded, the list folds back to where it started.
+	const canCollapse =
+		maxInitiallyVisible !== undefined && files.length > maxInitiallyVisible;
 	return (
 		<ul aria-label={label} className={`pr-[5px] pl-[17px] ${className}`}>
 			{visibleFiles.map((file) => {
@@ -546,14 +549,14 @@ function ReviewFileList({
 					</li>
 				);
 			})}
-			{hiddenCount > 0 ? (
+			{hiddenCount > 0 || (showAll && canCollapse) ? (
 				<li>
 					<button
 						type="button"
-						onClick={() => setShowAll(true)}
+						onClick={() => setShowAll(hiddenCount > 0)}
 						className="cursor-pointer rounded-control px-1.5 py-1 text-[11.5px] font-medium text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
-						Show {hiddenCount} more files
+						{hiddenCount > 0 ? `Show ${hiddenCount} more files` : "Show less"}
 					</button>
 				</li>
 			) : null}
