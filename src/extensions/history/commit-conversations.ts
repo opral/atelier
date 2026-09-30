@@ -89,23 +89,32 @@ export function selectConversationComments(
 		typeof conversationIds === "string"
 			? [conversationIds]
 			: [...conversationIds];
-	return qb(lix)
-		.selectFrom("lix_comment as comment")
-		.leftJoin("lix_change as change", "change.id", "comment.lixcol_change_id")
-		.leftJoin("lix_account as author", "author.id", "change.account_id")
-		.select([
-			"comment.id as id",
-			"comment.body as body",
-			"comment.lixcol_created_at as lixcol_created_at",
-			"author.name as author_name",
-			"author.profile_uri as author_profile_uri",
-			"change.account_id as author_id",
-		])
-		.where("comment.conversation_id", "in", ids.length ? ids : [""])
-		.where("comment.lixcol_global", "=", true)
-		.orderBy("comment.lixcol_created_at", "asc")
-		.orderBy("comment.id", "asc")
-		.$castTo<ConversationComment>();
+	return (
+		qb(lix)
+			.selectFrom("lix_comment as comment")
+			// The author is on the comment's row. Reaching it through lix_change
+			// failed on a client that holds part of the history: lix_change
+			// refuses to answer without the full change inventory, and the thread
+			// read as "Could not load the conversation".
+			.leftJoin(
+				"lix_account as author",
+				"author.id",
+				"comment.lixcol_author_id",
+			)
+			.select([
+				"comment.id as id",
+				"comment.body as body",
+				"comment.lixcol_created_at as lixcol_created_at",
+				"author.name as author_name",
+				"author.profile_uri as author_profile_uri",
+				"comment.lixcol_author_id as author_id",
+			])
+			.where("comment.conversation_id", "in", ids.length ? ids : [""])
+			.where("comment.lixcol_global", "=", true)
+			.orderBy("comment.lixcol_created_at", "asc")
+			.orderBy("comment.id", "asc")
+			.$castTo<ConversationComment>()
+	);
 }
 
 export function commentBody(text: string): Document {
