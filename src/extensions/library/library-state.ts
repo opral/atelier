@@ -27,7 +27,9 @@ export function libraryLocationFromState(
 			? state.mode
 			: preferredMode(preferences, kind);
 	const dirPath =
-		typeof state?.dirPath === "string" ? canonicalDirectory(state.dirPath) : "/";
+		typeof state?.dirPath === "string"
+			? canonicalDirectory(state.dirPath)
+			: "/";
 	return { kind, mode, dirPath };
 }
 

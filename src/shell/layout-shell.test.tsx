@@ -66,6 +66,19 @@ async function openWorkingChangesFromHistory() {
 	);
 }
 
+/**
+ * These tests are about the Files view in the sidebar, which is no longer the
+ * default left view (the Library is), so they place it there themselves.
+ */
+const FILES_SIDEBAR = {
+	views: [{ instance: "atelier_files-sidebar", kind: FILES_EXTENSION_KIND }],
+	activeInstance: "atelier_files-sidebar",
+};
+const filesSidebarState = () => ({
+	...DEFAULT_ATELIER_UI_STATE,
+	areas: { ...DEFAULT_ATELIER_UI_STATE.areas, left: FILES_SIDEBAR },
+});
+
 const ASYNC_UI_TIMEOUT = 10_000;
 
 describe("panel shortcut target guard", () => {
@@ -137,7 +150,11 @@ describe("extension menu preferences", () => {
 	test("shares the Files hidden-file toggle between the sidebar and main tab", async () => {
 		const lix = await openLix();
 		const preferencesStore = createMemoryPreferencesStore();
-		const atelier = createAtelier({ lix, preferencesStore });
+		const atelier = createAtelier({
+			lix,
+			preferencesStore,
+			sessionStateStore: createMemorySessionStateStore(filesSidebarState()),
+		});
 		await qb(lix)
 			.insertInto("lix_file")
 			.values([
@@ -228,7 +245,8 @@ describe("open file lifecycle", () => {
 	test("opens documents as main tabs beside the sidebar Files view", async () => {
 		const lix = await openLix();
 		const onEvent = vi.fn();
-		const sessionStateStore = createMemorySessionStateStore();
+		const sessionStateStore =
+			createMemorySessionStateStore(filesSidebarState());
 		const preferencesStore = createMemoryPreferencesStore();
 		const atelier = createAtelier({
 			lix,
@@ -376,6 +394,7 @@ describe("open file lifecycle", () => {
 			focusedArea: "right" as const,
 			areas: {
 				...DEFAULT_ATELIER_UI_STATE.areas,
+				left: FILES_SIDEBAR,
 				main: {
 					views: [
 						{
@@ -503,7 +522,8 @@ describe("diff review navigation", () => {
 	test("opens checkpoint working changes without requiring agent-turn metadata", async () => {
 		const lix = await openLix();
 		await createCheckpoint(lix);
-		const sessionStateStore = createMemorySessionStateStore();
+		const sessionStateStore =
+			createMemorySessionStateStore(filesSidebarState());
 		const preferencesStore = createMemoryPreferencesStore({
 			version: 1,
 			layout: { sizes: { left: 20, main: 80, right: 0 } },
@@ -926,7 +946,8 @@ describe("diff review navigation", () => {
 
 	test("checkpoints an added active file without reading its absent history", async () => {
 		const lix = await openLix();
-		const sessionStateStore = createMemorySessionStateStore();
+		const sessionStateStore =
+			createMemorySessionStateStore(filesSidebarState());
 		const atelier = createAtelier({ lix, sessionStateStore });
 		const fileId = fakeUuid("checkpoint-added-active-file");
 		let utils: ReturnType<typeof render> | undefined;
@@ -2325,8 +2346,8 @@ describe("canonical UI state", () => {
 			focusedArea: "main" as const,
 			areas: {
 				left: {
-					views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
-					activeInstance: "files-default",
+					views: FILES_SIDEBAR.views,
+					activeInstance: FILES_SIDEBAR.activeInstance,
 				},
 				main: {
 					views: [

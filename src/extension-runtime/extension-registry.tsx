@@ -67,21 +67,24 @@ export const buildExtensionRegistry = (
 	return { visibleExtensions, extensionMap };
 };
 
-const BASE_REGISTRY = buildExtensionRegistry([], []);
-
-const EXTENSION_DEFINITIONS: ExtensionDefinition[] =
-	BASE_REGISTRY.visibleExtensions;
-const EXTENSION_MAP: Map<ExtensionKind, ExtensionDefinition> =
-	BASE_REGISTRY.extensionMap;
-
 const NOOP = () => {};
 const EMPTY_EXTENSION_DEFINITIONS: readonly ExtensionDefinition[] = [];
 
-const ExtensionRegistryContext = createContext<ExtensionRegistryValue>({
-	visibleExtensions: EXTENSION_DEFINITIONS,
-	extensionMap: EXTENSION_MAP,
-	replaceInstalledExtensions: NOOP,
-});
+// Built on first use, not at module load: bundled views (the Library) read
+// the registry, and the bundled list imports them, so the list may still be
+// initializing when this module is.
+let baseRegistry: ExtensionRegistryValue | null = null;
+function baseRegistryValue(): ExtensionRegistryValue {
+	baseRegistry ??= {
+		...buildExtensionRegistry([], []),
+		replaceInstalledExtensions: NOOP,
+	};
+	return baseRegistry;
+}
+
+const ExtensionRegistryContext = createContext<ExtensionRegistryValue | null>(
+	null,
+);
 
 export function ExtensionRegistryProvider({
 	children,
@@ -128,7 +131,7 @@ export function ExtensionRegistryProvider({
 }
 
 export function useExtensionRegistry(): ExtensionRegistryValue {
-	return useContext(ExtensionRegistryContext);
+	return useContext(ExtensionRegistryContext) ?? baseRegistryValue();
 }
 
 let extensionCounter = 0;

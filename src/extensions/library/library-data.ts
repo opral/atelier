@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQueryResult } from "@/lib/lix-react";
 import { qb } from "@/lib/lix-kysely";
+import { selectFilesStateAt } from "@/queries";
 import { useExtensionRegistry } from "../../extension-runtime/extension-registry";
 import type { ExtensionRuntime } from "../../extension-runtime/types";
 import type { DiffGlyphKind } from "@/components/diff-glyph";
@@ -60,8 +61,10 @@ export function canonicalDirectory(path: string): string {
 /**
  * Every file and folder in the workspace, each file with its Library kind.
  * `null` until both reads have landed; the caller keeps its frame meanwhile.
+ * With `commitId` (a checkpoint being viewed) it is the workspace as it was
+ * then: that commit's files, their folders drawn from the paths.
  */
-export function useLibraryData(): {
+export function useLibraryData(commitId: string | null = null): {
 	readonly data: LibraryData | null;
 	readonly error: Error | null;
 } {
@@ -73,7 +76,15 @@ export function useLibraryData(): {
 				.select(["id", "path", "name"])
 				.select((eb) => eb.ref("lixcol_updated_at").as("updated_at"))
 				.$castTo<FileRow>(),
-		{ reuseObservedResult: false },
+		{ reuseObservedResult: false, enabled: commitId === null },
+	);
+	const historicalFiles = useQueryResult<{
+		readonly id: string;
+		readonly path: string | null;
+	}>(
+		(lix) =>
+			selectFilesStateAt(lix, commitId ?? "").select(["id", "path"]) as never,
+		{ enabled: commitId !== null },
 	);
 	const directories = useQueryResult<DirectoryRow>(
 		(lix) =>
@@ -82,10 +93,50 @@ export function useLibraryData(): {
 				.select(["id", "path", "name"])
 				.select((eb) => eb.ref("lixcol_updated_at").as("updated_at"))
 				.$castTo<DirectoryRow>(),
-		{ reuseObservedResult: false },
+		{ reuseObservedResult: false, enabled: commitId === null },
 	);
 	const extensions = useMemo(() => [...extensionMap.values()], [extensionMap]);
 	const data = useMemo<LibraryData | null>(() => {
+		if (commitId !== null) {
+			if (historicalFiles.status !== "success") return null;
+			const rows = historicalFiles.rows.filter(
+				(row): row is { id: string; path: string } =>
+					typeof row.path === "string",
+			);
+			const folderPaths = new Set<string>();
+			for (const row of rows) {
+				const segments = row.path.split("/").filter(Boolean);
+				segments.pop();
+				for (let index = 1; index <= segments.length; index += 1)
+					folderPaths.add(`/${segments.slice(0, index).join("/")}`);
+			}
+			return {
+				files: rows
+					.map((row) => {
+						const kind = libraryKindOfPath(extensions, row.path);
+						return {
+							id: row.id,
+							path: row.path,
+							name: row.path.split("/").filter(Boolean).at(-1) ?? row.path,
+							directory: parentDirectoryOf(row.path),
+							kind,
+							displayName: libraryDisplayName(row.path, kind),
+							updatedAt: "",
+							hidden: isHiddenPath(row.path),
+						};
+					})
+					.sort(newestFirst),
+				directories: [...folderPaths]
+					.map((path) => ({
+						id: `historical:${path}`,
+						path,
+						name: path.split("/").at(-1) ?? path,
+						updatedAt: "",
+						hidden: isHiddenPath(path),
+					}))
+					.sort((left, right) => left.name.localeCompare(right.name)),
+			};
+		}
 		if (files.status !== "success" || directories.status !== "success")
 			return null;
 		return {
@@ -116,13 +167,15 @@ export function useLibraryData(): {
 				}))
 				.sort((left, right) => left.name.localeCompare(right.name)),
 		};
-	}, [directories, extensions, files]);
+	}, [commitId, directories, extensions, files, historicalFiles]);
 	const error =
-		files.status === "error"
-			? files.error
-			: directories.status === "error"
-				? directories.error
-				: null;
+		historicalFiles.status === "error"
+			? historicalFiles.error
+			: files.status === "error"
+				? files.error
+				: directories.status === "error"
+					? directories.error
+					: null;
 	return { data, error: error instanceof Error ? error : null };
 }
 
@@ -216,14 +269,18 @@ export type LibraryReviewMarks = {
 	readonly files: ReadonlyMap<string, DiffGlyphKind>;
 	/** Folders holding a changed file: "added" when all they hold is new. */
 	readonly directories: ReadonlyMap<string, "added" | "modified">;
-	readonly kinds: ReadonlySet<Exclude<LibraryKind, "all">>;
+	/** Kinds holding a change: "added" when all they gained is new. */
+	readonly kinds: ReadonlyMap<
+		Exclude<LibraryKind, "all">,
+		"added" | "modified"
+	>;
 };
 
 const NO_REVIEW: LibraryReviewMarks = {
 	active: false,
 	files: new Map(),
 	directories: new Map(),
-	kinds: new Set(),
+	kinds: new Map(),
 };
 
 /**
@@ -240,7 +297,7 @@ export function useLibraryReviewMarks(
 		if (!session || session.files.length === 0) return NO_REVIEW;
 		const extensions = [...extensionMap.values()];
 		const files = new Map<string, DiffGlyphKind>();
-		const kinds = new Set<Exclude<LibraryKind, "all">>();
+		const kinds = new Map<Exclude<LibraryKind, "all">, "added" | "modified">();
 		const directories = new Map<string, "added" | "modified">();
 		for (const file of session.files) {
 			if (file.review?.status === "resolved") continue;
@@ -249,7 +306,13 @@ export function useLibraryReviewMarks(
 					? "moved"
 					: file.changeKind;
 			files.set(file.path, glyph);
-			kinds.add(libraryKindOfPath(extensions, file.path));
+			const fileKind = libraryKindOfPath(extensions, file.path);
+			kinds.set(
+				fileKind,
+				glyph === "added" && kinds.get(fileKind) !== "modified"
+					? "added"
+					: "modified",
+			);
 			const segments = file.path.split("/").filter(Boolean);
 			segments.pop();
 			let prefix = "";

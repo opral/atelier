@@ -2,7 +2,10 @@ import { useEffect, useMemo, type MouseEvent, type ReactNode } from "react";
 import { DiffGlyph } from "@/components/diff-glyph";
 import { fileIconUrl } from "../files/file-icons";
 import { KindIcon } from "./kind-icon";
-import type { ExtensionRuntime, ExtensionView } from "../../extension-runtime/types";
+import type {
+	ExtensionRuntime,
+	ExtensionView,
+} from "../../extension-runtime/types";
 import { ATELIER_BUILTIN_EXTENSION_IDS } from "../../extension-api";
 import { LIBRARY_KIND_COPY, type LibraryKind } from "./kinds";
 import {
@@ -44,10 +47,13 @@ export function useTrackRecentDocuments(
 ): void {
 	const activeFileId = atelier.documents.activeFileId;
 	const preferences = view.preferences;
+	// Stepping through a review opens every changed file in turn; that is
+	// reading the change, not choosing what to work on, so Recent holds still.
+	const reviewing = atelier.diff?.session != null;
 	useEffect(() => {
-		if (!activeFileId) return;
+		if (!activeFileId || reviewing) return;
 		pushRecentFile(preferences, activeFileId);
-	}, [activeFileId, preferences]);
+	}, [activeFileId, preferences, reviewing]);
 }
 
 /** Opens a Library location in the Library tab in front, or the home one. */
@@ -131,10 +137,11 @@ export function LibrarySidebar({
 					const label =
 						kind === "database" ? "Database" : LIBRARY_KIND_COPY[kind].label;
 					const icon = <KindIcon kind={kind} />;
-					const changed =
-						kind !== "database" &&
-						kind !== "all" &&
-						marks.kinds.has(kind);
+					const rollup =
+						kind !== "database" && kind !== "all"
+							? marks.kinds.get(kind)
+							: undefined;
+					const changed = rollup !== undefined;
 					return (
 						<li key={kind}>
 							<SidebarRow
@@ -143,9 +150,7 @@ export function LibrarySidebar({
 								icon={icon}
 								label={label}
 								testId={`library-kind-${kind}`}
-								trailing={
-									changed ? <DiffGlyph kind="modified" size={10} /> : null
-								}
+								trailing={rollup ? <DiffGlyph kind={rollup} size={11} /> : null}
 								onClick={(event) => {
 									if (kind === "database") {
 										void atelier.views
@@ -192,7 +197,9 @@ export function LibrarySidebar({
 										}
 										label={file.displayName}
 										title={file.path}
-										trailing={glyph ? <DiffGlyph kind={glyph} size={10} /> : null}
+										trailing={
+											glyph ? <DiffGlyph kind={glyph} size={10} /> : null
+										}
 										onClick={(event) => {
 											void atelier.documents
 												.open(file.path, {

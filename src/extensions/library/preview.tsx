@@ -25,14 +25,45 @@ type ContentState =
  * The file's bytes, read once the card scrolls into view and again whenever
  * the file changes (its `updatedAt`). Bytes past `maxBytes` are not read.
  */
+/**
+ * Preview bytes already read, by Lix handle, file and version. Switching kind
+ * and coming back redraws from here instead of reading every file again.
+ */
+const previewCache = new WeakMap<object, Map<string, ContentState>>();
+const PREVIEW_CACHE_LIMIT = 200;
+
+function cachedContent(lix: object, key: string): ContentState | undefined {
+	return previewCache.get(lix)?.get(key);
+}
+
+function cacheContent(lix: object, key: string, state: ContentState): void {
+	let cache = previewCache.get(lix);
+	if (!cache) {
+		cache = new Map();
+		previewCache.set(lix, cache);
+	}
+	cache.delete(key);
+	cache.set(key, state);
+	if (cache.size > PREVIEW_CACHE_LIMIT)
+		cache.delete(cache.keys().next().value as string);
+}
+
 function useFileContent(
 	file: LibraryFile,
 	maxBytes: number,
 	visible: boolean,
 ): ContentState {
 	const lix = useLix();
-	const [state, setState] = useState<ContentState>({ status: "idle" });
+	const cacheKey = `${file.id}\0${file.updatedAt}\0${maxBytes}`;
+	const [state, setState] = useState<ContentState>(
+		() => cachedContent(lix, cacheKey) ?? { status: "idle" },
+	);
 	useEffect(() => {
+		const cached = cachedContent(lix, cacheKey);
+		if (cached) {
+			setState(cached);
+			return;
+		}
 		if (!visible) return;
 		let cancelled = false;
 		setState((current) =>
@@ -45,21 +76,25 @@ function useFileContent(
 			)
 			.then((result) => {
 				if (cancelled) return;
+				const settle = (next: ContentState) => {
+					cacheContent(lix, cacheKey, next);
+					setState(next);
+				};
 				const row = result.rows[0] as
 					| { content?: unknown; size?: unknown }
 					| undefined;
-				if (!row) return setState({ status: "error" });
+				if (!row) return settle({ status: "error" });
 				const content = row.content;
 				if (content instanceof Uint8Array)
-					return setState({ status: "ready", bytes: content });
+					return settle({ status: "ready", bytes: content });
 				if (typeof content === "string")
-					return setState({
+					return settle({
 						status: "ready",
 						bytes: new TextEncoder().encode(content),
 					});
 				if (Number(row.size ?? 0) === 0)
-					return setState({ status: "ready", bytes: new Uint8Array() });
-				setState({ status: "too-large" });
+					return settle({ status: "ready", bytes: new Uint8Array() });
+				settle({ status: "too-large" });
 			})
 			.catch(() => {
 				if (!cancelled) setState({ status: "error" });
@@ -67,7 +102,7 @@ function useFileContent(
 		return () => {
 			cancelled = true;
 		};
-	}, [file.id, file.updatedAt, lix, maxBytes, visible]);
+	}, [cacheKey, file.id, lix, maxBytes, visible]);
 	return state;
 }
 
@@ -136,7 +171,8 @@ export function LibraryPreview({ file }: { readonly file: LibraryFile }) {
 	let body: ReactNode = null;
 	if (content.status === "ready") {
 		const bytes = content.bytes;
-		if (isImage) body = <ImagePreview bytes={bytes} mime={IMAGE_MIME[extension]!} />;
+		if (isImage)
+			body = <ImagePreview bytes={bytes} mime={IMAGE_MIME[extension]!} />;
 		else if (isVideo)
 			body = <VideoPreview bytes={bytes} mime={VIDEO_MIME[extension]!} />;
 		else {
@@ -411,13 +447,15 @@ function MarkdownBlock({ node }: { readonly node: MdNode }): ReactNode {
 					<tbody>
 						{rows.map((row, rowIndex) => (
 							<tr key={rowIndex}>
-								{(row.children ?? []).slice(0, 4).map((cell, index) =>
-									rowIndex === 0 ? (
-										<th key={index}>{inlineText(cell)}</th>
-									) : (
-										<td key={index}>{inlineText(cell)}</td>
-									),
-								)}
+								{(row.children ?? [])
+									.slice(0, 4)
+									.map((cell, index) =>
+										rowIndex === 0 ? (
+											<th key={index}>{inlineText(cell)}</th>
+										) : (
+											<td key={index}>{inlineText(cell)}</td>
+										),
+									)}
 							</tr>
 						))}
 					</tbody>

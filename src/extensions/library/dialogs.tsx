@@ -278,7 +278,9 @@ export function MoveDialog({
 							<button
 								type="button"
 								disabled={busy}
-								aria-current={crumb.path === destination ? "location" : undefined}
+								aria-current={
+									crumb.path === destination ? "location" : undefined
+								}
 								onClick={() => setDestination(crumb.path)}
 								className="flex max-w-56 items-center gap-2 rounded-md px-2 py-1.5 text-fg-muted outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-ring aria-[current=location]:font-medium aria-[current=location]:text-fg disabled:opacity-50"
 							>

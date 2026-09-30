@@ -57,6 +57,13 @@ export interface ExtensionDefinition {
 	readonly description: string;
 	readonly icon: ComponentType<{ className?: string }>;
 	/**
+	 * The tab icon for one instance, when it depends on what the instance
+	 * shows (the Library's kind). Falls back to `icon`.
+	 */
+	readonly iconForState?: (
+		state: ExtensionState | undefined,
+	) => ComponentType<{ className?: string }> | undefined;
+	/**
 	 * Lowercase file extensions this extension can render when a file is opened.
 	 *
 	 * @example

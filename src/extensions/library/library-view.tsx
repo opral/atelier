@@ -158,10 +158,15 @@ export function LibraryView({
 	const lix = useLix();
 	const location = libraryLocationFromState(view.state, view.preferences);
 	const { kind, mode, dirPath } = location;
-	const { data, error } = useLibraryData();
-	const marks = useLibraryReviewMarks(atelier, data);
 	const session = atelier.diff?.session ?? null;
-	const viewingHistory = session !== null && "commitId" in session.target;
+	const historicalCommitId =
+		session !== null && "commitId" in session.target
+			? session.target.commitId
+			: null;
+	const viewingHistory = historicalCommitId !== null;
+	// Viewing a checkpoint shows the workspace as it was then.
+	const { data, error } = useLibraryData(historicalCommitId);
+	const marks = useLibraryReviewMarks(atelier, data);
 	const readOnly = atelier.readOnly || viewingHistory;
 	const showHidden =
 		atelier.preferences.get("atelier_files", "showHiddenFiles") === true;
@@ -219,7 +224,8 @@ export function LibraryView({
 				Object.assign(target, {
 					mode: preferredMode(view.preferences, next.kind),
 				});
-			if (next.mode !== undefined) rememberMode(view.preferences, target.kind, next.mode);
+			if (next.mode !== undefined)
+				rememberMode(view.preferences, target.kind, next.mode);
 			void atelier.views
 				.open(LIBRARY_EXTENSION_ID, {
 					state: libraryState(target),
@@ -283,8 +289,10 @@ export function LibraryView({
 	// A folder that vanished (deleted, moved elsewhere) returns the tab to
 	// the nearest folder that still exists.
 	useEffect(() => {
-		if (!data || mode !== "folders" || dirPath === "/" || viewingHistory) return;
-		if (data.directories.some((directory) => directory.path === dirPath)) return;
+		if (!data || mode !== "folders" || dirPath === "/" || viewingHistory)
+			return;
+		if (data.directories.some((directory) => directory.path === dirPath))
+			return;
 		const segments = dirPath.split("/").filter(Boolean);
 		let next = "/";
 		while (segments.length > 0) {
@@ -309,7 +317,10 @@ export function LibraryView({
 				return;
 			}
 			void atelier.documents
-				.open(file.path, { fileId: file.id, ...(newTab ? { newTab: true } : {}) })
+				.open(file.path, {
+					fileId: file.id,
+					...(newTab ? { newTab: true } : {}),
+				})
 				.catch((caught: unknown) => {
 					console.error("library: unable to open", caught);
 				});
@@ -379,6 +390,14 @@ export function LibraryView({
 		],
 	);
 
+	// The host's "new document" command lands here while the Library is in
+	// front: a page, created where New would put it.
+	const registerNewFileDraftHandler = view.registerNewFileDraftHandler;
+	useEffect(() => {
+		if (readOnly) return;
+		return registerNewFileDraftHandler(() => createTyped("markdown"));
+	}, [createTyped, readOnly, registerNewFileDraftHandler]);
+
 	const runDialogAction = useCallback(
 		async (action: () => Promise<string | null>) => {
 			setBusy(true);
@@ -412,7 +431,10 @@ export function LibraryView({
 					});
 					return;
 				}
-				const summary = summarizeUpload(created.map((file) => file.path), data);
+				const summary = summarizeUpload(
+					created.map((file) => file.path),
+					data,
+				);
 				showToast({
 					message:
 						result.failed.length > 0
@@ -444,7 +466,11 @@ export function LibraryView({
 				? event.metaKey && !event.ctrlKey
 				: event.ctrlKey && !event.metaKey;
 			const inField = isTypingTarget(event.target);
-			if (primary && !event.altKey && (event.key === "[" || event.key === "]")) {
+			if (
+				primary &&
+				!event.altKey &&
+				(event.key === "[" || event.key === "]")
+			) {
 				if (mode !== "folders" || inField) return;
 				event.preventDefault();
 				if (event.key === "[") goBack();
@@ -453,18 +479,26 @@ export function LibraryView({
 			}
 			if (primary && !event.altKey && event.key.toLowerCase() === "f") {
 				// Only while the Library itself is where the user is.
-				if (!rootRef.current?.contains(document.activeElement) &&
-					document.activeElement !== document.body)
+				if (
+					!rootRef.current?.contains(document.activeElement) &&
+					document.activeElement !== document.body
+				)
 					return;
 				event.preventDefault();
 				searchRef.current?.focus();
 				searchRef.current?.select();
 				return;
 			}
-			if (primary && !event.altKey && (event.key === "." || event.code === "Period")) {
+			if (
+				primary &&
+				!event.altKey &&
+				(event.key === "." || event.code === "Period")
+			) {
 				if (inField || readOnly) return;
-				if (!rootRef.current?.contains(document.activeElement) &&
-					document.activeElement !== document.body)
+				if (
+					!rootRef.current?.contains(document.activeElement) &&
+					document.activeElement !== document.body
+				)
 					return;
 				event.preventDefault();
 				event.stopPropagation();
@@ -475,15 +509,41 @@ export function LibraryView({
 					}
 					return;
 				}
-				void createTyped(
-					KIND_FILE_TYPE[kind] ?? "generic",
-				);
+				void createTyped(KIND_FILE_TYPE[kind] ?? "generic");
 			}
 		};
 		window.addEventListener("keydown", onKeyDown, { capture: true });
 		return () =>
 			window.removeEventListener("keydown", onKeyDown, { capture: true });
-	}, [createTyped, dialog, goBack, goForward, isActive, isMac, kind, mode, readOnly]);
+	}, [
+		createTyped,
+		dialog,
+		goBack,
+		goForward,
+		isActive,
+		isMac,
+		kind,
+		mode,
+		readOnly,
+	]);
+
+	// Esc clears the search, then the selection — only from inside the
+	// Library, so it never swallows an Esc meant for the review or a dialog.
+	useEffect(() => {
+		if (!isActive || (!query && selection.size === 0)) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented || dialog) return;
+			const inside =
+				rootRef.current?.contains(document.activeElement) ||
+				document.activeElement === document.body;
+			if (!inside) return;
+			event.stopPropagation();
+			if (query) setQuery("");
+			else setSelection(new Set());
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [dialog, isActive, query, selection.size]);
 
 	const onDragEnter = (event: DragEvent) => {
 		if (readOnly || !event.dataTransfer.types.includes("Files")) return;
@@ -509,7 +569,10 @@ export function LibraryView({
 		const transfer = event.dataTransfer;
 		void collectDroppedEntries(transfer).then(upload, (caught: unknown) => {
 			console.error("library: unable to read the drop", caught);
-			showToast({ message: "Couldn’t read the dropped files.", tone: "danger" });
+			showToast({
+				message: "Couldn’t read the dropped files.",
+				tone: "danger",
+			});
 		});
 	};
 
@@ -558,10 +621,27 @@ export function LibraryView({
 	const canGoBack = history.back.length > 0 || dirPath !== "/";
 	const canGoForward = history.forward.length > 0;
 
+	// An empty workspace gets the host's onboarding in place of the listing;
+	// it stands alone, with no mode to switch on an empty page.
+	const EmptyWorkspace = atelier.library?.EmptyWorkspace;
+	const showsOnboarding = Boolean(
+		data &&
+		!results &&
+		EmptyWorkspace &&
+		!readOnly &&
+		kind === "all" &&
+		data.files.every((file) => file.hidden) &&
+		(mode === "grid" ||
+			(dirPath === "/" &&
+				data.directories.every((directory) => directory.hidden))),
+	);
 	let body: ReactNode;
 	if (!data) {
 		body = error ? (
-			<div role="alert" className="grid flex-1 place-content-center text-[13px] text-fg-muted">
+			<div
+				role="alert"
+				className="grid flex-1 place-content-center text-[13px] text-fg-muted"
+			>
 				Unable to load the Library.
 			</div>
 		) : (
@@ -599,11 +679,9 @@ export function LibraryView({
 			);
 	} else if (mode === "grid") {
 		const files = gridFiles(data, kind);
-		const workspaceEmpty = data.files.every((file) => file.hidden);
-		const EmptyWorkspace = atelier.library?.EmptyWorkspace;
 		body =
 			files.length === 0 ? (
-				kind === "all" && workspaceEmpty && EmptyWorkspace && !readOnly ? (
+				showsOnboarding && EmptyWorkspace ? (
 					<div className="flex flex-1 flex-col">
 						<EmptyWorkspace atelier={atelier} />
 					</div>
@@ -619,21 +697,33 @@ export function LibraryView({
 					/>
 				)
 			) : (
-				<FileGrid files={files} marks={marks} actions={itemActions} onOpen={openFile} />
+				<FileGrid
+					files={files}
+					marks={marks}
+					actions={itemActions}
+					onOpen={openFile}
+				/>
 			);
 	} else {
 		const listing = folderListing(data, dirPath, kind, { showHidden });
-		const EmptyWorkspace = atelier.library?.EmptyWorkspace;
-		const workspaceEmpty =
-			dirPath === "/" &&
-			kind === "all" &&
-			data.files.every((file) => file.hidden) &&
-			data.directories.every((directory) => directory.hidden);
 		body =
-			workspaceEmpty && EmptyWorkspace && !readOnly ? (
+			showsOnboarding && EmptyWorkspace ? (
 				<div className="flex flex-1 flex-col">
 					<EmptyWorkspace atelier={atelier} />
 				</div>
+			) : listing.folders.length === 0 &&
+			  listing.files.length === 0 &&
+			  dirPath === "/" &&
+			  kind !== "all" ? (
+				<KindEmptyState
+					kind={kind}
+					readOnly={readOnly}
+					onCreate={() => {
+						const fileType = KIND_FILE_TYPE[kind];
+						if (fileType) void createTyped(fileType);
+					}}
+					onUpload={startUpload}
+				/>
 			) : listing.folders.length === 0 && listing.files.length === 0 ? (
 				<EmptyState
 					title={dirPath === "/" ? copy.emptyTitle : "This folder is empty"}
@@ -686,9 +776,15 @@ export function LibraryView({
 				entries.push(fileEntry(file));
 				continue;
 			}
-			const directory = data.directories.find((candidate) => candidate.path === path);
+			const directory = data.directories.find(
+				(candidate) => candidate.path === path,
+			);
 			if (directory)
-				entries.push({ type: "directory", path: directory.path, name: directory.name });
+				entries.push({
+					type: "directory",
+					path: directory.path,
+					name: directory.name,
+				});
 		}
 		return entries;
 	}, [data, selection]);
@@ -706,16 +802,6 @@ export function LibraryView({
 			onDragOver={onDragOver}
 			onDragLeave={onDragLeave}
 			onDrop={onDrop}
-			onKeyDown={(event: ReactKeyboardEvent) => {
-				if (event.key !== "Escape") return;
-				if (query) {
-					setQuery("");
-					event.stopPropagation();
-				} else if (selection.size > 0) {
-					setSelection(new Set());
-					event.stopPropagation();
-				}
-			}}
 		>
 			<input
 				ref={uploadInputRef}
@@ -731,7 +817,7 @@ export function LibraryView({
 				}}
 			/>
 			<div className="mx-auto flex w-[min(1080px,calc(100%-64px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
-				<header className="flex flex-wrap items-center gap-x-3 gap-y-3 pb-3">
+				<header className="flex items-center gap-3 pb-3">
 					{inSubfolder ? (
 						<div className="flex min-w-0 items-center gap-1.5">
 							<HistoryButton
@@ -748,11 +834,16 @@ export function LibraryView({
 							>
 								<ArrowRight className="size-3.5" aria-hidden="true" />
 							</HistoryButton>
-							<nav aria-label="Folder" className="ml-1 flex min-w-0 items-center gap-1 text-[22px] font-semibold tracking-[-0.01em]">
+							<nav
+								aria-label="Folder"
+								className="ml-1 flex min-w-0 items-center gap-1 text-[22px] font-semibold tracking-[-0.01em]"
+							>
 								<button
 									type="button"
 									className="shrink-0 rounded-md text-fg-faint hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-									onClick={(event) => openFolder("/", { newTab: isNewTabClick(event) })}
+									onClick={(event) =>
+										openFolder("/", { newTab: isNewTabClick(event) })
+									}
 								>
 									{copy.label}
 								</button>
@@ -760,17 +851,28 @@ export function LibraryView({
 									const path = `/${folderSegments.slice(0, index + 1).join("/")}`;
 									const last = index === folderSegments.length - 1;
 									return (
-										<span key={path} className="flex min-w-0 items-center gap-1">
-											<ChevronRight className="size-4 shrink-0 text-fg-faint" aria-hidden="true" />
+										<span
+											key={path}
+											className="flex min-w-0 items-center gap-1"
+										>
+											<ChevronRight
+												className="size-4 shrink-0 text-fg-faint"
+												aria-hidden="true"
+											/>
 											{last ? (
-												<h1 className="truncate text-fg" aria-current="location">
+												<h1
+													className="truncate text-fg"
+													aria-current="location"
+												>
 													{segment}
 												</h1>
 											) : (
 												<button
 													type="button"
 													className="truncate rounded-md text-fg-faint hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-													onClick={(event) => openFolder(path, { newTab: isNewTabClick(event) })}
+													onClick={(event) =>
+														openFolder(path, { newTab: isNewTabClick(event) })
+													}
 												>
 													{segment}
 												</button>
@@ -781,13 +883,16 @@ export function LibraryView({
 							</nav>
 						</div>
 					) : (
-						<h1 className="text-[22px] font-semibold tracking-[-0.01em] text-fg">
+						<h1 className="min-w-0 truncate text-[22px] font-semibold tracking-[-0.01em] text-fg">
 							{copy.label}
 						</h1>
 					)}
 					<span className="flex-1" />
-					<label className="relative flex h-8 w-56 items-center max-sm:w-full max-sm:order-last">
-						<Search className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle" aria-hidden="true" />
+					<label className="relative flex h-8 w-56 min-w-20 shrink items-center">
+						<Search
+							className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
+							aria-hidden="true"
+						/>
 						<input
 							ref={searchRef}
 							type="search"
@@ -813,7 +918,7 @@ export function LibraryView({
 						) : null}
 					</label>
 					{readOnly ? null : (
-						<div className={`transition-opacity${reviewDim}`}>
+						<div className={`shrink-0 transition-opacity${reviewDim}`}>
 							<NewFileMenu
 								align="end"
 								defaultFolders={defaultFolders}
@@ -839,7 +944,14 @@ export function LibraryView({
 								onCreateFolder={async (parent, name) => {
 									if (!data) return null;
 									try {
-										return (await createFolder(lix, data, canonicalDirectory(parent), name)).path;
+										return (
+											await createFolder(
+												lix,
+												data,
+												canonicalDirectory(parent),
+												name,
+											)
+										).path;
 									} catch {
 										return null;
 									}
@@ -880,13 +992,15 @@ export function LibraryView({
 						</p>
 					) : null}
 					<span className="flex-1" />
-					<ModeSwitch
-						mode={mode}
-						onChange={(next, event) => {
-							setSelection(new Set());
-							navigate({ mode: next }, { newTab: isNewTabClick(event) });
-						}}
-					/>
+					{showsOnboarding ? null : (
+						<ModeSwitch
+							mode={mode}
+							onChange={(next, event) => {
+								setSelection(new Set());
+								navigate({ mode: next }, { newTab: isNewTabClick(event) });
+							}}
+						/>
+					)}
 				</div>
 				{body}
 			</div>
@@ -907,7 +1021,9 @@ export function LibraryView({
 					<NameDialog
 						open={dialog?.type === "rename" || dialog?.type === "new-folder"}
 						title={dialog?.type === "new-folder" ? "New folder" : "Rename"}
-						submitLabel={dialog?.type === "new-folder" ? "Create folder" : "Save"}
+						submitLabel={
+							dialog?.type === "new-folder" ? "Create folder" : "Save"
+						}
 						initialName={
 							dialog?.type === "rename" ? dialog.entry.name : "Untitled folder"
 						}
@@ -945,9 +1061,7 @@ export function LibraryView({
 								: []
 						}
 						currentDirectory={
-							dialog?.type === "move"
-								? commonParent(dialog.entries)
-								: "/"
+							dialog?.type === "move" ? commonParent(dialog.entries) : "/"
 						}
 						busy={busy}
 						error={dialogError}
@@ -982,8 +1096,13 @@ export function LibraryView({
 								const undo = await deleteEntries(lix, data, entries);
 								for (const entry of entries)
 									if (entry.type === "file")
-										void atelier.documents.close(entry.path).catch(() => undefined);
-								showToast({ message: `Deleted ${describeEntries(entries)}`, undo });
+										void atelier.documents
+											.close(entry.path)
+											.catch(() => undefined);
+								showToast({
+									message: `Deleted ${describeEntries(entries)}`,
+									undo,
+								});
 								return null;
 							});
 						}}
@@ -1024,7 +1143,9 @@ function summarizeUpload(paths: readonly string[], data: LibraryData): string {
 	const counts = new Map<string, number>();
 	for (const path of paths) {
 		const extension = path.split(".").at(-1)?.toLowerCase() ?? "";
-		const known = data.files.find((file) => file.path.endsWith(`.${extension}`));
+		const known = data.files.find((file) =>
+			file.path.endsWith(`.${extension}`),
+		);
 		const kind = known?.kind ?? guessKind(extension);
 		counts.set(kind, (counts.get(kind) ?? 0) + 1);
 	}
@@ -1043,7 +1164,20 @@ function guessKind(extension: string): LibraryKind {
 	if (extension === "md" || extension === "markdown") return "pages";
 	if (extension === "csv") return "tables";
 	if (extension === "excalidraw") return "drawings";
-	if (["png", "jpg", "jpeg", "svg", "gif", "webp", "mp4", "mov", "webm", "pdf"].includes(extension))
+	if (
+		[
+			"png",
+			"jpg",
+			"jpeg",
+			"svg",
+			"gif",
+			"webp",
+			"mp4",
+			"mov",
+			"webm",
+			"pdf",
+		].includes(extension)
+	)
 		return "media";
 	return "other";
 }
@@ -1126,8 +1260,16 @@ function ModeSwitch({
 			aria-label="View"
 			className="flex items-center gap-0.5 rounded-[7px] bg-bg-active p-0.5"
 		>
-			{option("grid", "Grid", <LayoutGrid className="size-3.5" aria-hidden="true" />)}
-			{option("folders", "Folders", <List className="size-3.5" aria-hidden="true" />)}
+			{option(
+				"grid",
+				"Grid",
+				<LayoutGrid className="size-3.5" aria-hidden="true" />,
+			)}
+			{option(
+				"folders",
+				"Folders",
+				<List className="size-3.5" aria-hidden="true" />,
+			)}
 		</div>
 	);
 }
@@ -1154,7 +1296,9 @@ function EmptyState({
 				</span>
 			) : null}
 			<p className="text-[14px] font-semibold text-fg">{title}</p>
-			<p className="max-w-sm text-[13px] leading-relaxed text-fg-subtle">{body}</p>
+			<p className="max-w-sm text-[13px] leading-relaxed text-fg-subtle">
+				{body}
+			</p>
 			{children ? <div className="mt-3 flex gap-2">{children}</div> : null}
 		</div>
 	);
@@ -1181,7 +1325,10 @@ function KindEmptyState({
 			icon={<KindIcon kind={kind} className="size-5" />}
 		>
 			{copy.createLabel ? (
-				<AtelierActionButton className="h-8 px-3 py-0 text-[13px]" onClick={onCreate}>
+				<AtelierActionButton
+					className="h-8 px-3 py-0 text-[13px]"
+					onClick={onCreate}
+				>
 					<Plus aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
 					{copy.createLabel}
 				</AtelierActionButton>
@@ -1222,7 +1369,10 @@ function ItemMenuContent({
 	readonly onOpenFolderInNewTab?: () => void;
 }) {
 	return (
-		<ContextMenuContent className="min-w-44 text-[13px]" data-testid="library-item-menu">
+		<ContextMenuContent
+			className="min-w-44 text-[13px]"
+			data-testid="library-item-menu"
+		>
 			{file ? (
 				<ContextMenuItem onSelect={() => actions.openInNewTab(file)}>
 					<SquareArrowOutUpRight aria-hidden="true" />
@@ -1344,7 +1494,8 @@ function GridCard({
 	readonly actions: ItemActions;
 	readonly onOpen: (file: LibraryFile, newTab: boolean) => void;
 }) {
-	const hint = file.directory === "/" ? "" : `${file.directory.split("/").at(-1)}/`;
+	const hint =
+		file.directory === "/" ? "" : `${file.directory.split("/").at(-1)}/`;
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>
@@ -1383,10 +1534,17 @@ function GridCard({
 						>
 							{file.displayName}
 						</span>
-						{glyph ? <DiffGlyph kind={glyph} size={11} className="shrink-0" /> : null}
-						<span className="min-w-0 flex-1 truncate text-right text-[11.5px] text-fg-faint">
-							{hint ? <span className="mr-1.5">{hint}</span> : null}
-							<span className="text-fg-subtle">{formatLibraryTime(file.updatedAt)}</span>
+						{glyph ? (
+							<DiffGlyph kind={glyph} size={11} className="shrink-0" />
+						) : null}
+						<span className="min-w-0 flex-1" />
+						{hint ? (
+							<span className="min-w-0 shrink-[2] truncate text-[11.5px] text-fg-faint">
+								{hint}
+							</span>
+						) : null}
+						<span className="shrink-0 text-[11.5px] text-fg-subtle">
+							{formatLibraryTime(file.updatedAt)}
 						</span>
 					</div>
 				</button>
@@ -1436,7 +1594,10 @@ function RowList({
 	readonly selectionAnchor: React.MutableRefObject<string | null>;
 	readonly onOpenFile: (file: LibraryFile, newTab: boolean) => void;
 	readonly onOpenFolder: (path: string, options: { newTab?: boolean }) => void;
-	readonly onMoveInto: (entries: readonly LibraryEntry[], destination: string) => void;
+	readonly onMoveInto: (
+		entries: readonly LibraryEntry[],
+		destination: string,
+	) => void;
 }) {
 	const order = useMemo(
 		() => [
@@ -1448,14 +1609,20 @@ function RowList({
 	const entryFor = (path: string): LibraryEntry | null => {
 		const file = files.find((candidate) => candidate.path === path);
 		if (file) return fileEntry(file);
-		const folder = folders.find((candidate) => candidate.directory.path === path);
+		const folder = folders.find(
+			(candidate) => candidate.directory.path === path,
+		);
 		return folder
 			? { type: "directory", path, name: folder.directory.name }
 			: null;
 	};
 	const toggle = (path: string, extend: boolean) => {
 		const next = new Set(selection);
-		if (extend && selectionAnchor.current && order.includes(selectionAnchor.current)) {
+		if (
+			extend &&
+			selectionAnchor.current &&
+			order.includes(selectionAnchor.current)
+		) {
 			const from = order.indexOf(selectionAnchor.current);
 			const to = order.indexOf(path);
 			const [start, end] = from < to ? [from, to] : [to, from];
@@ -1469,7 +1636,9 @@ function RowList({
 	const selectionActive = selection.size > 0;
 	const draggedEntries = (path: string): LibraryEntry[] => {
 		const paths = selection.has(path) ? [...selection] : [path];
-		return paths.map(entryFor).filter((entry): entry is LibraryEntry => entry !== null);
+		return paths
+			.map(entryFor)
+			.filter((entry): entry is LibraryEntry => entry !== null);
 	};
 
 	const row = ({
@@ -1518,10 +1687,14 @@ function RowList({
 					>
 						<span
 							className={`grid size-4 place-items-center rounded border ${
-								selected ? "border-link bg-link text-accent-on" : "border-border-strong bg-panel"
+								selected
+									? "border-link bg-link text-accent-on"
+									: "border-border-strong bg-panel"
 							}`}
 						>
-							{selected ? <Check className="size-3" aria-hidden="true" /> : null}
+							{selected ? (
+								<Check className="size-3" aria-hidden="true" />
+							) : null}
 						</span>
 					</button>
 				)}
@@ -1534,32 +1707,49 @@ function RowList({
 								event.dataTransfer.effectAllowed = "move";
 								event.dataTransfer.setData(
 									ENTRY_DRAG_TYPE,
-									JSON.stringify(draggedEntries(path).map((candidate) => candidate.path)),
+									JSON.stringify(
+										draggedEntries(path).map((candidate) => candidate.path),
+									),
 								);
 							}}
 							onDragOver={(event) => {
-								if (!isFolder || !event.dataTransfer.types.includes(ENTRY_DRAG_TYPE)) return;
+								if (
+									!isFolder ||
+									!event.dataTransfer.types.includes(ENTRY_DRAG_TYPE)
+								)
+									return;
 								event.preventDefault();
 								event.stopPropagation();
 								event.dataTransfer.dropEffect = "move";
 								setDropTarget(path);
 							}}
-							onDragLeave={() => setDropTarget((current) => (current === path ? null : current))}
+							onDragLeave={() =>
+								setDropTarget((current) => (current === path ? null : current))
+							}
 							onDrop={(event) => {
-								if (!isFolder || !event.dataTransfer.types.includes(ENTRY_DRAG_TYPE)) return;
+								if (
+									!isFolder ||
+									!event.dataTransfer.types.includes(ENTRY_DRAG_TYPE)
+								)
+									return;
 								event.preventDefault();
 								event.stopPropagation();
 								setDropTarget(null);
 								let paths: string[] = [];
 								try {
-									paths = JSON.parse(event.dataTransfer.getData(ENTRY_DRAG_TYPE)) as string[];
+									paths = JSON.parse(
+										event.dataTransfer.getData(ENTRY_DRAG_TYPE),
+									) as string[];
 								} catch {
 									return;
 								}
 								const entries = paths
 									.filter((candidate) => candidate !== path)
 									.map(entryFor)
-									.filter((candidate): candidate is LibraryEntry => candidate !== null);
+									.filter(
+										(candidate): candidate is LibraryEntry =>
+											candidate !== null,
+									);
 								if (entries.length > 0) onMoveInto(entries, path);
 							}}
 							onClick={(event) => {
@@ -1592,10 +1782,18 @@ function RowList({
 										: "hover:bg-bg-hover"
 							}${dim ? " opacity-[0.4] hover:opacity-100" : ""}`}
 						>
-							<img src={icon} alt="" aria-hidden="true" draggable={false} className="size-[18px] shrink-0" />
+							<img
+								src={icon}
+								alt=""
+								aria-hidden="true"
+								draggable={false}
+								className="size-[18px] shrink-0"
+							/>
 							<span
 								className={`min-w-0 flex-1 truncate font-medium ${
-									glyph && glyph !== "contains" ? glyphTextClass(glyph) : "text-fg"
+									glyph && glyph !== "contains"
+										? glyphTextClass(glyph)
+										: "text-fg"
 								}`}
 							>
 								{name}
@@ -1634,7 +1832,7 @@ function RowList({
 	};
 
 	return (
-		<ul className="flex flex-col gap-px" data-testid="library-rows" aria-multiselectable>
+		<ul className="flex flex-col gap-px" data-testid="library-rows">
 			{folders.map((folder) => {
 				const status = marks.directories.get(folder.directory.path);
 				return row({
@@ -1645,7 +1843,11 @@ function RowList({
 					glyph: status === "added" ? "added" : status ? "contains" : null,
 					dim: (marks.active && !status) || folder.directory.hidden,
 					open: (newTab) => onOpenFolder(folder.directory.path, { newTab }),
-					entry: { type: "directory", path: folder.directory.path, name: folder.directory.name },
+					entry: {
+						type: "directory",
+						path: folder.directory.path,
+						name: folder.directory.name,
+					},
 					isFolder: true,
 				});
 			})}
@@ -1693,7 +1895,9 @@ function SelectionToolbar({
 			data-testid="library-selection-toolbar"
 			className="flex items-center gap-1 rounded-[9px] border border-border bg-panel py-0.5 pr-0.5 pl-3 shadow-sm"
 		>
-			<span className="pr-2 text-[12.5px] font-semibold text-fg">{count} selected</span>
+			<span className="pr-2 text-[12.5px] font-semibold text-fg">
+				{count} selected
+			</span>
 			<button
 				type="button"
 				onClick={onMove}

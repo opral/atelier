@@ -4354,7 +4354,7 @@ function LayoutShellLoadedContentResolved({
 					label:
 						(entry.state?.atelier?.label as string | undefined) ??
 						definition.label,
-					icon: definition.icon,
+					icon: definition.iconForState?.(entry.state) ?? definition.icon,
 					isActive: entry.instance === activeInstance,
 					isPinned: entry.isPinned === true,
 					isPending: entry.isPending === true,
