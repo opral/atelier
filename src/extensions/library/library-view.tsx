@@ -1202,14 +1202,14 @@ function FolderBreadcrumb({
 		</span>
 	);
 	return (
-		<div className="relative flex min-w-0 flex-col">
+		<div className="relative flex w-full min-w-0 flex-col">
 			{trail.length > 0 ? (
 				<nav
 					aria-label="Folder path"
 					data-testid="library-breadcrumb"
 					// Above the title, out of flow: the header keeps one height inside
 					// a folder and out of it, so Search and New never move.
-					className="absolute bottom-full left-0 -ml-1 flex max-w-full min-w-0 items-center gap-0.5 pb-0.5 text-[13px] font-medium"
+					className="absolute bottom-full left-0 -ml-1 flex max-w-full min-w-0 items-center whitespace-nowrap gap-0.5 pb-0.5 text-[13px] font-medium"
 				>
 					{shownTrail.map((crumb, index) => (
 						<span
