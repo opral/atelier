@@ -105,6 +105,7 @@ export function NameDialog({
 		requestAnimationFrame(() => {
 			const input = inputRef.current;
 			if (!input) return;
+			input.focus();
 			const dot = initialName.lastIndexOf(".");
 			input.setSelectionRange(0, dot > 0 ? dot : initialName.length);
 		});
@@ -283,16 +284,36 @@ export function MoveDialog({
 		};
 	const { count, destinations, currentDirectory } = shown.current;
 	const [destination, setDestination] = useState(currentDirectory);
+	const crumbsRef = useRef<HTMLElement>(null);
+	const listRef = useRef<HTMLUListElement>(null);
+	const cameFrom = useRef<string | null>(null);
 	useEffect(() => {
-		if (open) setDestination(currentDirectory);
+		if (!open) return;
+		setDestination(currentDirectory);
+		cameFrom.current = null;
 	}, [currentDirectory, open]);
 	const segments = destination.split("/").filter(Boolean);
-	// The folder being chosen is the last crumb: keep it in view.
-	const crumbsRef = useRef<HTMLElement>(null);
+	// The folder being chosen is the last crumb, and the folder just left
+	// (going up) is in the list: keep both in view.
 	useEffect(() => {
+		if (!open) return;
 		const nav = crumbsRef.current;
 		if (nav) nav.scrollLeft = nav.scrollWidth;
+		const frame = requestAnimationFrame(() => {
+			const from = cameFrom.current;
+			const row = from
+				? listRef.current?.querySelector<HTMLElement>(
+						`[data-path="${CSS.escape(from)}"]`,
+					)
+				: null;
+			row?.scrollIntoView({ block: "nearest" });
+		});
+		return () => cancelAnimationFrame(frame);
 	}, [destination, open]);
+	const choose = (next: string) => {
+		cameFrom.current = destination;
+		setDestination(next);
+	};
 	const crumbs = [
 		{ path: "/", name: "Home" },
 		...segments.map((name, index) => ({
@@ -319,7 +340,11 @@ export function MoveDialog({
 		>
 			<div className="px-6 pb-5">
 				<nav
-					ref={crumbsRef}
+					ref={(nav) => {
+						crumbsRef.current = nav;
+						// On open the popup mounts after the effect: scroll on attach.
+						if (nav) nav.scrollLeft = nav.scrollWidth;
+					}}
 					aria-label="Destination location"
 					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto text-[13px] [scrollbar-width:none]"
 				>
@@ -337,7 +362,7 @@ export function MoveDialog({
 								aria-current={
 									crumb.path === destination ? "location" : undefined
 								}
-								onClick={() => setDestination(crumb.path)}
+								onClick={() => choose(crumb.path)}
 								className="flex max-w-56 items-center gap-2 rounded-md px-2 py-1.5 text-fg-muted outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-ring aria-[current=location]:font-medium aria-[current=location]:text-fg disabled:opacity-50"
 							>
 								{index === 0 ? (
@@ -349,8 +374,10 @@ export function MoveDialog({
 					))}
 				</nav>
 				<ul
+					ref={listRef}
 					aria-label="Destination folders"
-					className="h-52 overflow-y-auto rounded-lg border border-border p-1"
+					// Five and a half rows: the half row says the list scrolls.
+					className="h-[233px] overflow-y-auto rounded-lg border border-border p-1"
 				>
 					{folders.length === 0 ? (
 						<li className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
@@ -370,11 +397,11 @@ export function MoveDialog({
 						</li>
 					) : (
 						folders.map((folder) => (
-							<li key={folder.path}>
+							<li key={folder.path} data-path={folder.path}>
 								<button
 									type="button"
 									disabled={busy}
-									onClick={() => setDestination(folder.path)}
+									onClick={() => choose(folder.path)}
 									className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-50"
 								>
 									<img

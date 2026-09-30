@@ -141,7 +141,7 @@ export function NewFileMenu({
 						iconUrl={folderBlueIconUrl}
 						label="New folder"
 						shortcut={shortcutHint("⇧⌘ .")}
-						onSelect={onNewFolder}
+						onSelect={chose(onNewFolder)}
 					/>
 				) : null}
 				{onNewFile || onNewFolder ? (

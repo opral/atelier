@@ -315,8 +315,13 @@ export function LibraryView({
 
 	const openFile = useCallback(
 		(file: { readonly id: string; readonly path: string }, newTab: boolean) => {
-			// In review, a changed item opens straight to its diff.
-			if (!newTab && marks.files.has(file.path) && atelier.diff) {
+			// In review, a changed item opens straight to its diff; a removed
+			// one has nothing else to open.
+			if (
+				(!newTab || isRemovedFile(file)) &&
+				marks.files.has(file.path) &&
+				atelier.diff
+			) {
 				atelier.diff.openFile(file.path);
 				return;
 			}
@@ -1400,8 +1405,20 @@ function ItemMenuContent({
 	const Item = variant === "context" ? ContextMenuItem : DropdownMenuItem;
 	const Separator =
 		variant === "context" ? ContextMenuSeparator : DropdownMenuSeparator;
+	// Rename, Move and Delete open a dialog: the menu must not hand focus
+	// back to the card as it closes and take it from the dialog's field.
+	const opensDialog = useRef(false);
+	const toDialog = (action: () => void) => () => {
+		opensDialog.current = true;
+		action();
+	};
 	return (
 		<Content
+			onCloseAutoFocus={(event: Event) => {
+				if (!opensDialog.current) return;
+				opensDialog.current = false;
+				event.preventDefault();
+			}}
 			className="min-w-44 text-[13px]"
 			data-testid="library-item-menu"
 			{...(variant === "dropdown" ? { align: "end" as const } : {})}
@@ -1419,27 +1436,29 @@ function ItemMenuContent({
 			) : null}
 			{actions.readOnly ? null : (
 				<>
-					<Item onSelect={() => actions.rename(entry)}>
+					<Item onSelect={toDialog(() => actions.rename(entry))}>
 						<PencilLine aria-hidden="true" />
 						Rename
 						<MenuShortcut>F2</MenuShortcut>
 					</Item>
-					<Item onSelect={() => actions.move([entry])}>
+					<Item onSelect={toDialog(() => actions.move([entry]))}>
 						<FolderInput aria-hidden="true" />
 						Move…
 					</Item>
 				</>
 			)}
-			<Item onSelect={() => actions.download([entry])}>
-				<Download aria-hidden="true" />
-				Download
-			</Item>
+			{file && isRemovedFile(file) ? null : (
+				<Item onSelect={() => actions.download([entry])}>
+					<Download aria-hidden="true" />
+					Download
+				</Item>
+			)}
 			{actions.readOnly ? null : (
 				<>
 					<Separator />
 					<Item
 						className="text-danger focus:text-danger [&_svg:not([class*='text-'])]:text-danger"
-						onSelect={() => actions.remove([entry])}
+						onSelect={toDialog(() => actions.remove([entry]))}
 					>
 						<Trash2 aria-hidden="true" />
 						Delete
