@@ -44,21 +44,27 @@ export function DeclarativeExtension({
 	const [error, setError] = useState<Error | null>(null);
 	const documentPath =
 		typeof view.state.filePath === "string" ? view.state.filePath : undefined;
+	// The document's Lix handle is scoped from what it depends on — the base
+	// handle, the host's scoping, the document — never from the runtime as a
+	// whole. The runtime is rebuilt on every shell change (the tab in front,
+	// a review opening), and a new handle is a new query cache: every read of
+	// the view went back to pending and the editor was torn down and built
+	// again, a blank flash each time a checkpoint was opened.
+	const scopeDocumentLix = atelier.scopeDocumentLix;
+	const baseLix = atelier.lix;
+	const documentFileId =
+		typeof view.state.fileId === "string" ? view.state.fileId : undefined;
+	const documentLix = useMemo(
+		() =>
+			documentPath && scopeDocumentLix
+				? scopeDocumentLix(documentPath, documentFileId, baseLix)
+				: baseLix,
+		[baseLix, documentFileId, documentPath, scopeDocumentLix],
+	);
 	const documentAtelier = useMemo(
 		() =>
-			documentPath && atelier.scopeDocumentLix
-				? {
-						...atelier,
-						lix: atelier.scopeDocumentLix(
-							documentPath,
-							typeof view.state.fileId === "string"
-								? view.state.fileId
-								: undefined,
-							atelier.lix,
-						),
-					}
-				: atelier,
-		[atelier, documentPath, view.state.fileId],
+			documentLix === atelier.lix ? atelier : { ...atelier, lix: documentLix },
+		[atelier, documentLix],
 	);
 	const destination: AtelierLocation =
 		typeof view.state.filePath === "string" &&
