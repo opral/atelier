@@ -90,9 +90,11 @@ export function NameDialog({
 }) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [value, setValue] = useState(initialName);
+	const [emptyError, setEmptyError] = useState(false);
 	useEffect(() => {
 		if (!open) return;
 		setValue(initialName);
+		setEmptyError(false);
 		// Select the stem, as Finder does: the extension is rarely the edit.
 		requestAnimationFrame(() => {
 			const input = inputRef.current;
@@ -114,6 +116,8 @@ export function NameDialog({
 				onSubmit={(event) => {
 					event.preventDefault();
 					const name = value.trim();
+					// An empty name says why nothing happened.
+					setEmptyError(name.length === 0);
 					if (name && !busy) onSubmit(name);
 				}}
 			>
@@ -122,17 +126,19 @@ export function NameDialog({
 					<input
 						ref={inputRef}
 						value={value}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={(event) => {
+							setValue(event.target.value);
+							setEmptyError(false);
+						}}
 						aria-label="Name"
-						required
 						disabled={busy}
 						maxLength={255}
 						aria-invalid={error ? true : undefined}
 						className="h-10 w-full rounded-lg border border-border bg-panel px-3 text-[14px] font-normal text-fg outline-none focus:ring-2 focus:ring-ring"
 					/>
-					{error ? (
+					{error || emptyError ? (
 						<span role="alert" className="text-[13px] font-normal text-danger">
-							{error}
+							{emptyError ? "Enter a name." : error}
 						</span>
 					) : null}
 				</label>
@@ -145,7 +151,7 @@ export function NameDialog({
 					>
 						Cancel
 					</Button>
-					<Button type="submit" disabled={busy || value.trim().length === 0}>
+					<Button type="submit" disabled={busy}>
 						{busy ? "Saving…" : submitLabel}
 					</Button>
 				</DialogFooter>

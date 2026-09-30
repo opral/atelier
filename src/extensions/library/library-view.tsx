@@ -174,6 +174,10 @@ export function LibraryView({
 	const searchRef = useRef<HTMLInputElement>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const [dialog, setDialog] = useState<Dialog | null>(null);
+	// The name dialog keeps its title while it fades out after closing.
+	const lastNameDialog = useRef<"rename" | "new-folder">("rename");
+	if (dialog?.type === "rename" || dialog?.type === "new-folder")
+		lastNameDialog.current = dialog.type;
 	const [busy, setBusy] = useState(false);
 	const [dialogError, setDialogError] = useState<string | null>(null);
 	const [toast, setToast] = useState<LibraryToast | null>(null);
@@ -926,7 +930,10 @@ export function LibraryView({
 								hereDirectory={ensureDirectoryPath(hereDirectory)}
 								existingDirectories={existingDirectories}
 								onSetDefaultFolder={setDefaultFolder}
-								onNewFile={() => void createTyped("generic")}
+								// In a kind, a new file is one of that kind.
+								onNewFile={() =>
+									void createTyped(KIND_FILE_TYPE[kind] ?? "generic")
+								}
 								{...(mode === "folders"
 									? {
 											onNewFolder: () => {
@@ -1020,7 +1027,9 @@ export function LibraryView({
 				<>
 					<NameDialog
 						open={dialog?.type === "rename" || dialog?.type === "new-folder"}
-						title={dialog?.type === "new-folder" ? "New folder" : "Rename"}
+						title={
+							lastNameDialog.current === "new-folder" ? "New folder" : "Rename"
+						}
 						submitLabel={
 							dialog?.type === "new-folder" ? "Create folder" : "Save"
 						}
@@ -1147,10 +1156,21 @@ function summarizeUpload(paths: readonly string[], data: LibraryData): string {
 			file.path.endsWith(`.${extension}`),
 		);
 		const kind = known?.kind ?? guessKind(extension);
-		counts.set(kind, (counts.get(kind) ?? 0) + 1);
+		// Media says what it is: an image, a video, a PDF.
+		const noun =
+			kind !== "media"
+				? kind
+				: extension === "pdf"
+					? "PDF"
+					: ["mp4", "mov", "webm"].includes(extension)
+						? "video"
+						: "image";
+		counts.set(noun, (counts.get(noun) ?? 0) + 1);
 	}
-	const parts = [...counts].map(([kind, count]) =>
-		countLabel(kind as LibraryKind, count),
+	const parts = [...counts].map(([noun, count]) =>
+		noun === "PDF" || noun === "video" || noun === "image"
+			? `${count} ${noun}${count === 1 ? "" : "s"}`
+			: countLabel(noun as LibraryKind, count),
 	);
 	if (parts.length === 0) return "Nothing added";
 	const list =
