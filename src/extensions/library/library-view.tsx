@@ -1671,7 +1671,7 @@ function GridCard({
 								className="size-3.5 shrink-0"
 							/>
 							<span
-								className={`min-w-0 flex-1 truncate text-[12.5px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
+								className={`min-w-0 flex-auto truncate text-[12.5px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
 							>
 								{file.displayName}
 							</span>
