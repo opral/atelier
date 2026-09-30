@@ -849,7 +849,10 @@ describe("checkpoint conversation flows", () => {
 			fireEvent.click(
 				within(list).getByRole("button", { name: "Show 3 more files" }),
 			);
-			expect(within(list).getAllByRole("button")).toHaveLength(6);
+			// Six files, and Show less.
+			expect(within(list).getAllByRole("button")).toHaveLength(7);
+			fireEvent.click(within(list).getByRole("button", { name: "Show less" }));
+			expect(within(list).getAllByRole("button")).toHaveLength(4);
 		} finally {
 			view.unmount();
 			await lix.close();
