@@ -32,6 +32,8 @@ export type {
 	AtelierExtensionRuntime,
 	AtelierExtensionState,
 	AtelierExtensionView,
+	AtelierLibraryKind,
+	AtelierLibraryOptions,
 } from "./extension-api";
 export {
 	deleteWorkspaceEntry,

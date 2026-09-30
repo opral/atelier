@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { Upload } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -34,8 +35,11 @@ export type NewFileMenuProps = {
 	readonly onNewCsv: () => void;
 	readonly onNewExcalidraw: () => void;
 	readonly onNewFile: () => void;
-	readonly onNewFolder: () => void;
+	/** Absent where folders are not shown, e.g. the Library's Grid. */
+	readonly onNewFolder?: () => void;
 	readonly onNewMarkdown: () => void;
+	/** Adds "Upload…" at the end: the same import a drop does. */
+	readonly onUpload?: () => void;
 	readonly defaultFolders: DefaultFolders;
 	readonly folderOptions: readonly PickerFolder[];
 	readonly hereDirectory: string;
@@ -65,6 +69,7 @@ export function NewFileMenu({
 	onNewFile,
 	onNewFolder,
 	onNewMarkdown,
+	onUpload,
 	defaultFolders,
 	folderOptions,
 	hereDirectory,
@@ -109,13 +114,15 @@ export function NewFileMenu({
 				/>
 				{/* No default folder for New folder: a folder is not a file type,
 				    and "always nest one level in" is not a thing anyone wants. */}
-				<NewMenuItem
-					dataAttr="file-new-folder"
-					iconUrl={folderBlueIconUrl}
-					label="New folder"
-					shortcut={shortcutHint("⇧⌘ .")}
-					onSelect={onNewFolder}
-				/>
+				{onNewFolder ? (
+					<NewMenuItem
+						dataAttr="file-new-folder"
+						iconUrl={folderBlueIconUrl}
+						label="New folder"
+						shortcut={shortcutHint("⇧⌘ .")}
+						onSelect={onNewFolder}
+					/>
+				) : null}
 				<DropdownMenuSeparator className="my-1.5" />
 				<NewMenuItem
 					dataAttr="file-new-markdown"
@@ -138,6 +145,23 @@ export function NewFileMenu({
 					onSelect={onNewExcalidraw}
 					trailing={slotFor("excalidraw", "file-new-excalidraw")}
 				/>
+				{onUpload ? (
+					<>
+						<DropdownMenuSeparator className="my-1.5" />
+						<DropdownMenuItem
+							className="gap-2 py-1.75 text-xs"
+							data-attr="file-new-upload"
+							onSelect={onUpload}
+						>
+							<Upload
+								aria-hidden="true"
+								className="size-3.5 shrink-0 text-fg-subtle"
+								strokeWidth={2}
+							/>
+							<span className="min-w-0 flex-1 truncate">Upload…</span>
+						</DropdownMenuItem>
+					</>
+				) : null}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

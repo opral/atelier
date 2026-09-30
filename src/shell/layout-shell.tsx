@@ -1361,8 +1361,11 @@ function LayoutShellLoadedContentResolved({
 				mainKinds.add(definition.kind);
 			}
 		}
+		const homeKind = mainAreaOptions?.home?.extensionId ?? null;
 		return createCentralSlotBehavior({
-			homeKind: mainAreaOptions?.home?.extensionId ?? null,
+			homeKind,
+			homeMultiInstance:
+				homeKind !== null && extensionMap.get(homeKind)?.multiInstance === true,
 			mainKinds,
 		});
 	}, [mainAreaOptions, extensionMap]);
@@ -3934,7 +3937,16 @@ function LayoutShellLoadedContentResolved({
 				handleAddView(area, extensionId, options.state);
 				return undefined;
 			}
-			const isHome = mainBehavior.homeKind === extensionId;
+			// A multi-instance home opens further tabs of itself on request; a
+			// plain open still lands on the pinned home.
+			const isHome =
+				mainBehavior.homeKind === extensionId &&
+				!(
+					definition.multiInstance &&
+					(options.newTab === true ||
+						(options.instanceId !== undefined &&
+							options.instanceId !== CENTRAL_HOME_INSTANCE))
+				);
 			if (!isHome && options.instanceId === CENTRAL_HOME_INSTANCE) {
 				throw new Error(
 					`The instance id "${CENTRAL_HOME_INSTANCE}" is reserved for the configured home extension.`,
@@ -4750,6 +4762,9 @@ function LayoutShellLoadedContentResolved({
 		],
 	);
 
+	const activeMainKind = activeCentralEntry?.kind ?? null;
+	const activeMainInstance = activeCentralEntry?.instance ?? null;
+	const activeMainState = activeCentralEntry?.state;
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
@@ -4766,13 +4781,26 @@ function LayoutShellLoadedContentResolved({
 			...(configuration.filesView !== undefined
 				? { filesView: configuration.filesView }
 				: {}),
+			...(configuration.library !== undefined
+				? { library: configuration.library }
+				: {}),
 			events: { emit: emitEvent },
 			documents: {
 				...effectiveAtelierInstance.documents,
 				activeFileId: activeCentralFileId,
 				activeFilePath: activeDocumentPath,
 			},
-			views: effectiveAtelierInstance.views,
+			views: {
+				...effectiveAtelierInstance.views,
+				activeMain:
+					activeMainKind && activeMainInstance
+						? {
+								extensionId: activeMainKind,
+								instanceId: activeMainInstance,
+								state: activeMainState ?? {},
+							}
+						: null,
+			},
 			preferences: {
 				get: (extensionId: string, key: string) =>
 					preferencesFor(extensionId).get(key),
@@ -4798,6 +4826,7 @@ function LayoutShellLoadedContentResolved({
 			configuration.debug,
 			configuration.documentLinks,
 			configuration.filesView,
+			configuration.library,
 			configuration.scopeDocumentLix,
 			configuration.readOnly,
 			emitEvent,
@@ -4806,6 +4835,9 @@ function LayoutShellLoadedContentResolved({
 			effectiveAtelierInstance.documents,
 			effectiveAtelierInstance.views,
 			preferencesFor,
+			activeMainKind,
+			activeMainInstance,
+			activeMainState,
 			activeCentralFileId,
 			activeDocumentPath,
 			lix,

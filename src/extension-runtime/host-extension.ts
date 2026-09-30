@@ -13,6 +13,7 @@ export function hostExtensionDefinition(
 			registration.description ?? registration.name ?? registration.id,
 		icon: registration.icon ?? Puzzle,
 		fileExtensions: normalizeFileExtensions(registration.fileExtensions),
+		...(registration.kind ? { libraryKind: registration.kind } : {}),
 		multiInstance: registration.multiInstance,
 		placement: registration.placement,
 		hidden: registration.hidden,

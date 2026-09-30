@@ -3,6 +3,12 @@ import type { CommitSpan, Lix } from "@lix-js/sdk";
 
 export type AtelierArea = "left" | "main" | "right";
 
+/**
+ * What a file is to a person, as the Library groups it: the view that opens
+ * the file says so in its manifest. A file no view claims is "other".
+ */
+export type AtelierLibraryKind = "pages" | "tables" | "drawings" | "media";
+
 /** Metadata for an already-loaded host extension entry. */
 export type ExtensionManifest = {
 	readonly apiVersion: 1;
@@ -10,6 +16,8 @@ export type ExtensionManifest = {
 	readonly name: string;
 	readonly description?: string;
 	readonly fileExtensions?: readonly string[];
+	/** The Library kind of the files this view opens (a file handler only). */
+	readonly kind?: AtelierLibraryKind;
 	readonly multiInstance?: boolean;
 	/**
 	 * Panel sides this view may occupy. Defaults to the side areas; main
@@ -27,6 +35,7 @@ export type ExtensionManifest = {
 /** Stable ids for replacing Atelier's bundled extension views. */
 export const ATELIER_BUILTIN_EXTENSION_IDS = {
 	files: "atelier_files",
+	library: "atelier_library",
 	history: "atelier_history",
 	debug: "atelier_debug",
 	markdown: "atelier_file",
@@ -431,7 +440,16 @@ export type AtelierExtensionRuntime = {
 		readonly activeFileId: string | null;
 		readonly activeFilePath: string | null;
 	};
-	readonly views: AtelierViewsApi;
+	readonly views: AtelierViewsApi & {
+		/** The main view in front: what a navigation surface marks as current. */
+		readonly activeMain?: {
+			readonly extensionId: string;
+			readonly instanceId: string;
+			readonly state: AtelierExtensionState;
+		} | null;
+	};
+	/** Host contributions to the bundled Library view. */
+	readonly library?: AtelierLibraryOptions;
 	/**
 	 * Read and write another extension's preference without taking ownership
 	 * of its defaults. A host surface that mirrors a bundled extension reads
@@ -462,6 +480,21 @@ export type AtelierExtensionRuntime = {
 	readonly diff?: AtelierDiffApi;
 };
 
+/**
+ * What a host adds to the bundled Library. The Library is complete without
+ * it; a host fills the moments that are about the product, not the files.
+ */
+export type AtelierLibraryOptions = {
+	/**
+	 * Shown in All when the workspace has no files yet: the host's own
+	 * onboarding (connect an agent, start writing). Without it the Library
+	 * shows its plain empty state.
+	 */
+	readonly EmptyWorkspace?: ComponentType<{
+		readonly atelier: AtelierExtensionRuntime;
+	}>;
+};
+
 export type AtelierExtensionView = {
 	readonly instanceId: string;
 	readonly state: AtelierExtensionState;
@@ -482,6 +515,8 @@ export type AtelierExtensionRegistration = {
 	readonly description?: string;
 	readonly icon?: ComponentType<{ className?: string }>;
 	readonly fileExtensions?: readonly string[];
+	/** The Library kind of the files this view opens; see `AtelierLibraryKind`. */
+	readonly kind?: AtelierLibraryKind;
 	readonly multiInstance?: boolean;
 	readonly placement?: readonly AtelierArea[];
 	readonly hidden?: boolean;

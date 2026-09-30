@@ -3,5 +3,6 @@
 	"id": "atelier_pdf",
 	"name": "PDF",
 	"entry": "./index.js",
+	"kind": "media",
 	"fileExtensions": ["pdf"]
 }

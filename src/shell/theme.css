@@ -261,6 +261,28 @@
 		rgb(96 165 250),
 		rgb(125 180 255)
 	); /* the folder glyph, everywhere a folder is drawn */
+	/* Library kinds: the glyph that stands for a kind of thing, wherever the
+	   Library names one (its sidebar, a tab, an empty state). */
+	--atelier-kind-pages: light-dark(
+		rgb(194 65 12),
+		rgb(251 146 60)
+	); /* pages: documents written in Markdown */
+	--atelier-kind-tables: light-dark(
+		rgb(47 125 91),
+		rgb(110 200 155)
+	); /* tables: CSV files */
+	--atelier-kind-drawings: light-dark(
+		rgb(180 83 9),
+		rgb(245 170 90)
+	); /* drawings: Excalidraw scenes */
+	--atelier-kind-media: light-dark(
+		rgb(107 87 166),
+		rgb(180 165 230)
+	); /* media: images, video, PDFs */
+	--atelier-kind-database: light-dark(
+		rgb(29 111 165),
+		rgb(120 185 230)
+	); /* the database: tables without a path */
 
 	/* ── Shell ────────────────────────────────────────────────────────── */
 	--atelier-panel-header-height: 40px; /* every panel's header row, so tabs and toolbars align across panels */

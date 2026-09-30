@@ -63,6 +63,8 @@ export interface ExtensionDefinition {
 	 * fileExtensions: ["md", "markdown"]
 	 */
 	readonly fileExtensions?: readonly string[];
+	/** The Library kind of the files this view opens (manifest `kind`). */
+	readonly libraryKind?: import("../extension-api").AtelierLibraryKind;
 	/** Allow more than one view of this extension in the same panel. */
 	readonly multiInstance?: boolean;
 	/**

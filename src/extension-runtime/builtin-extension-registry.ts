@@ -1,5 +1,6 @@
 import type { ExtensionDefinition } from "./types";
 import { extension as filesExtensionDefinition } from "../extensions/files";
+import { extension as libraryExtensionDefinition } from "../extensions/library";
 import { extension as historyExtensionDefinition } from "../extensions/history";
 import { extension as markdownExtensionDefinition } from "../extensions/markdown";
 import { extension as csvExtensionDefinition } from "../extensions/csv";
@@ -14,6 +15,7 @@ import { extension as debugExtensionDefinition } from "../extensions/debug";
 import { extension as conversationExtensionDefinition } from "../extensions/conversation";
 
 export const BUILTIN_VISIBLE_EXTENSION_DEFINITIONS: ExtensionDefinition[] = [
+	libraryExtensionDefinition,
 	filesExtensionDefinition,
 	historyExtensionDefinition,
 	sqlExplorerExtensionDefinition,

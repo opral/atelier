@@ -3,6 +3,7 @@ import type { AtelierJsonValue } from "../extension-api";
 import {
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
+	LIBRARY_EXTENSION_KIND,
 } from "../extension-runtime/extension-instance-helpers";
 
 /**
@@ -79,6 +80,20 @@ const DEFAULT_RIGHT_PANEL_STATE: AreaState = {
 	activeInstance: "history-default",
 };
 
+/**
+ * A left panel still holding only the old untouched default — the Files view
+ * Atelier seeded before the Library existed — becomes the new default. A
+ * Files view someone added, or a panel they arranged, stays as it is.
+ */
+function withLibraryDefault(area: AreaState): AreaState {
+	const [only] = area.views;
+	return area.views.length === 1 &&
+		only?.instance === "files-default" &&
+		only.kind === FILES_EXTENSION_KIND
+		? DEFAULT_ATELIER_UI_STATE.areas.left
+		: area;
+}
+
 /** Seeds the History default into a right panel persisted with no views. */
 function withDefaultRightView(area: AreaState): AreaState {
 	return area.views.length === 0 ? DEFAULT_RIGHT_PANEL_STATE : area;
@@ -87,9 +102,10 @@ function withDefaultRightView(area: AreaState): AreaState {
 export const DEFAULT_ATELIER_UI_STATE: AtelierUiState = {
 	focusedArea: "main",
 	areas: {
+		// The Library is the default left panel; Files stays one menu away.
 		left: {
-			views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
-			activeInstance: "files-default",
+			views: [{ instance: "library-default", kind: LIBRARY_EXTENSION_KIND }],
+			activeInstance: "library-default",
 		},
 		main: { views: [], activeInstance: null },
 		right: DEFAULT_RIGHT_PANEL_STATE,
@@ -218,10 +234,12 @@ export function coerceAtelierUiState(raw: unknown): AtelierUiState {
 	return {
 		focusedArea,
 		areas: {
-			left: dedupeArea(
-				coerceAreaState(
-					areasCandidate.left,
-					DEFAULT_ATELIER_UI_STATE.areas.left,
+			left: withLibraryDefault(
+				dedupeArea(
+					coerceAreaState(
+						areasCandidate.left,
+						DEFAULT_ATELIER_UI_STATE.areas.left,
+					),
 				),
 			),
 			main: dedupeArea(
