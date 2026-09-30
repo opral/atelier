@@ -290,13 +290,26 @@ export function LibraryView({
 		navigate({ dirPath: next });
 	}, [dirPath, history.forward, navigate]);
 
-	// A folder that vanished (deleted, moved elsewhere) returns the tab to
-	// the nearest folder that still exists.
+	// A folder renamed or moved while open is followed to its new path; one
+	// that vanished returns the tab to the nearest folder that still exists.
+	const openDirectoryId = useRef<string | null>(null);
 	useEffect(() => {
 		if (!data || mode !== "folders" || dirPath === "/" || viewingHistory)
 			return;
-		if (data.directories.some((directory) => directory.path === dirPath))
+		const here = data.directories.find(
+			(directory) => directory.path === dirPath,
+		);
+		if (here) {
+			openDirectoryId.current = here.id;
 			return;
+		}
+		const moved = data.directories.find(
+			(directory) => directory.id === openDirectoryId.current,
+		);
+		if (moved) {
+			navigate({ dirPath: moved.path });
+			return;
+		}
 		const segments = dirPath.split("/").filter(Boolean);
 		let next = "/";
 		while (segments.length > 0) {
@@ -1393,7 +1406,10 @@ function ItemMenuContent({
 	actions,
 	onOpenFolderInNewTab,
 	variant = "context",
+	removed = false,
 }: {
+	/** A review's removed item: it can be opened (to its diff), nothing else. */
+	readonly removed?: boolean;
 	readonly entry: LibraryEntry;
 	readonly file?: LibraryFile;
 	readonly actions: ItemActions;
@@ -1447,7 +1463,7 @@ function ItemMenuContent({
 					</Item>
 				</>
 			)}
-			{file && isRemovedFile(file) ? null : (
+			{removed || (file && isRemovedFile(file)) ? null : (
 				<Item onSelect={() => actions.download([entry])}>
 					<Download aria-hidden="true" />
 					Download
@@ -1969,6 +1985,7 @@ function RowList({
 						{...(file ? { file } : {})}
 						actions={actions}
 						{...(isFolder ? { onOpenFolderInNewTab: () => open(true) } : {})}
+						removed={removed}
 					/>
 				</ContextMenu>
 				<ItemMenuButton
@@ -1981,6 +1998,7 @@ function RowList({
 						{...(file ? { file } : {})}
 						actions={actions}
 						{...(isFolder ? { onOpenFolderInNewTab: () => open(true) } : {})}
+						removed={removed}
 					/>
 				</ItemMenuButton>
 			</li>
@@ -1996,7 +2014,14 @@ function RowList({
 					name: folder.directory.name,
 					icon: folderBlueIconUrl,
 					meta: countLabel(kind, folder.count),
-					glyph: status === "added" ? "added" : status ? "contains" : null,
+					// A folder the review removed is marked so, whatever it held.
+					glyph: isRemovedFile(folder.directory)
+						? "removed"
+						: status === "added"
+							? "added"
+							: status
+								? "contains"
+								: null,
 					dim: (marks.active && !status) || folder.directory.hidden,
 					open: (newTab) => onOpenFolder(folder.directory.path, { newTab }),
 					removed: isRemovedFile(folder.directory),

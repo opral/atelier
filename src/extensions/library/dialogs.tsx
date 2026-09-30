@@ -5,6 +5,23 @@ import { ChevronRight, FolderOpen, House, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import folderBlueIconUrl from "../files/assets/folder-blue.svg";
 
+/**
+ * The element focused last outside a menu. A dialog opened from a menu item
+ * returns focus there when it closes: the item it was opened from is gone.
+ */
+let focusBeforeMenu: HTMLElement | null = null;
+let trackingFocus = false;
+function trackFocusBeforeMenu() {
+	if (trackingFocus || typeof document === "undefined") return;
+	trackingFocus = true;
+	document.addEventListener("focusin", (event) => {
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) return;
+		if (target.closest('[role="menu"], [role="dialog"]')) return;
+		focusBeforeMenu = target;
+	});
+}
+
 function LibraryDialog({
 	open,
 	busy,
@@ -22,6 +39,34 @@ function LibraryDialog({
 	readonly initialFocus?: React.RefObject<HTMLElement | null>;
 	readonly children: ReactNode;
 }) {
+	trackFocusBeforeMenu();
+	const returnTo = useRef<HTMLElement | null>(null);
+	const wasOpen = useRef(false);
+	useEffect(() => {
+		if (open) {
+			const active = document.activeElement;
+			returnTo.current =
+				active instanceof HTMLElement && !active.closest('[role="menu"]')
+					? active
+					: focusBeforeMenu;
+			wasOpen.current = true;
+			return;
+		}
+		if (!wasOpen.current) return;
+		wasOpen.current = false;
+		// After the close animation, only if nothing else has taken focus.
+		const timer = setTimeout(() => {
+			const target = returnTo.current;
+			returnTo.current = null;
+			if (
+				target?.isConnected &&
+				(document.activeElement === document.body ||
+					document.activeElement === null)
+			)
+				target.focus({ preventScroll: true });
+		}, 200);
+		return () => clearTimeout(timer);
+	}, [open]);
 	return (
 		<Dialog.Root
 			open={open}
@@ -285,6 +330,7 @@ export function MoveDialog({
 	const { count, destinations, currentDirectory } = shown.current;
 	const [destination, setDestination] = useState(currentDirectory);
 	const crumbsRef = useRef<HTMLElement>(null);
+	const currentCrumbRef = useRef<HTMLButtonElement>(null);
 	const listRef = useRef<HTMLUListElement>(null);
 	const cameFrom = useRef<string | null>(null);
 	useEffect(() => {
@@ -335,6 +381,9 @@ export function MoveDialog({
 			open={open}
 			busy={busy}
 			title={`Move ${count} ${count === 1 ? "item" : "items"}`}
+			// The folder being chosen, not "Home": on a deep path Home is
+			// scrolled out of view, and its focus ring would be clipped.
+			initialFocus={currentCrumbRef}
 			description="Choose where these items should live."
 			onClose={onClose}
 		>
@@ -346,7 +395,7 @@ export function MoveDialog({
 						if (nav) nav.scrollLeft = nav.scrollWidth;
 					}}
 					aria-label="Destination location"
-					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto text-[13px] [scrollbar-width:none]"
+					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto px-0.5 text-[13px] [scrollbar-width:none]"
 				>
 					{crumbs.map((crumb, index) => (
 						<span key={crumb.path} className="flex shrink-0 items-center gap-1">
@@ -359,6 +408,7 @@ export function MoveDialog({
 							<button
 								type="button"
 								disabled={busy}
+								ref={crumb.path === destination ? currentCrumbRef : undefined}
 								aria-current={
 									crumb.path === destination ? "location" : undefined
 								}
