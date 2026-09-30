@@ -2,9 +2,9 @@ import type { LibraryKind } from "./kinds";
 
 export type LibraryNavKind = LibraryKind | "database";
 
-/** Each kind's tint; "all" and "other" stay neutral. */
+/** Each section's tint; Files wears the folder blue, Other stays neutral. */
 const KIND_TINT: Record<LibraryNavKind, string> = {
-	all: "text-fg",
+	files: "text-folder",
 	pages: "text-kind-pages",
 	tables: "text-kind-tables",
 	drawings: "text-kind-drawings",
@@ -30,20 +30,15 @@ export function KindIcon({
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
-			strokeWidth={kind === "all" ? 2 : 1.9}
+			strokeWidth={1.9}
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			aria-hidden="true"
 			data-kind-icon={kind}
 			className={`shrink-0 ${KIND_TINT[kind]} ${className}`}
 		>
-			{kind === "all" ? (
-				<>
-					<rect x="4" y="4" width="7" height="7" rx="1.5" />
-					<rect x="13" y="4" width="7" height="7" rx="1.5" />
-					<rect x="4" y="13" width="7" height="7" rx="1.5" />
-					<rect x="13" y="13" width="7" height="7" rx="1.5" />
-				</>
+			{kind === "files" ? (
+				<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.2h7.5A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" />
 			) : kind === "pages" ? (
 				<>
 					<rect x="5" y="3" width="14" height="18" rx="2.5" />

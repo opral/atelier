@@ -8,7 +8,6 @@ import {
 	type ButtonHTMLAttributes,
 	type DragEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
-	type MouseEvent,
 	type ReactNode,
 } from "react";
 import {
@@ -20,8 +19,6 @@ import {
 	Download,
 	FileUp,
 	FolderInput,
-	LayoutGrid,
-	List,
 	MoreHorizontal,
 	PencilLine,
 	Plus,
@@ -83,10 +80,7 @@ import {
 	LIBRARY_EXTENSION_ID,
 	libraryLocationFromState,
 	libraryState,
-	preferredMode,
-	rememberMode,
 	type LibraryLocation,
-	type LibraryMode,
 } from "./library-state";
 import {
 	collectDroppedEntries,
@@ -154,9 +148,8 @@ export function LibraryView({
 	readonly atelier: ExtensionRuntime;
 	readonly view: ExtensionView;
 }) {
-	useTrackRecentDocuments(atelier, view);
 	const lix = useLix();
-	const location = libraryLocationFromState(view.state, view.preferences);
+	const location = libraryLocationFromState(view.state);
 	const { kind, mode, dirPath } = location;
 	const session = atelier.diff?.session ?? null;
 	const historicalCommitId =
@@ -166,6 +159,7 @@ export function LibraryView({
 	const viewingHistory = historicalCommitId !== null;
 	// Viewing a checkpoint shows the workspace as it was then.
 	const { data, error } = useLibraryData(historicalCommitId);
+	useTrackRecentDocuments(atelier, view, data);
 	const marks = useLibraryReviewMarks(atelier, data);
 	const readOnly = atelier.readOnly || viewingHistory;
 	const showHidden =
@@ -222,14 +216,11 @@ export function LibraryView({
 	}, [atelier.views, currentLabel, expectedLabel.label, view.instanceId]);
 
 	const navigate = useCallback(
-		(next: Partial<LibraryLocation>, options: { newTab?: boolean } = {}) => {
-			const target: LibraryLocation = { ...location, ...next };
-			if (next.kind !== undefined && next.mode === undefined)
-				Object.assign(target, {
-					mode: preferredMode(view.preferences, next.kind),
-				});
-			if (next.mode !== undefined)
-				rememberMode(view.preferences, target.kind, next.mode);
+		(
+			next: Partial<Pick<LibraryLocation, "kind" | "dirPath">>,
+			options: { newTab?: boolean } = {},
+		) => {
+			const target = { ...location, ...next };
 			void atelier.views
 				.open(LIBRARY_EXTENSION_ID, {
 					state: libraryState(target),
@@ -241,7 +232,7 @@ export function LibraryView({
 					console.error("library: unable to navigate", caught);
 				});
 		},
-		[atelier.views, location, view.instanceId, view.preferences],
+		[atelier.views, location, view.instanceId],
 	);
 
 	const openFolder = useCallback(
@@ -254,7 +245,7 @@ export function LibraryView({
 				}));
 			setSelection(new Set());
 			setQuery("");
-			navigate({ mode: "folders", dirPath: next }, options);
+			navigate({ kind: "files", dirPath: next }, options);
 		},
 		[dirPath, navigate],
 	);
@@ -625,17 +616,17 @@ export function LibraryView({
 	const canGoBack = history.back.length > 0 || dirPath !== "/";
 	const canGoForward = history.forward.length > 0;
 
-	// An empty workspace gets the host's onboarding in place of the listing;
-	// it stands alone, with no mode to switch on an empty page.
+	// An empty workspace gets the host's onboarding in place of the listing,
+	// in the sections a first visit lands on: Pages, and Files at the top.
 	const EmptyWorkspace = atelier.library?.EmptyWorkspace;
 	const showsOnboarding = Boolean(
 		data &&
 		!results &&
 		EmptyWorkspace &&
 		!readOnly &&
-		kind === "all" &&
+		(kind === "pages" || kind === "files") &&
 		data.files.every((file) => file.hidden) &&
-		(mode === "grid" ||
+		(kind === "pages" ||
 			(dirPath === "/" &&
 				data.directories.every((directory) => directory.hidden))),
 	);
@@ -715,19 +706,6 @@ export function LibraryView({
 				<div className="flex flex-1 flex-col">
 					<EmptyWorkspace atelier={atelier} />
 				</div>
-			) : listing.folders.length === 0 &&
-			  listing.files.length === 0 &&
-			  dirPath === "/" &&
-			  kind !== "all" ? (
-				<KindEmptyState
-					kind={kind}
-					readOnly={readOnly}
-					onCreate={() => {
-						const fileType = KIND_FILE_TYPE[kind];
-						if (fileType) void createTyped(fileType);
-					}}
-					onUpload={startUpload}
-				/>
 			) : listing.folders.length === 0 && listing.files.length === 0 ? (
 				<EmptyState
 					title={dirPath === "/" ? copy.emptyTitle : "This folder is empty"}
@@ -821,9 +799,9 @@ export function LibraryView({
 				}}
 			/>
 			<div className="mx-auto flex w-[min(1080px,calc(100%-64px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
-				<header className="flex items-center gap-3 pb-3">
+				<header className="flex items-center gap-3 pb-6">
 					{inSubfolder ? (
-						<div className="flex min-w-0 items-center gap-1.5">
+						<div className="flex min-w-0 shrink-[0.1] items-center gap-1.5">
 							<HistoryButton
 								label={`Back (${isMac ? "⌘" : "Ctrl+"}[)`}
 								disabled={!canGoBack}
@@ -892,7 +870,7 @@ export function LibraryView({
 						</h1>
 					)}
 					<span className="flex-1" />
-					<label className="relative flex h-8 w-56 min-w-20 shrink items-center">
+					<label className="relative flex h-8 w-56 min-w-24 shrink-[6] items-center">
 						<Search
 							className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
 							aria-hidden="true"
@@ -970,45 +948,39 @@ export function LibraryView({
 						</div>
 					)}
 				</header>
-				<div className="flex min-h-8 items-center gap-2 pb-4">
-					{mode === "folders" && selection.size > 0 && !readOnly ? (
-						<SelectionToolbar
-							count={selection.size}
-							onMove={() => {
-								setDialogError(null);
-								setDialog({ type: "move", entries: selectedEntries });
-							}}
-							onDelete={() => {
-								setDialogError(null);
-								setDialog({ type: "delete", entries: selectedEntries });
-							}}
-							onDownload={() => itemActions.download(selectedEntries)}
-							onOpenInNewTabs={() => {
-								for (const entry of selectedEntries)
-									if (entry.type === "file") openFile(entry, true);
-							}}
-							{...(selectedEntries.length === 1
-								? { onRename: () => itemActions.rename(selectedEntries[0]!) }
-								: {})}
-							onClear={() => setSelection(new Set())}
-						/>
-					) : results ? (
-						<p className="text-[12.5px] text-fg-subtle" aria-live="polite">
-							{results.length === 1 ? "1 result" : `${results.length} results`}
-							{mode === "folders" ? " from every folder" : ""}
-						</p>
-					) : null}
-					<span className="flex-1" />
-					{showsOnboarding ? null : (
-						<ModeSwitch
-							mode={mode}
-							onChange={(next, event) => {
-								setSelection(new Set());
-								navigate({ mode: next }, { newTab: isNewTabClick(event) });
-							}}
-						/>
-					)}
-				</div>
+				{(mode === "folders" && selection.size > 0 && !readOnly) || results ? (
+					<div className="flex min-h-8 items-center gap-2 pb-4">
+						{mode === "folders" && selection.size > 0 && !readOnly ? (
+							<SelectionToolbar
+								count={selection.size}
+								onMove={() => {
+									setDialogError(null);
+									setDialog({ type: "move", entries: selectedEntries });
+								}}
+								onDelete={() => {
+									setDialogError(null);
+									setDialog({ type: "delete", entries: selectedEntries });
+								}}
+								onDownload={() => itemActions.download(selectedEntries)}
+								onOpenInNewTabs={() => {
+									for (const entry of selectedEntries)
+										if (entry.type === "file") openFile(entry, true);
+								}}
+								{...(selectedEntries.length === 1
+									? { onRename: () => itemActions.rename(selectedEntries[0]!) }
+									: {})}
+								onClear={() => setSelection(new Set())}
+							/>
+						) : results ? (
+							<p className="text-[12.5px] text-fg-subtle" aria-live="polite">
+								{results.length === 1
+									? "1 result"
+									: `${results.length} results`}
+								{mode === "folders" ? " from every folder" : ""}
+							</p>
+						) : null}
+					</div>
+				) : null}
 				{body}
 			</div>
 			{dragOver ? (
@@ -1247,53 +1219,6 @@ function HistoryButton({
 	);
 }
 
-function ModeSwitch({
-	mode,
-	onChange,
-}: {
-	readonly mode: LibraryMode;
-	readonly onChange: (mode: LibraryMode, event: MouseEvent) => void;
-}) {
-	const option = (value: LibraryMode, label: string, icon: ReactNode) => (
-		<button
-			type="button"
-			role="radio"
-			aria-checked={mode === value}
-			aria-label={label}
-			title={label}
-			data-testid={`library-mode-${value}`}
-			onClick={(event) => {
-				if (mode !== value || isNewTabClick(event)) onChange(value, event);
-			}}
-			className={`grid h-6 w-7 place-items-center rounded-[5px] transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-				mode === value
-					? "bg-panel text-fg shadow-sm"
-					: "text-fg-subtle hover:text-fg"
-			}`}
-		>
-			{icon}
-		</button>
-	);
-	return (
-		<div
-			role="radiogroup"
-			aria-label="View"
-			className="flex items-center gap-0.5 rounded-[7px] bg-bg-active p-0.5"
-		>
-			{option(
-				"grid",
-				"Grid",
-				<LayoutGrid className="size-3.5" aria-hidden="true" />,
-			)}
-			{option(
-				"folders",
-				"Folders",
-				<List className="size-3.5" aria-hidden="true" />,
-			)}
-		</div>
-	);
-}
-
 function EmptyState({
 	title,
 	body,
@@ -1353,7 +1278,7 @@ function KindEmptyState({
 					{copy.createLabel}
 				</AtelierActionButton>
 			) : null}
-			{kind === "all" ? null : (
+			{kind === "files" ? null : (
 				<AtelierActionButton
 					variant="secondary"
 					className="h-8 px-3 py-0 text-[13px]"

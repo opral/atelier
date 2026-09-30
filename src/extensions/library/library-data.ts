@@ -11,6 +11,7 @@ import {
 	libraryKindOfPath,
 	matchesLibraryKind,
 	parentDirectoryOf,
+	type FileKind,
 	type LibraryKind,
 } from "./kinds";
 
@@ -19,7 +20,7 @@ export type LibraryFile = {
 	readonly path: string;
 	readonly name: string;
 	readonly directory: string;
-	readonly kind: Exclude<LibraryKind, "all">;
+	readonly kind: FileKind;
 	readonly displayName: string;
 	readonly updatedAt: string;
 	readonly hidden: boolean;
@@ -239,14 +240,17 @@ export function folderListing(
 				entries += 1;
 				if (matchesLibraryKind(kind, file.kind)) count += 1;
 			}
-			if (kind === "all") {
+			if (kind === "files") {
 				for (const nested of data.directories)
 					if (nested.path.startsWith(inside) && visible(nested.hidden))
 						entries += 1;
 			}
-			return { directory: candidate, count: kind === "all" ? entries : count };
+			return {
+				directory: candidate,
+				count: kind === "files" ? entries : count,
+			};
 		})
-		.filter((folder) => kind === "all" || folder.count > 0);
+		.filter((folder) => kind === "files" || folder.count > 0);
 	const files = data.files
 		.filter(
 			(file) =>
@@ -270,10 +274,7 @@ export type LibraryReviewMarks = {
 	/** Folders holding a changed file: "added" when all they hold is new. */
 	readonly directories: ReadonlyMap<string, "added" | "modified">;
 	/** Kinds holding a change: "added" when all they gained is new. */
-	readonly kinds: ReadonlyMap<
-		Exclude<LibraryKind, "all">,
-		"added" | "modified"
-	>;
+	readonly kinds: ReadonlyMap<FileKind, "added" | "modified">;
 };
 
 const NO_REVIEW: LibraryReviewMarks = {
@@ -297,7 +298,7 @@ export function useLibraryReviewMarks(
 		if (!session || session.files.length === 0) return NO_REVIEW;
 		const extensions = [...extensionMap.values()];
 		const files = new Map<string, DiffGlyphKind>();
-		const kinds = new Map<Exclude<LibraryKind, "all">, "added" | "modified">();
+		const kinds = new Map<FileKind, "added" | "modified">();
 		const directories = new Map<string, "added" | "modified">();
 		for (const file of session.files) {
 			if (file.review?.status === "resolved") continue;

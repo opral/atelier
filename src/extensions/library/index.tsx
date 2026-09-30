@@ -7,7 +7,8 @@ import manifestJson from "./manifest.json";
 import { LibrarySidebar } from "./sidebar";
 import { LibraryView } from "./library-view";
 import { KindIcon } from "./kind-icon";
-import { isLibraryKind, LIBRARY_KINDS, type LibraryKind } from "./kinds";
+import { LIBRARY_KINDS, type LibraryKind } from "./kinds";
+import { libraryLocationFromState } from "./library-state";
 
 const KIND_TAB_ICONS = Object.fromEntries(
 	LIBRARY_KINDS.map((kind) => {
@@ -45,6 +46,5 @@ export const extension: ExtensionDefinition = {
 	...definition,
 	multiInstance: true,
 	// A Library tab wears the glyph of the kind it shows.
-	iconForState: (state) =>
-		KIND_TAB_ICONS[isLibraryKind(state?.kind) ? state.kind : "all"],
+	iconForState: (state) => KIND_TAB_ICONS[libraryLocationFromState(state).kind],
 };

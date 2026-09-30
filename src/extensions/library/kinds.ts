@@ -2,18 +2,21 @@ import type { AtelierLibraryKind } from "../../extension-api";
 import { findFileHandlerExtension } from "../../extension-runtime/file-handlers";
 import type { ExtensionDefinition } from "../../extension-runtime/types";
 
+/** What a file is: the kind its handler declares, or "other". */
+export type FileKind = AtelierLibraryKind | "other";
+
 /**
- * A Library filter. The kinds a file handler can declare, plus the two the
- * Library adds itself: everything, and everything no handler claims.
+ * A Library section. The kinds are grids of one kind of thing; Files is the
+ * filesystem itself, one folder at a time, every kind in it.
  */
-export type LibraryKind = "all" | AtelierLibraryKind | "other";
+export type LibraryKind = FileKind | "files";
 
 export const LIBRARY_KINDS: readonly LibraryKind[] = [
-	"all",
 	"pages",
 	"tables",
 	"drawings",
 	"media",
+	"files",
 	"other",
 ];
 
@@ -29,8 +32,8 @@ export type LibraryKindCopy = {
 };
 
 export const LIBRARY_KIND_COPY: Record<LibraryKind, LibraryKindCopy> = {
-	all: {
-		label: "All",
+	files: {
+		label: "Files",
 		one: "item",
 		many: "items",
 		emptyTitle: "Nothing here yet",
@@ -96,15 +99,15 @@ export function countLabel(kind: LibraryKind, count: number): string {
 export function libraryKindOfPath(
 	extensions: Iterable<ExtensionDefinition>,
 	path: string,
-): Exclude<LibraryKind, "all"> {
+): FileKind {
 	return findFileHandlerExtension(extensions, path)?.libraryKind ?? "other";
 }
 
 export function matchesLibraryKind(
 	kind: LibraryKind,
-	fileKind: Exclude<LibraryKind, "all">,
+	fileKind: FileKind,
 ): boolean {
-	return kind === "all" || kind === fileKind;
+	return kind === "files" || kind === fileKind;
 }
 
 /** Dotfiles and anything under a dot-folder (`.lix/`) stay out of Grid. */
@@ -136,10 +139,7 @@ export function parentDirectoryOf(path: string): string {
  * "Customer interviews", `README.md` stays "README". Media and everything
  * else keep their file name — a `.png` or a `.json` is a file first.
  */
-export function libraryDisplayName(
-	path: string,
-	kind: Exclude<LibraryKind, "all">,
-): string {
+export function libraryDisplayName(path: string, kind: FileKind): string {
 	const name = fileNameOf(path);
 	if (kind === "media" || kind === "other") return name;
 	const dot = name.lastIndexOf(".");
