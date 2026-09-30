@@ -41,6 +41,8 @@ export type NewFileMenuProps = {
 	 * rather than by format. The Library's word for them.
 	 */
 	readonly kindNames?: boolean;
+	/** With kindNames: the row ⌘ . makes here (defaults to New Page). */
+	readonly shortcutType?: "markdown" | "csv" | "excalidraw";
 	/** Absent where folders are not shown, e.g. the Library's Grid. */
 	readonly onNewFolder?: () => void;
 	readonly onNewMarkdown: () => void;
@@ -74,6 +76,7 @@ export function NewFileMenu({
 	onNewExcalidraw,
 	onNewFile,
 	kindNames = false,
+	shortcutType = "markdown",
 	onNewFolder,
 	onNewMarkdown,
 	onUpload,
@@ -104,6 +107,10 @@ export function NewFileMenu({
 		) : null;
 	// A row that created something opens it, focused: the menu must not hand
 	// focus back to its button as it closes and take it from the new file.
+	const shortcutFor = (type: "markdown" | "csv" | "excalidraw") =>
+		kindNames && !onNewFile && type === shortcutType
+			? { shortcut: shortcutHint("⌘ .") }
+			: {};
 	const choseRef = useRef(false);
 	const chose = (action: () => void) => (): void => {
 		choseRef.current = true;
@@ -151,9 +158,7 @@ export function NewFileMenu({
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
 					label={kindNames ? "New Page" : "New Markdown"}
-					{...(kindNames && !onNewFile
-						? { shortcut: shortcutHint("⌘ .") }
-						: {})}
+					{...shortcutFor("markdown")}
 					onSelect={chose(onNewMarkdown)}
 					trailing={slotFor("markdown", "file-new-markdown")}
 				/>
@@ -161,6 +166,7 @@ export function NewFileMenu({
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
 					label={kindNames ? "New Table" : "New CSV"}
+					{...shortcutFor("csv")}
 					onSelect={chose(onNewCsv)}
 					trailing={slotFor("csv", "file-new-csv")}
 				/>
@@ -168,6 +174,7 @@ export function NewFileMenu({
 					dataAttr="file-new-excalidraw"
 					iconUrl={fileExcalidrawIconUrl}
 					label="New Drawing"
+					{...shortcutFor("excalidraw")}
 					onSelect={chose(onNewExcalidraw)}
 					trailing={slotFor("excalidraw", "file-new-excalidraw")}
 				/>

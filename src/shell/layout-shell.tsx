@@ -2665,14 +2665,15 @@ function LayoutShellLoadedContentResolved({
 			}
 			const state = withoutDocumentIdentity(options.state);
 			const activeView = activeEntryFromPanel(panelStatesRef.current.main);
-			// A route (browser Back/Forward, a link) opens a document beside a
-			// non-document view in front, such as a Library or SQL tab, rather
-			// than closing it — as an auto-reveal does.
+			// A route (browser Back/Forward, a reload) never closes a tab to
+			// show its document: one already open is activated where it is;
+			// any other opens in a tab of its own, beside whatever is in front.
+			const alreadyOpen = panelStatesRef.current.main.views.some(
+				(view) => documentPathFromView(view) === normalizedPath,
+			);
 			const newTab =
 				options.newTab ??
-				(options.navigationCause === "route" &&
-				activeView &&
-				!isDocumentView(activeView)
+				(options.navigationCause === "route" && activeView && !alreadyOpen
 					? true
 					: undefined);
 			if (

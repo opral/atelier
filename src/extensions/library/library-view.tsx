@@ -992,6 +992,7 @@ export function LibraryView({
 										existingDirectories={existingDirectories}
 										onSetDefaultFolder={setDefaultFolder}
 										kindNames
+										shortcutType={KIND_FILE_TYPE[kind] ?? "markdown"}
 										{...(mode === "folders"
 											? {
 													onNewFolder: () => {
