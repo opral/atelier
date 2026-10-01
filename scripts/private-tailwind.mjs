@@ -62,7 +62,12 @@ export function privateTailwind() {
 		name: "atelier-private-tailwind",
 		enforce: "pre",
 		transform(code, id) {
-			if (path.resolve(id.split("?")[0]) !== entry) return;
+			const [file, query] = id.split("?", 2);
+			if (path.resolve(file) !== entry) return;
+			// Vite's asset loader returns JavaScript for these requests. The URL's
+			// separate direct CSS request still needs private Tailwind compilation.
+			const params = new URLSearchParams(query);
+			if (params.has("url") || params.has("raw")) return;
 			return { code: isolateTailwind(code), map: null };
 		},
 	};
