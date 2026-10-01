@@ -1,0 +1,10 @@
+/* Opt in only when the host does not generate Tailwind utilities.
+ * The reset remains scoped to Atelier; the utility classes are global. */
+@import "./shell/layers.css";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "tw-animate-css";
+@import "./shell/tailwind.css";
+@import "../dist/atelier.css";
+@source "./";
+@custom-variant dark (&:is(.dark *));

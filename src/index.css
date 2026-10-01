@@ -1,18 +1,16 @@
 @import "./shell/layers.css";
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
-@import "tw-animate-css";
 @import "./shell/theme.css" layer(atelier);
 @import "./shell/document.css" layer(atelier);
-@import "./shell/tailwind.css";
-
-@source "./";
-
-@custom-variant dark (&:is(.dark *));
+/* Resolve @apply with Atelier's vocabulary without emitting host utilities. */
+@reference "tailwindcss/theme.css";
+@reference "./shell/tailwind.css";
 
 /* Every token carries its dark value in light-dark(); the scheme is the switch. */
 @layer atelier {
-	.dark {
+	.atelier-root.dark,
+	.atelier-portal.dark,
+	.dark .atelier-root,
+	.dark .atelier-portal {
 		color-scheme: dark;
 	}
 
@@ -435,7 +433,7 @@
 	}
 }
 
-@layer base {
+@layer atelier {
 	.atelier-root,
 	.atelier-portal,
 	.atelier-root *,
@@ -446,7 +444,12 @@
 	.atelier-portal *::after {
 		@apply border-border outline-ring/50;
 		box-sizing: border-box;
-		border: 0 solid;
+		border-width: 0;
+		border-style: solid;
+	}
+	.atelier-root,
+	.atelier-portal {
+		color-scheme: light;
 	}
 	.atelier-root {
 		@apply bg-panel text-fg;
@@ -528,7 +531,7 @@
 	/* TipTap / ProseMirror base styles */
 }
 
-@layer components {
+@layer atelier {
 	.atelier-root
 		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror

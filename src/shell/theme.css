@@ -9,9 +9,9 @@
  * `panel` is an island on the `bg` canvas; `subtle` is a tint, `strong` a
  * heavier edge. Each token says, at the end of its line, when to use it.
  *
- * Dark values ride along in light-dark(), but the scheme is pinned to light:
+ * Dark values ride along in light-dark(), but mounted roots pin the scheme to light:
  * the dark palette is a first pass nobody has designed yet, so no operating
- * system preference may turn it on. When it is ready, this line becomes
+ * system preference may turn it on. When it is ready, the root declaration becomes
  * `color-scheme: light dark` and `.dark { color-scheme: dark }` (index.css)
  * is the only switch a host needs; nothing else changes.
  *
@@ -20,8 +20,6 @@
  */
 :root,
 :host {
-	color-scheme: light;
-
 	/* ── Surfaces ─────────────────────────────────────────────────────── */
 	--atelier-bg: light-dark(
 		rgb(244 242 239),

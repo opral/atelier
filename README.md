@@ -29,13 +29,44 @@ product's chrome. Atelier owns none of those.
 
 ```tsx
 import { Atelier } from "@opral/atelier";
-import "@opral/atelier/style.css";
+import "@opral/atelier/standalone.css";
 
 <Atelier lix={lix} location={{ path: "/README.md" }} />;
 ```
 
 The host opens the Lix handle and closes it after unmount. Atelier owns its
 UI, subscriptions, extension loading, and editor lifecycle.
+
+### CSS ownership
+
+For a host without Tailwind, import `@opral/atelier/standalone.css` as above.
+It includes component styles and global utilities, with a reset scoped to
+`.atelier-root` and `.atelier-portal`. Do not combine it with a host utility build.
+
+Tailwind v4 hosts generate utilities once in their own stylesheet:
+
+```css
+@layer theme, base, components, atelier, utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@opral/atelier/style.css";
+@import "@opral/atelier/tailwind.css";
+@custom-variant dark (&:is(.dark *));
+```
+
+`style.css` contains the shell and extension styles, namespaced tokens and
+scoped resets; it emits no global Tailwind utilities or Preflight. `tailwind.css`
+is a build-time adapter that registers the published JavaScript as class sources,
+including lazy extension chunks. Vendored source builds use `src/shell/tailwind.css`,
+which registers `src` instead. The host owns Preflight and animation utilities.
+`theme.css`, `document.css` and `layers.css` are also explicit plain CSS exports
+for hosts that need tokens or static document styling independently.
+
+Utilities override Atelier's component layer in either stylesheet order. Host
+CSS outside a layer overrides it too. Override `--atelier-*` tokens on an ancestor
+to retheme a workspace or portal. The token export declares no global
+`color-scheme`; the mounted roots choose light, and a `.dark` root or ancestor
+switches them to dark.
 
 ## Static
 
@@ -82,7 +113,7 @@ Colours are `--atelier-*` custom properties from `@opral/atelier/theme.css`, the
 | `@opral/atelier`                | the shell, and the extension API | React                                                                               |
 | `@opral/atelier/render`         | views, without a shell           | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
 | `@opral/atelier/render.css`     | styles for static views          | generated tokens, no colour literals in rules                                       |
-| `@opral/atelier/style.css`      | styles for the shell             |                                                                                     |
+| `@opral/atelier/style.css`      | embeddable component styles      |                                                                                     |
 | `@opral/atelier/file-icons`     | path → icon                      | no React, no DOM                                                                    |
 | `@opral/atelier/state-adapters` | the shell's persistence ports    |                                                                                     |
 | `@opral/atelier/dev-tools`      | tools for working on Atelier     | not for shipping                                                                    |

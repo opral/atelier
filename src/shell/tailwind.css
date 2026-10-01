@@ -137,3 +137,7 @@
 }
 
 @custom-variant mobile (@media (max-width: 767px));
+
+/* Source consumers and vendored hosts explicitly register Atelier classes.
+ * The published adapter registers the built JavaScript beside it instead. */
+@source "../";

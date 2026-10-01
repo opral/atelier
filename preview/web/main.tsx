@@ -9,7 +9,6 @@ import {
 import { AtelierDeveloperTools } from "@opral/atelier/dev-tools";
 import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import "@opral/atelier/style.css";
 import {
 	HostBrandMark,
 	HostRepositoryPicker,

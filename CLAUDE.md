@@ -97,9 +97,10 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
 - A component's own variables (`--markdown-*`, `--csv-*`) are declared on its
   root and reference tokens; they are never a place to hide a colour.
 - Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else —
-  and it is off for now: `theme.css` pins `color-scheme: light` until the
+  and it is off for now: mounted `.atelier-root`/`.atelier-portal` pin `color-scheme: light` until the
   dark palette has been designed. Keep writing dark values in `light-dark()`.
-  A host rebrands by redeclaring tokens on `:root`; it never overrides
+  The token sheet does not set the host colour scheme. A host rebrands by
+  redeclaring tokens on an ancestor; it never overrides
   component classes.
 - Cascade layers are the override contract: `src/index.css` orders
   `theme, base, components, atelier, utilities`, and every Atelier stylesheet
@@ -146,3 +147,14 @@ export.
 
 The Lix handle, routing, authentication, and the product's chrome belong to the
 host.
+
+## CSS ownership
+
+`style.css` is embeddable component CSS, with scoped resets and no generated
+Tailwind utilities. `@reference` resolves its `@apply` against the stock theme
+and Atelier adapter without emitting them. Hosts own Preflight, animation
+utilities and a single Tailwind build; their first layer declaration includes
+`atelier` before `utilities`. `tailwind.css` registers Atelier source classes
+(the published copy scans built chunks). A host without Tailwind opts into
+`standalone.css`, which includes component CSS and global utilities. New CSS
+exports must ship in `dist`, the package's files whitelist.
