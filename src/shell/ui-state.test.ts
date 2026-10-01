@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { FILES_EXTENSION_KIND } from "../extension-runtime/extension-instance-helpers";
+import {
+	FILES_EXTENSION_KIND,
+	LIBRARY_EXTENSION_KIND,
+} from "../extension-runtime/extension-instance-helpers";
 import {
 	coerceAtelierUiState,
 	coerceAtelierUserPreferences,
@@ -9,15 +12,43 @@ import {
 } from "./ui-state";
 
 describe("coerceAtelierUiState", () => {
-	test("fresh defaults seed Files in the left sidebar", () => {
+	test("fresh defaults seed the Library in the left sidebar", () => {
 		const state = coerceAtelierUiState(undefined);
 
 		expect(state.areas.left.views.map((view) => view.kind)).toEqual([
-			FILES_EXTENSION_KIND,
+			LIBRARY_EXTENSION_KIND,
 		]);
-		expect(state.areas.left.activeInstance).toBe("files-default");
+		expect(state.areas.left.activeInstance).toBe("library-default");
 		expect(state.areas.main.views).toEqual([]);
 		expect(state.layout?.sizes).toEqual({ left: 0, main: 100, right: 0 });
+	});
+
+	test("an untouched old Files default becomes the Library; an arranged panel stays", () => {
+		const withLeft = (
+			left: AtelierUiState["areas"]["left"],
+		): AtelierUiState => ({
+			...DEFAULT_ATELIER_UI_STATE,
+			areas: { ...DEFAULT_ATELIER_UI_STATE.areas, left },
+		});
+		const migrated = coerceAtelierUiState(
+			withLeft({
+				views: [{ instance: "files-default", kind: FILES_EXTENSION_KIND }],
+				activeInstance: "files-default",
+			}),
+		);
+		expect(migrated.areas.left.views.map((view) => view.kind)).toEqual([
+			LIBRARY_EXTENSION_KIND,
+		]);
+
+		const arranged = coerceAtelierUiState(
+			withLeft({
+				views: [{ instance: "atelier_files-1", kind: FILES_EXTENSION_KIND }],
+				activeInstance: "atelier_files-1",
+			}),
+		);
+		expect(arranged.areas.left.views.map((view) => view.kind)).toEqual([
+			FILES_EXTENSION_KIND,
+		]);
 	});
 
 	test("drops a duplicated instance id, keeping the first panel's view", () => {

@@ -4,6 +4,8 @@ import { ATELIER_BUILTIN_EXTENSION_IDS } from "../extension-api";
 
 export const FILES_EXTENSION_KIND =
 	ATELIER_BUILTIN_EXTENSION_IDS.files as ExtensionKind;
+export const LIBRARY_EXTENSION_KIND =
+	ATELIER_BUILTIN_EXTENSION_IDS.library as ExtensionKind;
 export const HISTORY_EXTENSION_KIND =
 	ATELIER_BUILTIN_EXTENSION_IDS.history as ExtensionKind;
 export const FILE_EXTENSION_KIND =

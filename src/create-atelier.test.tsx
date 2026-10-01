@@ -326,7 +326,22 @@ describe("Atelier instance file controller", () => {
 				content: new TextEncoder().encode("# Queued\n"),
 			})
 			.execute();
-		const atelier = createAtelier({ lix });
+		// The inline, folder-relative draft is the Files view's; put it in the
+		// sidebar, where the Library now sits by default.
+		const atelier = createAtelier({
+			lix,
+			sessionStateStore: createMemorySessionStateStore({
+				focusedArea: "main",
+				areas: {
+					left: {
+						views: [{ instance: "atelier_files-1", kind: "atelier_files" }],
+						activeInstance: "atelier_files-1",
+					},
+					main: { views: [], activeInstance: null },
+					right: { views: [], activeInstance: null },
+				},
+			}),
+		});
 		const queuedOpen = atelier.documents.open("/docs/queued.md");
 		let rendered: ReturnType<typeof render> | undefined;
 

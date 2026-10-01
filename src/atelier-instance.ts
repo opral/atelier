@@ -7,6 +7,7 @@ import type {
 	AtelierExtensionRegistration,
 	AtelierExtensionRuntime,
 	AtelierFilesViewOptions,
+	AtelierLibraryOptions,
 	AtelierArea,
 	AtelierViewOpenOptions,
 	AtelierViewsApi,
@@ -70,6 +71,8 @@ export type AtelierOptions = {
 	 * view (e.g. disk files surfaced by filesystem watchers).
 	 */
 	readonly filesView?: AtelierFilesViewOptions;
+	/** Host contributions to the bundled Library view (its onboarding). */
+	readonly library?: AtelierLibraryOptions;
 	/** Main tabs configuration (e.g. the pinned home). */
 	readonly mainArea?: AtelierMainAreaOptions;
 };
@@ -276,6 +279,7 @@ export function createAtelier(options: AtelierOptions): AtelierInstance {
 		...(options.filesView !== undefined
 			? { filesView: options.filesView }
 			: {}),
+		...(options.library !== undefined ? { library: options.library } : {}),
 		...(options.mainArea !== undefined ? { mainArea: options.mainArea } : {}),
 	};
 	Object.defineProperty(instance, CONFIGURATION, {

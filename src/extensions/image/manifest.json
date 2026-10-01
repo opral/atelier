@@ -3,5 +3,6 @@
 	"id": "atelier_image",
 	"name": "Image",
 	"entry": "./index.js",
+	"kind": "media",
 	"fileExtensions": ["svg", "png", "jpg", "jpeg"]
 }

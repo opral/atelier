@@ -1361,8 +1361,11 @@ function LayoutShellLoadedContentResolved({
 				mainKinds.add(definition.kind);
 			}
 		}
+		const homeKind = mainAreaOptions?.home?.extensionId ?? null;
 		return createCentralSlotBehavior({
-			homeKind: mainAreaOptions?.home?.extensionId ?? null,
+			homeKind,
+			homeMultiInstance:
+				homeKind !== null && extensionMap.get(homeKind)?.multiInstance === true,
 			mainKinds,
 		});
 	}, [mainAreaOptions, extensionMap]);
@@ -2662,6 +2665,17 @@ function LayoutShellLoadedContentResolved({
 			}
 			const state = withoutDocumentIdentity(options.state);
 			const activeView = activeEntryFromPanel(panelStatesRef.current.main);
+			// A route (browser Back/Forward, a reload) never closes a tab to
+			// show its document: one already open is activated where it is;
+			// any other opens in a tab of its own, beside whatever is in front.
+			const alreadyOpen = panelStatesRef.current.main.views.some(
+				(view) => documentPathFromView(view) === normalizedPath,
+			);
+			const newTab =
+				options.newTab ??
+				(options.navigationCause === "route" && activeView && !alreadyOpen
+					? true
+					: undefined);
 			if (
 				!options.newTab &&
 				!hasHistoricalEditorRevisionState(state) &&
@@ -2698,7 +2712,7 @@ function LayoutShellLoadedContentResolved({
 					focus: options.focus ?? true,
 					documentOrigin: options.documentOrigin ?? "existing",
 					navigationCause: options.navigationCause,
-					newTab: options.newTab,
+					newTab,
 				});
 				return historicalFile.path;
 			}
@@ -2711,7 +2725,7 @@ function LayoutShellLoadedContentResolved({
 				focus: options.focus ?? true,
 				documentOrigin: options.documentOrigin ?? "existing",
 				navigationCause: options.navigationCause,
-				newTab: options.newTab,
+				newTab,
 			});
 		},
 		[lix, openResolvedFileView, resolveAndOpenFile],
@@ -2853,7 +2867,10 @@ function LayoutShellLoadedContentResolved({
 				openAutoRevealedFile({ fileId: file.id, filePath: file.path });
 				return;
 			}
+			// Like openAutoRevealedFile: a non-document tab stays where it is.
+			const active = activeEntryFromPanel(panelStatesRef.current.main);
 			void resolveAndOpenDocument(file.path, {
+				newTab: active && !isDocumentView(active) ? true : undefined,
 				state: historicalRevisionStateForPath(
 					file.path,
 					range.afterCommitId,
@@ -3480,11 +3497,21 @@ function LayoutShellLoadedContentResolved({
 	useEffect(() => {
 		const entry = activeCentralEntry;
 		if (!entry) {
+			// Only a close empties the area; a fresh workspace that never had a
+			// view in front has nothing to announce.
+			if (lastActivatedCentralViewRef.current !== null)
+				emitEvent({ type: "main_area_emptied" });
 			lastActivatedCentralViewRef.current = null;
 			return;
 		}
+		// A view's location is part of its name: a folder view moved to a new
+		// parent under the same label must still re-announce (`dirPath`).
 		const statePath =
-			typeof entry.state?.path === "string" ? entry.state.path : "";
+			typeof entry.state?.path === "string"
+				? entry.state.path
+				: typeof entry.state?.dirPath === "string"
+					? entry.state.dirPath
+					: "";
 		const filePath = documentPathFromView(entry) ?? "";
 		// A view that names itself once it has read its data (a conversation
 		// titles its tab) re-announces itself, so a host's URL can follow.
@@ -3809,6 +3836,17 @@ function LayoutShellLoadedContentResolved({
 
 	const activeCentralFileId =
 		activeFileIdFromExtensionInstance(activeCentralEntry);
+	// The files open in the main area, as a stable list: a navigation surface
+	// tells a file opened from one that came to front as a tab closed.
+	const openFileIdsKey = mainArea.views
+		.filter(isDocumentView)
+		.map((view) => activeFileIdFromExtensionInstance(view))
+		.filter((id): id is string => id !== null)
+		.join("\n");
+	const openFileIds = useMemo(
+		() => (openFileIdsKey ? openFileIdsKey.split("\n") : []),
+		[openFileIdsKey],
+	);
 
 	const activeFileName = useMemo(() => {
 		if (!activeCentralEntry) return null;
@@ -3934,7 +3972,16 @@ function LayoutShellLoadedContentResolved({
 				handleAddView(area, extensionId, options.state);
 				return undefined;
 			}
-			const isHome = mainBehavior.homeKind === extensionId;
+			// A multi-instance home opens further tabs of itself on request; a
+			// plain open still lands on the pinned home.
+			const isHome =
+				mainBehavior.homeKind === extensionId &&
+				!(
+					definition.multiInstance &&
+					(options.newTab === true ||
+						(options.instanceId !== undefined &&
+							options.instanceId !== CENTRAL_HOME_INSTANCE))
+				);
 			if (!isHome && options.instanceId === CENTRAL_HOME_INSTANCE) {
 				throw new Error(
 					`The instance id "${CENTRAL_HOME_INSTANCE}" is reserved for the configured home extension.`,
@@ -4342,7 +4389,7 @@ function LayoutShellLoadedContentResolved({
 					label:
 						(entry.state?.atelier?.label as string | undefined) ??
 						definition.label,
-					icon: definition.icon,
+					icon: definition.iconForState?.(entry.state) ?? definition.icon,
 					isActive: entry.instance === activeInstance,
 					isPinned: entry.isPinned === true,
 					isPending: entry.isPending === true,
@@ -4750,6 +4797,9 @@ function LayoutShellLoadedContentResolved({
 		],
 	);
 
+	const activeMainKind = activeCentralEntry?.kind ?? null;
+	const activeMainInstance = activeCentralEntry?.instance ?? null;
+	const activeMainState = activeCentralEntry?.state;
 	const extensionRuntime = useMemo(
 		() => ({
 			lix,
@@ -4766,13 +4816,27 @@ function LayoutShellLoadedContentResolved({
 			...(configuration.filesView !== undefined
 				? { filesView: configuration.filesView }
 				: {}),
+			...(configuration.library !== undefined
+				? { library: configuration.library }
+				: {}),
 			events: { emit: emitEvent },
 			documents: {
 				...effectiveAtelierInstance.documents,
 				activeFileId: activeCentralFileId,
 				activeFilePath: activeDocumentPath,
+				openFileIds,
 			},
-			views: effectiveAtelierInstance.views,
+			views: {
+				...effectiveAtelierInstance.views,
+				activeMain:
+					activeMainKind && activeMainInstance
+						? {
+								extensionId: activeMainKind,
+								instanceId: activeMainInstance,
+								state: activeMainState ?? {},
+							}
+						: null,
+			},
 			preferences: {
 				get: (extensionId: string, key: string) =>
 					preferencesFor(extensionId).get(key),
@@ -4798,6 +4862,7 @@ function LayoutShellLoadedContentResolved({
 			configuration.debug,
 			configuration.documentLinks,
 			configuration.filesView,
+			configuration.library,
 			configuration.scopeDocumentLix,
 			configuration.readOnly,
 			emitEvent,
@@ -4806,7 +4871,11 @@ function LayoutShellLoadedContentResolved({
 			effectiveAtelierInstance.documents,
 			effectiveAtelierInstance.views,
 			preferencesFor,
+			activeMainKind,
+			activeMainInstance,
+			activeMainState,
 			activeCentralFileId,
+			openFileIds,
 			activeDocumentPath,
 			lix,
 		],
@@ -4930,6 +4999,11 @@ function LayoutShellLoadedContentResolved({
 						groupRef={panelGroupRef}
 						onLayoutChanged={handleLayoutChanged}
 						className="atelier-panel-group"
+						// Clip, not hide: a hidden box can still be scrolled, and a
+						// click that focused something near its edge scrolled the
+						// whole row of panels a few pixels sideways, cutting the left
+						// panel under the group's edge. A clipped box never scrolls.
+						style={{ overflow: "clip" }}
 					>
 						<Panel
 							id="left"

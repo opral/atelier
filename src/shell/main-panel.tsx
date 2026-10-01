@@ -133,7 +133,7 @@ function EmptyStateContent({
 			</h1>
 			<p className="mt-1.5 max-w-90 text-sm leading-relaxed text-fg-muted text-pretty">
 				{canCreate
-					? "Open a file from the left, or create a new document — saved as plain markdown in this folder."
+					? "Open a file from the left, or create a new document."
 					: "Open a file from the left to read it."}
 			</p>
 			{onCreateNewFile ? (

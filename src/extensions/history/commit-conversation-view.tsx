@@ -16,7 +16,6 @@ import {
 	deleteComment,
 	selectActiveAccountId,
 } from "@/lib/conversation-writes";
-import { ResolvedLine } from "@/components/comments/resolve-controls";
 import {
 	createCommitConversation,
 	replyToConversation,
@@ -51,9 +50,6 @@ export function hasConversationDraft(draft: ConversationDraft): boolean {
 export function CommitConversationView({
 	commitId,
 	conversations,
-	resolved = [],
-	onReopen,
-	fieldKey = 0,
 	status,
 	onRefresh,
 	readOnly,
@@ -70,14 +66,6 @@ export function CommitConversationView({
 	readonly commitId: string;
 	/** The open conversations: their thread and the reply field. */
 	readonly conversations: readonly CommitConversation[];
-	/** Resolved ones, each folded to "Resolved · Reopen" (not lost). */
-	readonly resolved?: readonly {
-		readonly id: string;
-		readonly commentCount: number;
-	}[];
-	readonly onReopen?: (conversationId: string) => void;
-	/** A new value gives a new, empty field (after a Resolve took its text). */
-	readonly fieldKey?: number;
 	readonly status: "pending" | "success" | "error";
 	/** Retry after a failed read. Writes need no refresh: reads are live. */
 	readonly onRefresh: () => void;
@@ -159,14 +147,6 @@ export function CommitConversationView({
 			aria-label="Checkpoint conversation"
 			className="comment-surface flex flex-col gap-2"
 		>
-			{resolved.map((conversation) => (
-				<ResolvedLine
-					key={conversation.id}
-					commentCount={conversation.commentCount}
-					onReopen={onReopen ? () => onReopen(conversation.id) : undefined}
-					className="mr-2 ml-[23px]"
-				/>
-			))}
 			{rows.length > 0 ? (
 				<>
 					<div
@@ -217,7 +197,6 @@ export function CommitConversationView({
 			) : null}
 			{!readOnly && !loadFailed ? (
 				<Composer
-					key={fieldKey}
 					label={replying ? "Reply" : "Comment on this checkpoint"}
 					placeholder={replying ? "Reply" : "Comment"}
 					value={draft}

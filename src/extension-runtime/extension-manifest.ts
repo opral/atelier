@@ -1,5 +1,12 @@
 import { normalizeFileExtensions } from "./file-handlers";
-import type { ExtensionManifest } from "../extension-api";
+import type { AtelierLibraryKind, ExtensionManifest } from "../extension-api";
+
+const LIBRARY_KINDS: readonly AtelierLibraryKind[] = [
+	"pages",
+	"tables",
+	"drawings",
+	"media",
+];
 
 export type { ExtensionManifest } from "../extension-api";
 
@@ -35,6 +42,7 @@ export function parseExtensionManifest(
 		"description",
 		"entry",
 		"fileExtensions",
+		"kind",
 		"multiInstance",
 		"placement",
 	]);
@@ -84,6 +92,14 @@ export function parseExtensionManifest(
 			`Manifest at ${manifestPath} field "multiInstance" must be a boolean.`,
 		);
 	}
+	if (
+		manifest.kind !== undefined &&
+		!LIBRARY_KINDS.includes(manifest.kind as AtelierLibraryKind)
+	) {
+		throw new Error(
+			`Manifest at ${manifestPath} field "kind" must be one of ${LIBRARY_KINDS.map((kind) => `"${kind}"`).join(" | ")}.`,
+		);
+	}
 	let placement: ("left" | "right" | "main")[] | undefined;
 	if (manifest.placement !== undefined) {
 		if (
@@ -106,6 +122,9 @@ export function parseExtensionManifest(
 		...(description ? { description } : {}),
 		entry,
 		fileExtensions,
+		...(manifest.kind !== undefined
+			? { kind: manifest.kind as AtelierLibraryKind }
+			: {}),
 		...(manifest.multiInstance === true ? { multiInstance: true } : {}),
 		...(placement ? { placement } : {}),
 	};

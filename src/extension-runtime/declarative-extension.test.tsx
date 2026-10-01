@@ -84,6 +84,64 @@ describe("declarative extension hydration", () => {
 		}
 	});
 
+	test("keeps the document's scoped Lix handle when the runtime is rebuilt", async () => {
+		const lix = await openLix();
+		// The host wraps the handle per document (a trace). A new wrapper is a
+		// new query cache: every read of the view would start over.
+		const scopeDocumentLix = vi.fn(
+			(_path: string, _fileId: string | undefined, base: typeof lix) => base,
+		);
+		const runtime = () =>
+			({
+				events: { emit: vi.fn() },
+				lix,
+				scopeDocumentLix,
+				branches: { activeId: "main" },
+			}) as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			load: async () => "Loaded document",
+			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+		};
+		const documentView = {
+			...view,
+			state: { fileId: "file-1", filePath: "/notes.md" },
+		};
+		const mounted = render(
+			<AtelierRenderContext.Provider value={{}}>
+				<DeclarativeExtension
+					definition={definition}
+					atelier={runtime()}
+					view={documentView}
+				/>
+			</AtelierRenderContext.Provider>,
+		);
+		try {
+			await mounted.findByRole("heading");
+			const calls = scopeDocumentLix.mock.calls.length;
+			// The shell rebuilds the runtime on every change (the tab in front,
+			// a review opening); the document is the same.
+			for (let index = 0; index < 3; index += 1) {
+				mounted.rerender(
+					<AtelierRenderContext.Provider value={{}}>
+						<DeclarativeExtension
+							definition={definition}
+							atelier={runtime()}
+							view={documentView}
+						/>
+					</AtelierRenderContext.Provider>,
+				);
+			}
+			expect(scopeDocumentLix.mock.calls.length).toBe(calls);
+		} finally {
+			mounted.unmount();
+			await lix.close();
+		}
+	});
+
 	test("coalesces changes during a slow read and refreshes after it completes", async () => {
 		const lix = await openLix();
 		const completions: Array<(data: string) => void> = [];

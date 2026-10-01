@@ -3,5 +3,6 @@
 	"id": "atelier_video",
 	"name": "Video",
 	"entry": "./index.js",
+	"kind": "media",
 	"fileExtensions": ["mp4", "mov", "webm"]
 }

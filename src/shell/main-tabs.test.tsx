@@ -840,21 +840,21 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
-	test("a pinned home keeps Files in the sidebar instead of dropping it", async () => {
+	test("a pinned home keeps the Library in the sidebar instead of dropping it", async () => {
 		const shell = await renderTabbedShell();
 		try {
-			// A pinned home owns the main landing; the Files view must
-			// survive in the left panel rather than vanish.
+			// A pinned home owns the main landing; the default sidebar view
+			// must survive in the left panel rather than vanish.
 			await waitFor(() => {
 				const snapshot = shell.sessionStateStore.getSnapshot();
 				expect(
 					snapshot?.areas.left.views.some(
-						(view) => view.kind === "atelier_files",
+						(view) => view.kind === "atelier_library",
 					),
 				).toBe(true);
 				expect(
 					snapshot?.areas.main.views.some(
-						(view) => view.kind === "atelier_files",
+						(view) => view.kind === "atelier_library",
 					),
 				).toBe(false);
 			});

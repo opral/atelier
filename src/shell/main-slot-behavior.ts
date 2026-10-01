@@ -54,9 +54,20 @@ const panelViewsEqual = (left: AreaState, right: AreaState): boolean =>
 const ensurePinnedHomeView = (
 	views: readonly ExtensionInstance[],
 	homeKind: ExtensionKind,
+	homeMultiInstance = false,
 ): ExtensionInstance[] => {
-	const candidates = views.filter(
-		(view) => view.instance === CENTRAL_HOME_INSTANCE || view.kind === homeKind,
+	// A home that is one view of a multi-instance extension (the Library)
+	// keeps its other tabs: only the reserved instance is the home, and a
+	// state without one promotes the first view of the kind.
+	const hasReservedHome = views.some(
+		(view) => view.instance === CENTRAL_HOME_INSTANCE,
+	);
+	const firstOfKind = views.find((view) => view.kind === homeKind);
+	const candidates = views.filter((view) =>
+		homeMultiInstance
+			? view.instance === CENTRAL_HOME_INSTANCE ||
+				(!hasReservedHome && view === firstOfKind)
+			: view.instance === CENTRAL_HOME_INSTANCE || view.kind === homeKind,
 	);
 	const canonical =
 		candidates.find(
@@ -137,6 +148,8 @@ const insertCentralTabView = (
 
 export function createCentralSlotBehavior(config: {
 	readonly homeKind: ExtensionKind | null;
+	/** The home extension opens further tabs of itself (see ensurePinnedHomeView). */
+	readonly homeMultiInstance?: boolean;
 	/** Extension kinds declaring main placement (beyond document editors). */
 	readonly mainKinds: ReadonlySet<ExtensionKind>;
 }): CentralSlotBehavior {
@@ -151,7 +164,11 @@ export function createCentralSlotBehavior(config: {
 		normalize: (area) => {
 			let views: ExtensionInstance[] = area.views.filter(canHost);
 			if (homeKind) {
-				views = ensurePinnedHomeView(views, homeKind);
+				views = ensurePinnedHomeView(
+					views,
+					homeKind,
+					config.homeMultiInstance === true,
+				);
 			}
 			const activeInstance = views.some(
 				(view) => view.instance === area.activeInstance,

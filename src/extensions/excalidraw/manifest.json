@@ -3,5 +3,6 @@
 	"id": "atelier_excalidraw",
 	"name": "Excalidraw",
 	"entry": "./index.js",
+	"kind": "drawings",
 	"fileExtensions": ["excalidraw"]
 }

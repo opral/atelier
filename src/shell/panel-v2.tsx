@@ -577,7 +577,9 @@ export function PanelV2({
 									kind={entry.kind}
 									icon={
 										side === "main"
-											? (fileGlyphForLabel(label) ?? view.icon)
+											? (view.iconForState?.(entry.state) ??
+												fileGlyphForLabel(label) ??
+												view.icon)
 											: view.icon
 									}
 									label={label}
@@ -1091,7 +1093,11 @@ export function PanelTabStrip({
 							instance={entry.instance}
 							area={side}
 							kind={entry.kind}
-							icon={fileGlyphForLabel(label) ?? view.icon}
+							icon={
+								view.iconForState?.(entry.state) ??
+								fileGlyphForLabel(label) ??
+								view.icon
+							}
 							label={label}
 							tooltip={
 								tabTooltip?.(view, entry) ??
@@ -1217,7 +1223,15 @@ export function availableExtensionsForPanel(
 	const openKinds = new Set(area.views.map((entry) => entry.kind));
 	return visibleExtensions.filter(
 		(view) =>
-			(view.multiInstance || !openKinds.has(view.kind)) &&
+			(!openKinds.has(view.kind) ||
+				(view.multiInstance &&
+					// A view that also lives in the main area (the Library) has
+					// its further instances as tabs there, not as copies here.
+					!(
+						side !== undefined &&
+						side !== "main" &&
+						view.placement?.includes("main")
+					))) &&
 			// Manifest placement gates the menus; the default is side areas only.
 			(side === undefined ||
 				view.placement === undefined ||
@@ -1480,7 +1494,6 @@ function TabBar({
 	// neighboring chip peeking out as the cue that the strip scrolls. Guarded
 	// per instance so unrelated re-renders never fight a manual scroll.
 	const lastEnsuredInstanceRef = useRef<string | null>(null);
-	const hasScrolledRef = useRef(false);
 	useLayoutEffect(() => {
 		const container = scrollRef.current;
 		if (!container || activeInstance == null) return;
@@ -1492,17 +1505,23 @@ function TabBar({
 		).find((button) => button.dataset.viewInstance === activeInstance);
 		if (!tab) return;
 		lastEnsuredInstanceRef.current = activeInstance;
-		const behavior = hasScrolledRef.current
-			? ("smooth" as const)
-			: ("auto" as const);
-		hasScrolledRef.current = true;
+
 		// The margin only widens a scroll that is needed anyway (so the next
 		// chip peeks out); a fully visible tab never triggers scrolling.
 		const margin = 28;
-		const tabStart = tab.offsetLeft;
+		// Measured against the scroller: offsetLeft is relative to the tab
+		// bar (the offset parent), which does not scroll.
+		const tabStart =
+			tab.getBoundingClientRect().left -
+			container.getBoundingClientRect().left +
+			container.scrollLeft;
 		const tabEnd = tabStart + tab.offsetWidth;
 		const viewStart = container.scrollLeft;
 		const viewEnd = viewStart + container.clientWidth;
+		// Instant, never smooth: a smooth scroll is cut short by the focus and
+		// layout work of switching views (and never advances in a hidden
+		// page), which left the active tab clipped or off-screen.
+		const behavior = "auto" as const;
 		if (tabStart < viewStart) {
 			container.scrollTo({ left: Math.max(0, tabStart - margin), behavior });
 		} else if (tabEnd > viewEnd) {

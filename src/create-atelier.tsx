@@ -264,6 +264,7 @@ function LiveAtelier(props: AtelierProps) {
 		documentLinks: props.documentLinks,
 		defaultOpenPanels: props.defaultOpenPanels,
 		filesView: props.filesView,
+		library: props.library,
 		mainArea: props.mainArea,
 	});
 	const [routeError, setRouteError] = useState<unknown>();

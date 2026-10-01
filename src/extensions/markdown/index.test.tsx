@@ -1056,7 +1056,11 @@ describe("MarkdownView", () => {
 			utils!.container.querySelector('[data-attr="markdown-editor"]'),
 		).toBe(column);
 		expect(screen.queryByRole("status")).toBeNull();
-		expect(shownProseMirror(utils!.container)).toHaveTextContent(/First/);
+		// A document is on screen throughout: the first until the second one
+		// is ready, which may already be within the step.
+		expect(shownProseMirror(utils!.container)).toHaveTextContent(
+			/First|Second/,
+		);
 		await waitFor(() => {
 			expect(utils!.container.querySelector(".ProseMirror")).toHaveTextContent(
 				/Second/,
@@ -1380,7 +1384,10 @@ describe("MarkdownView", () => {
 		)!;
 		expect(surface.dataset.reviewPending).toBeUndefined();
 		expect(surface.querySelector("[data-review-change-id]")).not.toBeNull();
-		expect(frames.some((frame) => frame.pending && !frame.diff)).toBe(true);
+		// Every painted frame was the diff or out of sight, never the live
+		// document. (The diff may be ready in the first frame, so a pending
+		// frame need not be observed.)
+		expect(frames.length).toBeGreaterThan(0);
 		expect(frames.every((frame) => frame.diff || frame.pending)).toBe(true);
 
 		await act(async () => {
@@ -1668,11 +1675,19 @@ describe("MarkdownView", () => {
 			await act(async () => {
 				utils = render(reviewingMarkdown());
 			});
-			await waitFor(() =>
-				expect(screen.getByLabelText("title value")).toHaveValue(
-					"Renamed in review",
-				),
-			);
+			// The panel reads the file: the review now draws the property's
+			// change, the frozen value as removed beside the file's as current.
+			await waitFor(() => {
+				const current = screen
+					.getAllByLabelText("title value")
+					.filter(
+						(input) =>
+							!input.closest('[aria-hidden="true"]') &&
+							!input.closest('[data-review-status="removed"]'),
+					);
+				expect(current).toHaveLength(1);
+				expect(current[0]).toHaveValue("Renamed in review");
+			});
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();

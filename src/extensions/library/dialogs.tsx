@@ -1,0 +1,603 @@
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Dialog } from "@base-ui/react/dialog";
+import { ChevronRight, FolderOpen, House, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import folderBlueIconUrl from "../files/assets/folder-blue.svg";
+
+/**
+ * The element focused last outside a menu. A dialog opened from a menu item
+ * returns focus there when it closes: the item it was opened from is gone.
+ */
+let focusBeforeMenu: HTMLElement | null = null;
+let trackingFocus = false;
+function trackFocusBeforeMenu() {
+	if (trackingFocus || typeof document === "undefined") return;
+	trackingFocus = true;
+	document.addEventListener("focusin", (event) => {
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) return;
+		if (target.closest('[role="menu"], [role="dialog"]')) return;
+		focusBeforeMenu = target;
+	});
+}
+
+function LibraryDialog({
+	open,
+	busy,
+	title,
+	description,
+	onClose,
+	initialFocus,
+	children,
+}: {
+	readonly open: boolean;
+	readonly busy: boolean;
+	readonly title: string;
+	readonly description: string;
+	readonly onClose: () => void;
+	readonly initialFocus?: React.RefObject<HTMLElement | null>;
+	readonly children: ReactNode;
+}) {
+	trackFocusBeforeMenu();
+	const returnTo = useRef<HTMLElement | null>(null);
+	const wasOpen = useRef(false);
+	useEffect(() => {
+		if (open) {
+			const active = document.activeElement;
+			returnTo.current =
+				active instanceof HTMLElement && !active.closest('[role="menu"]')
+					? active
+					: focusBeforeMenu;
+			wasOpen.current = true;
+			return;
+		}
+		if (!wasOpen.current) return;
+		wasOpen.current = false;
+		// After the close animation, only if nothing else has taken focus.
+		const timer = setTimeout(() => {
+			const target = returnTo.current;
+			returnTo.current = null;
+			if (
+				target?.isConnected &&
+				(document.activeElement === document.body ||
+					document.activeElement === null)
+			)
+				target.focus({ preventScroll: true });
+		}, 200);
+		return () => clearTimeout(timer);
+	}, [open]);
+	return (
+		<Dialog.Root
+			open={open}
+			onOpenChange={(next) => {
+				if (!next && !busy) onClose();
+			}}
+		>
+			<Dialog.Portal>
+				<Dialog.Backdrop className="atelier-portal fixed inset-0 z-50 bg-[color-mix(in_srgb,var(--atelier-fg)_38%,transparent)] transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
+				<Dialog.Popup
+					{...(initialFocus ? { initialFocus } : {})}
+					className="atelier-portal fixed top-1/2 left-1/2 z-50 flex w-[min(480px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-panel font-sans text-fg shadow-overlay outline-none transition-[opacity,scale] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+				>
+					<div className="flex flex-col gap-1.5 px-6 pt-6 pb-5">
+						<Dialog.Title className="text-[15px] font-semibold text-fg">
+							{title}
+						</Dialog.Title>
+						<Dialog.Description className="text-[13px] leading-relaxed text-fg-subtle">
+							{description}
+						</Dialog.Description>
+					</div>
+					{children}
+					{busy ? null : (
+						<Dialog.Close
+							aria-label="Close"
+							className="absolute top-4 right-4 grid size-7 place-items-center rounded-md text-fg-subtle hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+						>
+							<X className="size-4" aria-hidden="true" />
+						</Dialog.Close>
+					)}
+				</Dialog.Popup>
+			</Dialog.Portal>
+		</Dialog.Root>
+	);
+}
+
+function DialogFooter({ children }: { readonly children: ReactNode }) {
+	return (
+		<div className="flex justify-end gap-2 border-t border-border px-6 py-4">
+			{children}
+		</div>
+	);
+}
+
+const SECONDARY_BUTTON =
+	"border border-border-strong bg-panel text-fg-muted hover:bg-bg-hover hover:text-fg";
+
+/** Names a new folder, or renames an item. Enter saves, Escape cancels. */
+export function NameDialog({
+	open,
+	title,
+	submitLabel,
+	initialName,
+	busy,
+	error,
+	onClose,
+	onSubmit,
+}: {
+	readonly open: boolean;
+	readonly title: string;
+	readonly submitLabel: string;
+	readonly initialName: string;
+	readonly busy: boolean;
+	readonly error: string | null;
+	readonly onClose: () => void;
+	readonly onSubmit: (name: string) => void;
+}) {
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [value, setValue] = useState(initialName);
+	const [emptyError, setEmptyError] = useState(false);
+	// An error answers the name that was submitted; editing the name dismisses
+	// it until the next attempt.
+	const [errorDismissed, setErrorDismissed] = useState(false);
+	useEffect(() => setErrorDismissed(false), [error]);
+	const shownError = errorDismissed ? null : error;
+	useEffect(() => {
+		if (!open) return;
+		setValue(initialName);
+		setEmptyError(false);
+		// Select the stem, as Finder does: the extension is rarely the edit.
+		requestAnimationFrame(() => {
+			const input = inputRef.current;
+			if (!input) return;
+			input.focus();
+			const dot = initialName.lastIndexOf(".");
+			input.setSelectionRange(0, dot > 0 ? dot : initialName.length);
+		});
+	}, [initialName, open]);
+	return (
+		<LibraryDialog
+			open={open}
+			busy={busy}
+			title={title}
+			description="Choose a name. Press Enter to save or Escape to cancel."
+			onClose={onClose}
+			initialFocus={inputRef}
+		>
+			<form
+				onSubmit={(event) => {
+					event.preventDefault();
+					const name = value.trim();
+					// An empty name says why nothing happened.
+					setEmptyError(name.length === 0);
+					if (name && !busy) onSubmit(name);
+				}}
+			>
+				<label className="flex flex-col gap-2 px-6 pb-5 text-[13px] font-medium text-fg-muted">
+					Name
+					<input
+						ref={inputRef}
+						value={value}
+						onChange={(event) => {
+							setValue(event.target.value);
+							setEmptyError(false);
+							setErrorDismissed(true);
+						}}
+						aria-label="Name"
+						disabled={busy}
+						maxLength={255}
+						aria-invalid={shownError || emptyError ? true : undefined}
+						className="h-10 w-full rounded-lg border border-border bg-panel px-3 text-[14px] font-normal text-fg outline-none focus:ring-2 focus:ring-ring"
+					/>
+					{shownError || emptyError ? (
+						<span role="alert" className="text-[13px] font-normal text-danger">
+							{emptyError ? "Enter a name." : shownError}
+						</span>
+					) : null}
+				</label>
+				<DialogFooter>
+					<Button
+						type="button"
+						className={SECONDARY_BUTTON}
+						disabled={busy}
+						onClick={onClose}
+					>
+						Cancel
+					</Button>
+					<Button type="submit" disabled={busy}>
+						{busy ? "Saving…" : submitLabel}
+					</Button>
+				</DialogFooter>
+			</form>
+		</LibraryDialog>
+	);
+}
+
+export function DeleteDialog({
+	open,
+	count: openCount,
+	name: openName,
+	hasFolders: openHasFolders,
+	busy,
+	error,
+	onClose,
+	onConfirm,
+}: {
+	readonly open: boolean;
+	readonly count: number;
+	/** The one item's name, when there is one: the dialog says what it deletes. */
+	readonly name?: string;
+	readonly hasFolders: boolean;
+	readonly busy: boolean;
+	readonly error: string | null;
+	readonly onClose: () => void;
+	readonly onConfirm: () => void;
+}) {
+	const confirmRef = useRef<HTMLButtonElement>(null);
+	// The dialog fades out after its item is cleared: keep saying what it
+	// was about until it is gone.
+	const shown = useRef({
+		count: openCount,
+		name: openName,
+		hasFolders: openHasFolders,
+	});
+	if (open)
+		shown.current = {
+			count: openCount,
+			name: openName,
+			hasFolders: openHasFolders,
+		};
+	const { count, name, hasFolders } = shown.current;
+	return (
+		<LibraryDialog
+			open={open}
+			busy={busy}
+			title={
+				count === 1 && name
+					? `Delete “${name}”?`
+					: `Delete ${count} ${count === 1 ? "item" : "items"}?`
+			}
+			description={
+				hasFolders
+					? count === 1
+						? "The folder and everything inside it will be deleted. Its history remains available."
+						: "Folders and everything inside them will be deleted. Their history remains available."
+					: "History keeps every version, so this can be restored."
+			}
+			onClose={onClose}
+			initialFocus={confirmRef}
+		>
+			{error ? (
+				<p role="alert" className="px-6 pb-4 text-[13px] text-danger">
+					{error}
+				</p>
+			) : null}
+			<DialogFooter>
+				<Button
+					type="button"
+					className={SECONDARY_BUTTON}
+					disabled={busy}
+					onClick={onClose}
+				>
+					Cancel
+				</Button>
+				<Button
+					ref={confirmRef}
+					type="button"
+					variant="destructive"
+					disabled={busy}
+					onClick={onConfirm}
+				>
+					{busy ? "Deleting…" : "Delete"}
+				</Button>
+			</DialogFooter>
+		</LibraryDialog>
+	);
+}
+
+/** Browse to a folder one level at a time, then move there. */
+export function MoveDialog({
+	open,
+	count: openCount,
+	destinations: openDestinations,
+	currentDirectory: openCurrentDirectory,
+	busy,
+	error,
+	onClose,
+	onMove,
+}: {
+	readonly open: boolean;
+	readonly count: number;
+	readonly destinations: readonly string[];
+	readonly currentDirectory: string;
+	readonly busy: boolean;
+	readonly error: string | null;
+	readonly onClose: () => void;
+	readonly onMove: (destination: string) => void;
+}) {
+	// As DeleteDialog: hold the content while the dialog fades out.
+	const shown = useRef({
+		count: openCount,
+		destinations: openDestinations,
+		currentDirectory: openCurrentDirectory,
+	});
+	if (open)
+		shown.current = {
+			count: openCount,
+			destinations: openDestinations,
+			currentDirectory: openCurrentDirectory,
+		};
+	const { count, destinations, currentDirectory } = shown.current;
+	const [destination, setDestination] = useState(currentDirectory);
+	const crumbsRef = useRef<HTMLElement>(null);
+	const currentCrumbRef = useRef<HTMLButtonElement>(null);
+	const listRef = useRef<HTMLUListElement>(null);
+	const cameFrom = useRef<string | null>(null);
+	useEffect(() => {
+		if (!open) return;
+		setDestination(currentDirectory);
+		cameFrom.current = null;
+	}, [currentDirectory, open]);
+	const segments = destination.split("/").filter(Boolean);
+	// The folder being chosen is the last crumb, and the folder just left
+	// (going up) is in the list: keep both in view.
+	useEffect(() => {
+		if (!open) return;
+		const nav = crumbsRef.current;
+		if (nav) nav.scrollLeft = nav.scrollWidth;
+		// Entering a folder from the list removes the row that had focus:
+		// the folder now being chosen takes it.
+		if (document.activeElement === document.body)
+			firstFocusable()?.focus({ preventScroll: true });
+		const frame = requestAnimationFrame(() => {
+			const from = cameFrom.current;
+			const row = from
+				? listRef.current?.querySelector<HTMLElement>(
+						`[data-path="${CSS.escape(from)}"]`,
+					)
+				: null;
+			row?.scrollIntoView({ block: "nearest" });
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [destination, open]);
+	// Keyboard users walk down the list: it takes focus (its first folder),
+	// or the folder being chosen when there is none below.
+	const firstRowRef = useRef<HTMLButtonElement>(null);
+	const firstFocusable = () => firstRowRef.current ?? currentCrumbRef.current;
+	// Read when the popup opens, after its rows have mounted.
+	const initialFocusRef = useMemo<React.RefObject<HTMLElement | null>>(
+		() => ({
+			get current() {
+				return firstRowRef.current ?? currentCrumbRef.current;
+			},
+		}),
+		[],
+	);
+	const choose = (next: string) => {
+		cameFrom.current = destination;
+		setDestination(next);
+	};
+	const crumbs = [
+		{ path: "/", name: "Home" },
+		...segments.map((name, index) => ({
+			path: `/${segments.slice(0, index + 1).join("/")}`,
+			name,
+		})),
+	];
+	const folders = destinations
+		.filter(
+			(path) =>
+				path !== "/" &&
+				(path.slice(0, path.lastIndexOf("/")) || "/") === destination,
+		)
+		.map((path) => ({ path, name: path.split("/").at(-1)! }));
+	const canMove =
+		destination !== currentDirectory && destinations.includes(destination);
+	return (
+		<LibraryDialog
+			open={open}
+			busy={busy}
+			title={`Move ${count} ${count === 1 ? "item" : "items"}`}
+			// The list, or the folder being chosen — never "Home": on a deep
+			// path Home is scrolled out of view, its focus ring clipped.
+			initialFocus={initialFocusRef}
+			description="Choose where these items should live."
+			onClose={onClose}
+		>
+			<div className="px-6 pb-5">
+				<nav
+					ref={(nav) => {
+						crumbsRef.current = nav;
+						// On open the popup mounts after the effect: scroll on attach.
+						if (nav) nav.scrollLeft = nav.scrollWidth;
+					}}
+					aria-label="Destination location"
+					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto px-0.5 text-[13px] [scrollbar-width:none]"
+				>
+					{crumbs.map((crumb, index) => (
+						<span key={crumb.path} className="flex shrink-0 items-center gap-1">
+							{index > 0 ? (
+								<ChevronRight
+									aria-hidden="true"
+									className="size-3.5 text-fg-subtle"
+								/>
+							) : null}
+							<button
+								type="button"
+								disabled={busy}
+								ref={crumb.path === destination ? currentCrumbRef : undefined}
+								aria-current={
+									crumb.path === destination ? "location" : undefined
+								}
+								onClick={() => choose(crumb.path)}
+								className="flex max-w-56 items-center gap-2 rounded-md px-2 py-1.5 text-fg-muted outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-ring aria-[current=location]:font-medium aria-[current=location]:text-fg disabled:opacity-50"
+							>
+								{index === 0 ? (
+									<House aria-hidden="true" className="size-3.5" />
+								) : null}
+								<span className="truncate">{crumb.name}</span>
+							</button>
+						</span>
+					))}
+				</nav>
+				<ul
+					ref={listRef}
+					aria-label="Destination folders"
+					// Five and a half rows: the half row says the list scrolls.
+					className="h-[233px] overflow-y-auto rounded-lg border border-border p-1"
+				>
+					{folders.length === 0 ? (
+						<li className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+							<FolderOpen
+								aria-hidden="true"
+								className="mb-1 size-7 text-fg-subtle"
+								strokeWidth={1.5}
+							/>
+							<p className="text-[13px] font-medium text-fg-muted">
+								No folders inside
+							</p>
+							<p className="max-w-72 text-xs leading-relaxed text-fg-subtle">
+								{destination !== currentDirectory
+									? "You can move your items here."
+									: "Use the breadcrumb above to choose another folder."}
+							</p>
+						</li>
+					) : (
+						folders.map((folder, index) => (
+							<li key={folder.path} data-path={folder.path}>
+								<button
+									ref={index === 0 ? firstRowRef : undefined}
+									type="button"
+									disabled={busy}
+									onClick={() => choose(folder.path)}
+									className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-50"
+								>
+									<img
+										src={folderBlueIconUrl}
+										alt=""
+										className="size-4 shrink-0"
+									/>
+									<span className="min-w-0 flex-1 truncate">{folder.name}</span>
+									<ChevronRight
+										aria-hidden="true"
+										className="size-4 shrink-0 text-fg-subtle"
+									/>
+								</button>
+							</li>
+						))
+					)}
+				</ul>
+				<p aria-live="polite" className="mt-3 text-xs text-fg-subtle">
+					{destination === currentDirectory
+						? "These items are already in this folder."
+						: `Move to ${segments.at(-1) ?? "Home"}`}
+				</p>
+				{error ? (
+					<p role="alert" className="mt-2 text-[13px] text-danger">
+						{error}
+					</p>
+				) : null}
+			</div>
+			<DialogFooter>
+				<Button
+					type="button"
+					className={SECONDARY_BUTTON}
+					disabled={busy}
+					onClick={onClose}
+				>
+					Cancel
+				</Button>
+				<Button
+					type="button"
+					disabled={busy || !canMove}
+					onClick={() => onMove(destination)}
+				>
+					{busy ? "Moving…" : "Move here"}
+				</Button>
+			</DialogFooter>
+		</LibraryDialog>
+	);
+}
+
+export type LibraryToast = {
+	readonly id: number;
+	readonly message: string;
+	readonly tone?: "danger";
+	readonly undo?: () => Promise<void>;
+};
+
+/** One line at the foot of the Library: what just happened, and Undo. */
+export function ToastLine({
+	toast,
+	onDismiss,
+	placement = "container",
+	raised = false,
+}: {
+	readonly toast: LibraryToast | null;
+	readonly onDismiss: () => void;
+	/**
+	 * "viewport" floats at the foot of the window, over everything: for a
+	 * narrow surface (the sidebar) that cannot hold a readable toast.
+	 */
+	readonly placement?: "container" | "viewport";
+	/** Clears the review float, which sits at the same foot. */
+	readonly raised?: boolean;
+}) {
+	const [undoing, setUndoing] = useState(false);
+	useEffect(() => {
+		if (!toast) return;
+		setUndoing(false);
+		const timer = setTimeout(onDismiss, toast.undo ? 8000 : 5000);
+		return () => clearTimeout(timer);
+	}, [onDismiss, toast]);
+	if (!toast) return null;
+	const line = (
+		<div
+			className={
+				placement === "viewport"
+					? `atelier-portal pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 font-sans ${raised ? "bottom-28" : "bottom-12"}`
+					: `pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4 ${raised ? "bottom-20" : "bottom-5"}`
+			}
+		>
+			<div
+				role="status"
+				data-testid="library-toast"
+				className={`pointer-events-auto flex max-w-full items-center gap-3 rounded-[10px] bg-overlay py-2 pr-2 pl-3.5 text-[13px] text-overlay-fg shadow-overlay ${
+					toast.tone === "danger" ? "ring-1 ring-danger" : ""
+				}`}
+			>
+				<span className="min-w-0 text-pretty">{toast.message}</span>
+				{toast.undo ? (
+					<button
+						type="button"
+						disabled={undoing}
+						className="rounded-md px-2 py-1 font-semibold text-overlay-accent hover:bg-overlay-hover disabled:opacity-60"
+						onClick={() => {
+							const undo = toast.undo;
+							if (!undo) return;
+							setUndoing(true);
+							void undo()
+								.catch((error: unknown) => {
+									console.error("library: undo failed", error);
+								})
+								.finally(onDismiss);
+						}}
+					>
+						{undoing ? "Undoing…" : "Undo"}
+					</button>
+				) : null}
+				<button
+					type="button"
+					aria-label="Dismiss"
+					className="grid size-6 place-items-center rounded-md text-overlay-fg-subtle hover:bg-overlay-hover hover:text-overlay-fg"
+					onClick={onDismiss}
+				>
+					<X className="size-3.5" aria-hidden="true" />
+				</button>
+			</div>
+		</div>
+	);
+	return placement === "viewport" && typeof document !== "undefined"
+		? createPortal(line, document.body)
+		: line;
+}

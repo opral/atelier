@@ -251,32 +251,21 @@ describe("ConversationView", () => {
 		).toBeTruthy();
 	});
 
-	test("Resolve conversation resolves it, and the page says so with Reopen", async () => {
+	test("a checkpoint's conversation offers no Resolve, and one resolved before shows as open", async () => {
 		lix = await openLix();
 		const { id } = await checkpointConversation(lix, ["Ready to send?"]);
+		// Resolved by an earlier version, or another client.
+		await lix.execute(
+			"UPDATE lix_conversation SET resolved = true WHERE id = $1",
+			[id],
+		);
 		renderView(runtimeStub(), id);
-		const resolve = await screen.findByRole("button", {
-			name: /Resolve conversation/,
-		});
-		await act(async () => {
-			fireEvent.click(resolve);
-		});
-		await screen.findByText("Resolved");
+		await screen.findByText("Ready to send?");
 		expect(
 			screen.queryByRole("button", { name: /Resolve conversation/ }),
 		).toBeNull();
-		const row = await lix.execute(
-			"SELECT resolved FROM lix_conversation WHERE id = $1",
-			[id],
-		);
-		expect(row.rows[0]?.resolved).toBe(true);
-		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
-		});
-		await waitFor(() => expect(screen.queryByText("Resolved")).toBeNull());
-		expect(
-			screen.getByRole("button", { name: /Resolve conversation/ }),
-		).toBeTruthy();
+		expect(screen.queryByText("Resolved")).toBeNull();
+		expect(screen.queryByRole("button", { name: "Reopen" })).toBeNull();
 	});
 
 	test("a missing or malformed id says only that the conversation isn't available", async () => {

@@ -52,17 +52,15 @@ import {
 	setCommitConversationTitle,
 } from "./commit-conversations";
 import { emptyCommentDocument } from "@/components/comments/comment-composer";
-import { ResolveButton } from "@/components/comments/resolve-controls";
-import { setConversationResolved } from "@/lib/conversation-writes";
 import { OpenConversationButton } from "../conversation/open-conversation";
 
 /**
- * The open checkpoint's header links (Open conversation, Resolve): nothing
+ * The open checkpoint's header link (Open conversation): nothing
  * at rest (4a); they show over the header's end while it, or one of them,
  * is hovered or focused, and stay in the tab order.
  */
 const HEADER_LINK_REVEAL =
-	"pointer-events-none absolute top-1.5 bg-accent-subtle text-history-selected-secondary opacity-0 hover:bg-accent-border/50 focus-visible:pointer-events-auto focus-visible:opacity-100 group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto group-has-[[data-attr=open-conversation]:hover]:opacity-100 group-has-[[data-attr=resolve-conversation]:hover]:pointer-events-auto group-has-[[data-attr=resolve-conversation]:hover]:opacity-100";
+	"pointer-events-none absolute top-1.5 bg-accent-subtle text-history-selected-secondary opacity-0 hover:bg-accent-border/50 focus-visible:pointer-events-auto focus-visible:opacity-100 group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto group-has-[[data-attr=open-conversation]:hover]:opacity-100";
 
 export type HistoryScope = "file" | "repository";
 
@@ -497,6 +495,9 @@ function ReviewFileList({
 			? orderedFiles
 			: orderedFiles.slice(0, maxInitiallyVisible);
 	const hiddenCount = files.length - visibleFiles.length;
+	// Unfolded, the list folds back to where it started.
+	const canCollapse =
+		maxInitiallyVisible !== undefined && files.length > maxInitiallyVisible;
 	return (
 		<ul aria-label={label} className={`pr-[5px] pl-[17px] ${className}`}>
 			{visibleFiles.map((file) => {
@@ -548,14 +549,14 @@ function ReviewFileList({
 					</li>
 				);
 			})}
-			{hiddenCount > 0 ? (
+			{hiddenCount > 0 || (showAll && canCollapse) ? (
 				<li>
 					<button
 						type="button"
-						onClick={() => setShowAll(true)}
+						onClick={() => setShowAll(hiddenCount > 0)}
 						className="cursor-pointer rounded-control px-1.5 py-1 text-[11.5px] font-medium text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
-						Show {hiddenCount} more files
+						{hiddenCount > 0 ? `Show ${hiddenCount} more files` : "Show less"}
 					</button>
 				</li>
 			) : null}
@@ -853,13 +854,10 @@ function CheckpointPage({
 							(conversation) => conversation.commit_id === checkpoint.commit_id,
 						)}
 						conversationStatus={conversations.status}
-						commentCounts={countsByConversation}
-						// Resolved conversations are not counted.
 						commentCount={conversations.rows
 							.filter(
 								(conversation) =>
-									conversation.commit_id === checkpoint.commit_id &&
-									!conversation.resolved,
+									conversation.commit_id === checkpoint.commit_id,
 							)
 							.reduce(
 								(total, conversation) =>
@@ -889,7 +887,6 @@ function CheckpointItem({
 	conversations,
 	conversationStatus,
 	commentCount,
-	commentCounts,
 	onRefreshConversations,
 	activeFileId,
 	onPreviewVisible,
@@ -908,8 +905,6 @@ function CheckpointItem({
 	readonly conversations: readonly CommitConversation[];
 	readonly conversationStatus: "pending" | "success" | "error";
 	readonly commentCount: number;
-	/** Comments per conversation, for a resolved one's folded line. */
-	readonly commentCounts: ReadonlyMap<string, number>;
 	readonly onRefreshConversations: () => void;
 	/** File scope: the file the rows are filtered by, marked in the previews. */
 	readonly activeFileId: string | null;
@@ -931,14 +926,10 @@ function CheckpointItem({
 		"commitId" in session.target &&
 		session.target.commitId === checkpoint.commit_id;
 	const conversationTitle = conversations[0]?.title;
-	// Resolved conversations fold to one line under the checkpoint; the
-	// thread and its reply field are the open ones'.
-	const openConversations = conversations.filter(
-		(conversation) => !conversation.resolved,
-	);
-	const resolvedConversations = conversations.filter(
-		(conversation) => conversation.resolved,
-	);
+	// A checkpoint's conversation is not resolved: it is the record of the
+	// checkpoint, open for as long as the checkpoint is. One resolved before
+	// that rule reads as open too.
+	const openConversations = conversations;
 	const rowMemory = useCheckpointRowMemory();
 	const [draft, setDraftState] = useState<ConversationDraft>(
 		() => rowMemory.drafts.get(checkpoint.commit_id) ?? emptyCommentDocument(),
@@ -1098,30 +1089,6 @@ function CheckpointItem({
 	const showCommentAction = !isViewing && !editingTitle && !atelier.readOnly;
 	const showOpenConversation =
 		isViewing && !editingTitle && Boolean(atelier.views && conversations[0]);
-	const resolveTarget =
-		isViewing && !editingTitle && !atelier.readOnly
-			? (openConversations[0] ?? null)
-			: null;
-	// The field reads its text once: after a Resolve took it as the note,
-	// a new field starts empty.
-	const [fieldKey, setFieldKey] = useState(0);
-	async function resolve(conversationId: string, resolved: boolean) {
-		try {
-			// A written comment goes with the Resolve, as its note.
-			await setConversationResolved(
-				lix,
-				conversationId,
-				resolved,
-				resolved ? draft : null,
-			);
-			if (resolved && hasConversationDraft(draft)) {
-				setDraft(emptyCommentDocument());
-				setFieldKey((key) => key + 1);
-			}
-		} catch (error) {
-			console.error(error);
-		}
-	}
 
 	return (
 		// The open checkpoint is where ⌘↵ sends a comment. Focus returns to its
@@ -1237,11 +1204,9 @@ function CheckpointItem({
 						// Wide rows end in file names; keep them clear of the hover button.
 						showCommentAction
 							? "group-hover:pr-[91px] group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:pr-[91px]"
-							: resolveTarget
-								? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-14 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-14 group-has-[[data-attr=open-conversation]:hover]:pr-14 group-has-[[data-attr=open-conversation]:focus-visible]:pr-14 group-has-[[data-attr=resolve-conversation]:hover]:pr-14 group-has-[[data-attr=resolve-conversation]:focus-visible]:pr-14"
-								: showOpenConversation
-									? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 group-has-[[data-attr=open-conversation]:hover]:pr-8 group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
-									: ""
+							: showOpenConversation
+								? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 group-has-[[data-attr=open-conversation]:hover]:pr-8 group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
+								: ""
 					} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
 				>
 					{flag}
@@ -1300,12 +1265,6 @@ function CheckpointItem({
 					className={`right-[5px] ${HEADER_LINK_REVEAL}`}
 				/>
 			) : null}
-			{resolveTarget ? (
-				<ResolveButton
-					onResolve={() => void resolve(resolveTarget.id, true)}
-					className={`${showOpenConversation ? "right-[29px]" : "right-[5px]"} ${HEADER_LINK_REVEAL}`}
-				/>
-			) : null}
 			{showCommentAction ? (
 				<button
 					type="button"
@@ -1340,14 +1299,6 @@ function CheckpointItem({
 					<CommitConversationView
 						commitId={checkpoint.commit_id}
 						conversations={openConversations}
-						resolved={resolvedConversations.map((conversation) => ({
-							id: conversation.id,
-							commentCount: commentCounts.get(conversation.id) ?? 0,
-						}))}
-						onReopen={
-							atelier.readOnly ? undefined : (id) => void resolve(id, false)
-						}
-						fieldKey={fieldKey}
 						status={conversationStatus}
 						onRefresh={onRefreshConversations}
 						readOnly={atelier.readOnly}

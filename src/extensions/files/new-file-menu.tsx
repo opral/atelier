@@ -1,4 +1,5 @@
-import { type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { Upload } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -33,9 +34,20 @@ export type NewFileMenuProps = {
 	readonly align?: "start" | "end";
 	readonly onNewCsv: () => void;
 	readonly onNewExcalidraw: () => void;
-	readonly onNewFile: () => void;
-	readonly onNewFolder: () => void;
+	/** Absent in the Library, which creates things of a kind, not files. */
+	readonly onNewFile?: () => void;
+	/**
+	 * Name the rows by what they make — New Page, New Table, New Drawing —
+	 * rather than by format. The Library's word for them.
+	 */
+	readonly kindNames?: boolean;
+	/** With kindNames: the row ⌘ . makes here (defaults to New Page). */
+	readonly shortcutType?: "markdown" | "csv" | "excalidraw";
+	/** Absent where folders are not shown, e.g. the Library's Grid. */
+	readonly onNewFolder?: () => void;
 	readonly onNewMarkdown: () => void;
+	/** Adds "Upload…" at the end: the same import a drop does. */
+	readonly onUpload?: () => void;
 	readonly defaultFolders: DefaultFolders;
 	readonly folderOptions: readonly PickerFolder[];
 	readonly hereDirectory: string;
@@ -63,8 +75,11 @@ export function NewFileMenu({
 	onNewCsv,
 	onNewExcalidraw,
 	onNewFile,
+	kindNames = false,
+	shortcutType = "markdown",
 	onNewFolder,
 	onNewMarkdown,
+	onUpload,
 	defaultFolders,
 	folderOptions,
 	hereDirectory,
@@ -90,54 +105,96 @@ export function NewFileMenu({
 				onCreateFolder={onCreateFolder}
 			/>
 		) : null;
+	// A row that created something opens it, focused: the menu must not hand
+	// focus back to its button as it closes and take it from the new file.
+	const shortcutFor = (type: "markdown" | "csv" | "excalidraw") =>
+		kindNames && !onNewFile && type === shortcutType
+			? { shortcut: shortcutHint("⌘ .") }
+			: {};
+	const choseRef = useRef(false);
+	const chose = (action: () => void) => (): void => {
+		choseRef.current = true;
+		action();
+	};
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
 			<DropdownMenuContent
+				onCloseAutoFocus={(event) => {
+					if (!choseRef.current) return;
+					choseRef.current = false;
+					event.preventDefault();
+				}}
 				align={align}
 				aria-label="Create"
 				className="w-72 p-1.5 text-xs"
 				sideOffset={3}
 			>
-				<NewMenuItem
-					dataAttr="file-new-file"
-					iconUrl={fileNewIconUrl}
-					label="New file"
-					shortcut={shortcutHint("⌘ .")}
-					onSelect={onNewFile}
-					trailing={slotFor("generic", "file-new-file")}
-				/>
+				{onNewFile ? (
+					<NewMenuItem
+						dataAttr="file-new-file"
+						iconUrl={fileNewIconUrl}
+						label="New file"
+						shortcut={shortcutHint("⌘ .")}
+						onSelect={chose(onNewFile)}
+						trailing={slotFor("generic", "file-new-file")}
+					/>
+				) : null}
 				{/* No default folder for New folder: a folder is not a file type,
 				    and "always nest one level in" is not a thing anyone wants. */}
-				<NewMenuItem
-					dataAttr="file-new-folder"
-					iconUrl={folderBlueIconUrl}
-					label="New folder"
-					shortcut={shortcutHint("⇧⌘ .")}
-					onSelect={onNewFolder}
-				/>
-				<DropdownMenuSeparator className="my-1.5" />
+				{onNewFolder ? (
+					<NewMenuItem
+						dataAttr="file-new-folder"
+						iconUrl={folderBlueIconUrl}
+						label="New folder"
+						shortcut={shortcutHint("⇧⌘ .")}
+						onSelect={chose(onNewFolder)}
+					/>
+				) : null}
+				{onNewFile || onNewFolder ? (
+					<DropdownMenuSeparator className="my-1.5" />
+				) : null}
 				<NewMenuItem
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
-					label="New Markdown"
-					onSelect={onNewMarkdown}
+					label={kindNames ? "New Page" : "New Markdown"}
+					{...shortcutFor("markdown")}
+					onSelect={chose(onNewMarkdown)}
 					trailing={slotFor("markdown", "file-new-markdown")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
-					label="New CSV"
-					onSelect={onNewCsv}
+					label={kindNames ? "New Table" : "New CSV"}
+					{...shortcutFor("csv")}
+					onSelect={chose(onNewCsv)}
 					trailing={slotFor("csv", "file-new-csv")}
 				/>
 				<NewMenuItem
 					dataAttr="file-new-excalidraw"
 					iconUrl={fileExcalidrawIconUrl}
 					label="New Drawing"
-					onSelect={onNewExcalidraw}
+					{...shortcutFor("excalidraw")}
+					onSelect={chose(onNewExcalidraw)}
 					trailing={slotFor("excalidraw", "file-new-excalidraw")}
 				/>
+				{onUpload ? (
+					<>
+						<DropdownMenuSeparator className="my-1.5" />
+						<DropdownMenuItem
+							className="gap-2 py-1.75 text-xs"
+							data-attr="file-new-upload"
+							onSelect={chose(onUpload)}
+						>
+							<Upload
+								aria-hidden="true"
+								className="size-3.5 shrink-0 text-fg-subtle"
+								strokeWidth={2}
+							/>
+							<span className="min-w-0 flex-1 truncate">Upload…</span>
+						</DropdownMenuItem>
+					</>
+				) : null}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
