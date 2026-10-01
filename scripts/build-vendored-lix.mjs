@@ -57,8 +57,6 @@ const browserFiles = [
 	join(sdkDist, "index.d.ts"),
 	join(sdkDist, "wasm", "lix_js_sdk.js"),
 	join(sdkDist, "wasm", "lix_js_sdk_bg.wasm"),
-	join(sdkDist, "migration-wasm", "lix_js_sdk.js"),
-	join(sdkDist, "migration-wasm", "lix_js_sdk_bg.wasm"),
 	join(opfsRoot, "dist", "index.js"),
 ];
 console.log(`[lix-sdk] Selected vendored Lix ${revision}.`);
