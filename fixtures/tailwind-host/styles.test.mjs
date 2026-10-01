@@ -121,7 +121,13 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 <div class="dark" id="host-dark">Host dark class</div>
 <div class="dark"><div id="dark-root" class="atelier-root">Dark workspace</div></div>
 <div id="skeleton">${skeleton}</div>
-<div id="static" class="atelier-render">${staticView.html}</div>`);
+<div id="static" class="atelier-render">${staticView.html}</div>
+<div class="atelier-root">
+ <div id="group" class="atw:group"><span id="group-action" class="atw:opacity-0 atw:group-hover:opacity-100">Reveal</span></div>
+ <button id="arbitrary" class="atw:[&_svg:not([class*='size-'])]:size-4"><svg></svg></button>
+ <input id="peer" class="atw:peer"><span id="peer-target" class="atw:peer-focus-visible:ring-2">Focus</span>
+ <div id="animation" data-state="open" class="atw:data-[state=open]:animate-in atw:data-[state=open]:fade-in-0">Menu</div>
+</div>`);
 			for (const [width, hidden, columns] of [
 				[390, false, 1],
 				[1440, true, 2],
@@ -173,6 +179,48 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 				assert.equal(computed.skeleton, "flex");
 				assert.equal(computed.staticSize, "26.25px");
 			}
+
+			assert.equal(
+				await page
+					.locator("#arbitrary svg")
+					.evaluate((node) => getComputedStyle(node).width),
+				"16px",
+			);
+			assert.equal(
+				await page
+					.locator("#animation")
+					.evaluate((node) => getComputedStyle(node).animationName),
+				"atw-enter",
+			);
+			if (sheets.length === 2) {
+				assert.equal(
+					await page
+						.locator("#host-animation")
+						.evaluate((node) => getComputedStyle(node).animationName),
+					"enter",
+				);
+			}
+			await page.mouse.move(0, 0);
+			assert.equal(
+				await page
+					.locator("#group-action")
+					.evaluate((node) => getComputedStyle(node).opacity),
+				"0",
+			);
+			await page.locator("#group").hover();
+			assert.equal(
+				await page
+					.locator("#group-action")
+					.evaluate((node) => getComputedStyle(node).opacity),
+				"1",
+			);
+			await page.locator("#peer").focus();
+			assert.notEqual(
+				await page
+					.locator("#peer-target")
+					.evaluate((node) => getComputedStyle(node).boxShadow),
+				"none",
+			);
 		}
 	} finally {
 		await browser?.close();
