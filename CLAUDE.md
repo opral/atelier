@@ -105,8 +105,8 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
 - Cascade layers are the override contract: `src/index.css` orders
   `theme, base, components, atelier, utilities`, and every Atelier stylesheet
   (`theme.css`, `document.css`, each extension's `style.css`, the runtime's
-  sheets) lives in `@layer atelier` — imported with `layer(atelier)` or wrapped
-  in one `@layer atelier { … }` block that starts with
+  sheets) lives in `@layer atelier.components` — imported with `layer(atelier.components)` or wrapped
+  in one `@layer atelier.components { … }` block that starts with
   `@import "…/shell/layers.css"`, so the order holds whichever sheet a
   bundler emits first. A host's unlayered CSS and a Tailwind utility on the
   element beat Atelier's rules by design; extension authors do not declare

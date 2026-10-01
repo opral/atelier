@@ -94,8 +94,7 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 			entry,
 			`
 @layer theme, base, components, atelier, utilities;
-@import "${path.join(root, "node_modules/tailwindcss/theme.css")}" layer(theme);
-@import "${path.join(root, "node_modules/tailwindcss/utilities.css")}" layer(utilities) source(none);
+@import "${path.join(root, "node_modules/tailwindcss/index.css")}" source(none);
 @import "${path.join(root, "node_modules/tw-animate-css/dist/tw-animate.css")}";
 @source "${path.join(fixture, "host.html")}";
 `,
@@ -163,8 +162,14 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 				assert.equal(computed.hostScheme, "normal");
 				assert.equal(computed.darkScheme, "dark");
 				assert.equal(computed.darkPanel, "rgb(28, 25, 23)");
-				assert.equal(computed.outsideMargin, "16px");
-				assert.equal(computed.outsideBox, "content-box");
+				assert.equal(
+					computed.outsideMargin,
+					sheets.length === 2 ? "0px" : "16px",
+				);
+				assert.equal(
+					computed.outsideBox,
+					sheets.length === 2 ? "border-box" : "content-box",
+				);
 				assert.equal(computed.skeleton, "flex");
 				assert.equal(computed.staticSize, "26.25px");
 			}

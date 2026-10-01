@@ -41,7 +41,7 @@ const RENDERERS: readonly StaticRenderer[] = [
  * Pass both sides to show a change, one side to show the file as it stands.
  *
  * The HTML belongs inside an element with class `atelier-render`, paired with
- * {@link RENDER_CSS} (or the `@opral/atelier/render.css` stylesheet). Pass
+ * {@link RENDER_CSS} (or the `@opral/atelier/style.css` stylesheet). Pass
  * `document: true` to get a complete HTML file with the stylesheet inlined.
  */
 export function toHtml(

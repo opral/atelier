@@ -40,6 +40,19 @@ export function isolateTailwind(css) {
 			rule.selector = `${scope}, ${scope} *, ${scope}::before, ${scope}::after, ${scope} *::before, ${scope} *::after, ${scope}::backdrop`;
 		}
 	});
+	// Tailwind prepends its fallback layer before source layer declarations.
+	// Restore the public layer order at the very start: otherwise loading the
+	// library first registers `atelier` before host Preflight's `base` layer.
+	const layers = [
+		"theme, base, components, atelier, utilities",
+		"atelier.properties, atelier.theme, atelier.components, atelier.utilities",
+	];
+	ast.walkAtRules("layer", (rule) => {
+		if (!rule.nodes && layers.includes(rule.params)) rule.remove();
+	});
+	for (const params of layers.toReversed()) {
+		ast.prepend(postcss.atRule({ name: "layer", params }));
+	}
 	return ast.toString();
 }
 
