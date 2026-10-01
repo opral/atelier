@@ -2,7 +2,7 @@
 	"apiVersion": 1,
 	"id": "atelier_library",
 	"name": "Library",
-	"description": "Pages, tables, drawings and media, newest first; folders one switch away.",
+	"description": "Documents, tables, drawings and media, newest first; folders one switch away.",
 	"entry": "./index.js",
 	"multiInstance": true,
 	"placement": ["left", "main"]

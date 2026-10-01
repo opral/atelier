@@ -82,6 +82,25 @@ export function libraryState(location: {
 	};
 }
 
+/** How the kinds lay out their files: preview cards, or one row each. */
+export type LibraryLayout = "grid" | "list";
+
+const LAYOUT_KEY = "layout";
+
+/** The layout last picked, for every Library tab; Grid until one is. */
+export function libraryLayout(
+	preferences: AtelierExtensionPreferences,
+): LibraryLayout {
+	return preferences.get(LAYOUT_KEY) === "list" ? "list" : "grid";
+}
+
+export function setLibraryLayout(
+	preferences: AtelierExtensionPreferences,
+	layout: LibraryLayout,
+): void {
+	preferences.set(LAYOUT_KEY, layout);
+}
+
 const RECENT_KEY = "recent";
 /** Files taken off Recent: they no longer fill it as recently changed. */
 const RECENT_HIDDEN_KEY = "recentHidden";

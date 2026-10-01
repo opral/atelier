@@ -22,7 +22,6 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { fileIconUrl } from "../files/file-icons";
 import { KindIcon } from "./kind-icon";
 import type {
 	ExtensionRuntime,
@@ -329,12 +328,7 @@ export function LibrarySidebar({
 						{recent.map((file) => {
 							const glyph = marks.files.get(file.path);
 							const icon = (
-								<img
-									src={fileIconUrl(file.path)}
-									alt=""
-									aria-hidden="true"
-									className="atw:size-3.5 atw:shrink-0"
-								/>
+								<KindIcon kind={file.kind === "other" ? "file" : file.kind} />
 							);
 							if (renamingId === file.id) {
 								return (

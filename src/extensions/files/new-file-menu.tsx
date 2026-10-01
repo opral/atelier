@@ -37,11 +37,9 @@ export type NewFileMenuProps = {
 	/** Absent in the Library, which creates things of a kind, not files. */
 	readonly onNewFile?: () => void;
 	/**
-	 * Name the rows by what they make — New Page, New Table, New Drawing —
-	 * rather than by format. The Library's word for them.
+	 * The row ⌘ . makes here, marked with the shortcut. Without New file
+	 * only: where there is one, ⌘ . is New file's.
 	 */
-	readonly kindNames?: boolean;
-	/** With kindNames: the row ⌘ . makes here (defaults to New Page). */
 	readonly shortcutType?: "markdown" | "csv" | "excalidraw";
 	/** Absent where folders are not shown, e.g. the Library's Grid. */
 	readonly onNewFolder?: () => void;
@@ -75,8 +73,7 @@ export function NewFileMenu({
 	onNewCsv,
 	onNewExcalidraw,
 	onNewFile,
-	kindNames = false,
-	shortcutType = "markdown",
+	shortcutType,
 	onNewFolder,
 	onNewMarkdown,
 	onUpload,
@@ -108,7 +105,7 @@ export function NewFileMenu({
 	// A row that created something opens it, focused: the menu must not hand
 	// focus back to its button as it closes and take it from the new file.
 	const shortcutFor = (type: "markdown" | "csv" | "excalidraw") =>
-		kindNames && !onNewFile && type === shortcutType
+		!onNewFile && type === shortcutType
 			? { shortcut: shortcutHint("⌘ .") }
 			: {};
 	const choseRef = useRef(false);
@@ -157,7 +154,7 @@ export function NewFileMenu({
 				<NewMenuItem
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
-					label={kindNames ? "New Page" : "New Markdown"}
+					label="New Markdown"
 					{...shortcutFor("markdown")}
 					onSelect={chose(onNewMarkdown)}
 					trailing={slotFor("markdown", "file-new-markdown")}
@@ -165,7 +162,7 @@ export function NewFileMenu({
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
-					label={kindNames ? "New Table" : "New CSV"}
+					label="New CSV"
 					{...shortcutFor("csv")}
 					onSelect={chose(onNewCsv)}
 					trailing={slotFor("csv", "file-new-csv")}

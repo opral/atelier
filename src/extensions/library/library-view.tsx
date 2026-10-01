@@ -12,11 +12,12 @@ import {
 	type ReactNode,
 } from "react";
 import {
-	Check,
 	ChevronDown,
 	Download,
 	FileUp,
 	FolderInput,
+	LayoutGrid,
+	List,
 	MoreHorizontal,
 	PencilLine,
 	Plus,
@@ -79,10 +80,21 @@ import {
 } from "./library-data";
 import {
 	LIBRARY_EXTENSION_ID,
+	libraryLayout,
 	libraryLocationFromState,
 	libraryState,
+	setLibraryLayout,
+	type LibraryLayout,
 	type LibraryLocation,
 } from "./library-state";
+import {
+	selectionClick,
+	SelectionCheckbox,
+	SelectionToolbar,
+	toggleSelection,
+	usePruneSelection,
+	type LibrarySelection,
+} from "./selection";
 import {
 	collectDroppedEntries,
 	createFile,
@@ -176,6 +188,26 @@ export function LibraryView({
 	const toastId = useRef(0);
 	const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
 	const selectionAnchor = useRef<string | null>(null);
+	const [layout, setLayoutState] = useState<LibraryLayout>(() =>
+		libraryLayout(view.preferences),
+	);
+	const setLayout = useCallback(
+		(next: LibraryLayout) => {
+			setLayoutState(next);
+			setLibraryLayout(view.preferences, next);
+		},
+		[view.preferences],
+	);
+	// Files is folders; Home and the kinds are cards or rows, as picked.
+	const presentation: "grid" | "list" | "folders" =
+		mode === "folders" ? "folders" : kind === "home" ? "grid" : layout;
+	// A selection belongs to the section it was made in; Grid and List show
+	// the same files, so switching between them keeps it.
+	const clearSelection = useCallback(() => {
+		selectionAnchor.current = null;
+		setSelection((current) => (current.size === 0 ? current : new Set()));
+	}, []);
+	useEffect(clearSelection, [clearSelection, kind, mode]);
 	const [dragOver, setDragOver] = useState(false);
 	const dragDepth = useRef(0);
 	const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -591,11 +623,11 @@ export function LibraryView({
 			if (!inside) return;
 			event.stopPropagation();
 			if (query) setQuery("");
-			else setSelection(new Set());
+			else clearSelection();
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [dialog, isActive, query, selection.size]);
+	}, [clearSelection, dialog, isActive, query, selection.size]);
 
 	const onDragEnter = (event: DragEvent) => {
 		if (readOnly || !event.dataTransfer.types.includes("Files")) return;
@@ -709,6 +741,53 @@ export function LibraryView({
 			(dirPath === "/" &&
 				data.directories.every((directory) => directory.hidden))),
 	);
+	// What can be selected, in screen order: Shift ranges and Select all
+	// walk it. Search in Files lists every folder flat and selects nothing.
+	let selectable: readonly string[] = [];
+	const selectionFor = (
+		paths: readonly string[],
+	): LibrarySelection | undefined => {
+		if (readOnly) return undefined;
+		selectable = paths;
+		return {
+			selected: selection,
+			order: paths,
+			onChange: setSelection,
+			anchor: selectionAnchor,
+		};
+	};
+	const selectablePaths = (
+		files: readonly LibraryFile[],
+		folders: ReturnType<typeof folderListing>["folders"] = [],
+	) => [
+		...folders
+			.filter((folder) => !isRemovedFile(folder.directory))
+			.map((folder) => folder.directory.path),
+		...files.filter((file) => !isRemovedFile(file)).map((file) => file.path),
+	];
+	const kindItems = (files: readonly LibraryFile[]) =>
+		presentation === "list" ? (
+			<RowList
+				variant="list"
+				files={files}
+				folders={[]}
+				kind={kind}
+				marks={marks}
+				actions={itemActions}
+				selection={selectionFor(selectablePaths(files))}
+				onOpenFile={openFile}
+				onOpenFolder={openFolder}
+				onMoveInto={() => undefined}
+			/>
+		) : (
+			<FileGrid
+				files={files}
+				marks={marks}
+				actions={itemActions}
+				selection={selectionFor(selectablePaths(files))}
+				onOpen={openFile}
+			/>
+		);
 	let body: ReactNode;
 	if (!data) {
 		body = error ? (
@@ -729,23 +808,16 @@ export function LibraryView({
 					body="Search looks at names and folders. Try fewer letters."
 				/>
 			) : mode === "grid" ? (
-				<FileGrid
-					files={results}
-					marks={marks}
-					actions={itemActions}
-					onOpen={openFile}
-				/>
+				kindItems(results)
 			) : (
 				<RowList
+					variant="folders"
 					files={results}
 					folders={folderResults}
 					kind={kind}
 					flat
 					marks={marks}
 					actions={itemActions}
-					selection={selection}
-					onSelectionChange={setSelection}
-					selectionAnchor={selectionAnchor}
 					onOpenFile={openFile}
 					onOpenFolder={openFolder}
 					onMoveInto={() => undefined}
@@ -803,12 +875,7 @@ export function LibraryView({
 					/>
 				)
 			) : (
-				<FileGrid
-					files={files}
-					marks={marks}
-					actions={itemActions}
-					onOpen={openFile}
-				/>
+				kindItems(files)
 			);
 	} else {
 		const listing = folderListing(data, dirPath, kind, { showHidden });
@@ -836,14 +903,15 @@ export function LibraryView({
 				/>
 			) : (
 				<RowList
+					variant="folders"
 					files={listing.files}
 					folders={listing.folders}
 					kind={kind}
 					marks={marks}
 					actions={itemActions}
-					selection={selection}
-					onSelectionChange={setSelection}
-					selectionAnchor={selectionAnchor}
+					selection={selectionFor(
+						selectablePaths(listing.files, listing.folders),
+					)}
 					onOpenFile={openFile}
 					onOpenFolder={openFolder}
 					onMoveInto={(entries, destination) => {
@@ -867,6 +935,12 @@ export function LibraryView({
 				/>
 			);
 	}
+	// Only what is on screen stays selected: a search narrowed, a file
+	// deleted elsewhere.
+	usePruneSelection(
+		{ selected: selection, onChange: setSelection, anchor: selectionAnchor },
+		data ? selectable : null,
+	);
 
 	const selectedEntries = useMemo(() => {
 		if (!data || selection.size === 0) return [];
@@ -890,9 +964,9 @@ export function LibraryView({
 		return entries;
 	}, [data, selection]);
 
-	// While rows are selected, the header's Search and New make way for what
-	// can be done with them — in the same place, so the list never moves.
-	const selecting = mode === "folders" && selection.size > 0 && !readOnly;
+	// While items are selected, the header's title, Search and New make way
+	// for what can be done with them — in the same place, so nothing moves.
+	const selecting = selection.size > 0 && !readOnly;
 
 	return (
 		<div
@@ -922,16 +996,13 @@ export function LibraryView({
 			<div className="atw:mx-auto atw:flex atw:w-[min(1080px,calc(100%-112px))] atw:flex-1 atw:flex-col atw:pt-9 atw:pb-16 atw:max-sm:w-[calc(100%-32px)]">
 				<header className="atw:flex atw:items-center atw:gap-3 atw:pb-6 atw:@max-[520px]:flex-wrap">
 					<div className="atw:flex atw:min-w-0 atw:flex-auto">
-						<FolderBreadcrumb
-							rootLabel={copy.label}
-							segments={inSubfolder ? folderSegments : []}
-							onOpen={(path, newTab) => openFolder(path, { newTab })}
-						/>
-					</div>
-					{selecting ? (
-						<div className="atw:flex atw:shrink-0 atw:items-center">
+						{selecting ? (
 							<SelectionToolbar
 								count={selection.size}
+								total={selectable.length}
+								inset={presentation === "grid" ? "card" : "gutter"}
+								onSelectAll={() => setSelection(new Set(selectable))}
+								onClear={clearSelection}
 								onMove={() => {
 									setDialogError(null);
 									setDialog({ type: "move", entries: selectedEntries });
@@ -948,87 +1019,91 @@ export function LibraryView({
 								{...(selectedEntries.length === 1
 									? { onRename: () => itemActions.rename(selectedEntries[0]!) }
 									: {})}
-								onClear={() => setSelection(new Set())}
 							/>
-						</div>
-					) : (
-						<>
-							<label className="atw:relative atw:flex atw:h-8 atw:w-56 atw:min-w-24 atw:shrink-[4] atw:items-center atw:@max-[760px]:w-40 atw:@max-[520px]:order-last atw:@max-[520px]:w-full">
-								<Search
-									className="atw:pointer-events-none atw:absolute atw:left-2.5 atw:size-3.5 atw:text-fg-subtle"
-									aria-hidden="true"
-								/>
-								<input
-									ref={searchRef}
-									type="search"
-									value={query}
-									onChange={(event) => setQuery(event.target.value)}
-									placeholder="Search"
-									aria-label={`Search ${copy.label}`}
-									data-testid="library-search"
-									className="atw:h-8 atw:w-full atw:rounded-lg atw:border atw:border-border atw:bg-panel atw:pr-7 atw:pl-8 atw:text-[13px] atw:text-fg atw:outline-none atw:placeholder:text-fg-subtle atw:focus:border-border-strong atw:focus:ring-2 atw:focus:ring-ring/25 atw:[&::-webkit-search-cancel-button]:hidden"
-								/>
-								{query ? (
-									<button
-										type="button"
-										aria-label="Clear search"
-										className="atw:absolute atw:right-1.5 atw:grid atw:size-5 atw:place-items-center atw:rounded atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg"
-										onClick={() => {
-											setQuery("");
-											searchRef.current?.focus();
-										}}
-									>
-										<X className="atw:size-3" aria-hidden="true" />
-									</button>
-								) : null}
-							</label>
-							{readOnly ? null : (
-								<div className="atw:shrink-0">
-									<NewFileMenu
-										align="end"
-										defaultFolders={defaultFolders}
-										folderOptions={folderOptions}
-										hereDirectory={ensureDirectoryPath(hereDirectory)}
-										existingDirectories={existingDirectories}
-										onSetDefaultFolder={setDefaultFolder}
-										kindNames
-										shortcutType={KIND_FILE_TYPE[kind] ?? "markdown"}
-										{...(mode === "folders"
-											? {
-													onNewFolder: () => {
-														setDialogError(null);
-														setDialog({ type: "new-folder" });
-													},
-												}
-											: {})}
-										onNewMarkdown={() => void createTyped("markdown")}
-										onNewCsv={() => void createTyped("csv")}
-										onNewExcalidraw={() => void createTyped("excalidraw")}
-										onCreateHereOnce={(fileType) =>
-											void createTyped(fileType, { here: true })
+						) : (
+							<FolderBreadcrumb
+								rootLabel={copy.label}
+								segments={inSubfolder ? folderSegments : []}
+								onOpen={(path, newTab) => openFolder(path, { newTab })}
+							/>
+						)}
+					</div>
+					{mode === "grid" && kind !== "home" ? (
+						<LayoutSwitch layout={layout} onChange={setLayout} />
+					) : null}
+					<label className="atw:relative atw:flex atw:h-8 atw:w-56 atw:min-w-24 atw:shrink-[4] atw:items-center atw:@max-[760px]:w-40 atw:@max-[520px]:order-last atw:@max-[520px]:w-full">
+						<Search
+							className="atw:pointer-events-none atw:absolute atw:left-2.5 atw:size-3.5 atw:text-fg-subtle"
+							aria-hidden="true"
+						/>
+						<input
+							ref={searchRef}
+							type="search"
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							placeholder="Search"
+							aria-label={`Search ${copy.label}`}
+							data-testid="library-search"
+							className="atw:h-8 atw:w-full atw:rounded-lg atw:border atw:border-border atw:bg-panel atw:pr-7 atw:pl-8 atw:text-[13px] atw:text-fg atw:outline-none atw:placeholder:text-fg-subtle atw:focus:border-border-strong atw:focus:ring-2 atw:focus:ring-ring/25 atw:[&::-webkit-search-cancel-button]:hidden"
+						/>
+						{query ? (
+							<button
+								type="button"
+								aria-label="Clear search"
+								className="atw:absolute atw:right-1.5 atw:grid atw:size-5 atw:place-items-center atw:rounded atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg"
+								onClick={() => {
+									setQuery("");
+									searchRef.current?.focus();
+								}}
+							>
+								<X className="atw:size-3" aria-hidden="true" />
+							</button>
+						) : null}
+					</label>
+					{readOnly ? null : (
+						<div className="atw:shrink-0">
+							<NewFileMenu
+								align="end"
+								defaultFolders={defaultFolders}
+								folderOptions={folderOptions}
+								hereDirectory={ensureDirectoryPath(hereDirectory)}
+								existingDirectories={existingDirectories}
+								onSetDefaultFolder={setDefaultFolder}
+								shortcutType={KIND_FILE_TYPE[kind] ?? "markdown"}
+								{...(mode === "folders"
+									? {
+											onNewFolder: () => {
+												setDialogError(null);
+												setDialog({ type: "new-folder" });
+											},
 										}
-										onCreateFolder={async (parent, name) => {
-											if (!data) return null;
-											try {
-												return (
-													await createFolder(
-														lix,
-														data,
-														canonicalDirectory(parent),
-														name,
-													)
-												).path;
-											} catch {
-												return null;
-											}
-										}}
-										onUpload={startUpload}
-									>
-										<NewButton />
-									</NewFileMenu>
-								</div>
-							)}
-						</>
+									: {})}
+								onNewMarkdown={() => void createTyped("markdown")}
+								onNewCsv={() => void createTyped("csv")}
+								onNewExcalidraw={() => void createTyped("excalidraw")}
+								onCreateHereOnce={(fileType) =>
+									void createTyped(fileType, { here: true })
+								}
+								onCreateFolder={async (parent, name) => {
+									if (!data) return null;
+									try {
+										return (
+											await createFolder(
+												lix,
+												data,
+												canonicalDirectory(parent),
+												name,
+											)
+										).path;
+									} catch {
+										return null;
+									}
+								}}
+								onUpload={startUpload}
+							>
+								<NewButton />
+							</NewFileMenu>
+						</div>
 					)}
 				</header>
 				{results ? (
@@ -1190,7 +1265,7 @@ function commonParent(entries: readonly LibraryEntry[]): string {
 }
 
 function summarizeUpload(paths: readonly string[], data: LibraryData): string {
-	// Name what arrived by kind, as the handoff's "Added 2 pages and 1 image".
+	// Name what arrived by kind: "Added 2 documents and 1 image".
 	const counts = new Map<string, number>();
 	for (const path of paths) {
 		const extension = path.split(".").at(-1)?.toLowerCase() ?? "";
@@ -1635,10 +1710,51 @@ function useFittingColumns(
 	return columns;
 }
 
+/** Cards or rows, for the kinds; Files is always rows. */
+function LayoutSwitch({
+	layout,
+	onChange,
+}: {
+	readonly layout: LibraryLayout;
+	readonly onChange: (layout: LibraryLayout) => void;
+}) {
+	const options = [
+		{ value: "grid", label: "Grid", Icon: LayoutGrid },
+		{ value: "list", label: "List", Icon: List },
+	] as const;
+	return (
+		<div
+			role="group"
+			aria-label="Layout"
+			className="atw:flex atw:h-8 atw:shrink-0 atw:items-center atw:gap-0.5"
+		>
+			{options.map(({ value, label, Icon }) => (
+				<button
+					key={value}
+					type="button"
+					aria-pressed={layout === value}
+					aria-label={label}
+					title={label}
+					data-testid={`library-layout-${value}`}
+					onClick={() => onChange(value)}
+					className={`atw:grid atw:size-8 atw:place-items-center atw:rounded-lg atw:transition-colors atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none ${
+						layout === value
+							? "atw:bg-bg-active atw:text-fg"
+							: "atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg"
+					}`}
+				>
+					<Icon className="atw:size-4" aria-hidden="true" />
+				</button>
+			))}
+		</div>
+	);
+}
+
 function FileGrid({
 	files,
 	marks,
 	actions,
+	selection,
 	onOpen,
 	singleRow = false,
 }: {
@@ -1647,6 +1763,8 @@ function FileGrid({
 	readonly files: readonly LibraryFile[];
 	readonly marks: LibraryReviewMarks;
 	readonly actions: ItemActions;
+	/** Absent, the cards only open. */
+	readonly selection?: LibrarySelection;
 	readonly onOpen: (file: LibraryFile, newTab: boolean) => void;
 }) {
 	const ref = useRef<HTMLUListElement>(null);
@@ -1669,6 +1787,7 @@ function FileGrid({
 						glyph={marks.files.get(file.path) ?? null}
 						dimmed={marks.active && !marks.files.has(file.path)}
 						actions={actions}
+						{...(selection ? { selection } : {})}
 						onOpen={onOpen}
 					/>
 				</li>
@@ -1677,27 +1796,43 @@ function FileGrid({
 	);
 }
 
+/**
+ * A file as a card: its name on top, beside its menu, over a preview of
+ * what is in it. Hovered (or once anything is selected) the icon becomes
+ * the card's checkbox.
+ */
 function GridCard({
 	file,
 	glyph,
 	dimmed,
 	actions: cardActions,
+	selection,
 	onOpen,
 }: {
 	readonly file: LibraryFile;
 	readonly glyph: DiffGlyphKind | null;
 	readonly dimmed: boolean;
 	readonly actions: ItemActions;
+	readonly selection?: LibrarySelection;
 	readonly onOpen: (file: LibraryFile, newTab: boolean) => void;
 }) {
 	// A file a review removed can be opened (to its diff), nothing else.
 	const actions = isRemovedFile(file)
 		? { ...cardActions, readOnly: true }
 		: cardActions;
-	const hint =
-		file.directory === "/" ? "" : `${file.directory.split("/").at(-1)}/`;
+	const selectable = selection !== undefined && !actions.readOnly;
+	const selected = selectable && selection.selected.has(file.path);
+	const selecting = selectable && selection.selected.size > 0;
+	// Where the checkbox and the menu replace the icon and the time.
+	const revealed =
+		"atw:group-hover/card:opacity-100 atw:group-has-[:focus-visible]/card:opacity-100 atw:group-has-[[data-state=open]]/card:opacity-100";
+	const concealed =
+		"atw:group-hover/card:invisible atw:group-has-[:focus-visible]/card:invisible atw:group-has-[[data-state=open]]/card:invisible";
 	return (
-		<div className="atw:group/card atw:relative">
+		<div
+			className="atw:group/card atw:relative"
+			data-selected={selected || undefined}
+		>
 			<ContextMenu>
 				<ContextMenuTrigger asChild>
 					<button
@@ -1706,47 +1841,56 @@ function GridCard({
 						data-path={file.path}
 						data-changed={glyph ?? undefined}
 						title={file.path}
-						onClick={(event) => onOpen(file, isNewTabClick(event))}
+						onClick={(event) => {
+							if (selectable && selectionClick(selection, file.path, event))
+								return;
+							onOpen(file, isNewTabClick(event));
+						}}
 						onAuxClick={(event) => {
 							if (event.button === 1) onOpen(file, true);
 						}}
 						onKeyDown={(event) => {
+							if (event.key === " " && selectable) {
+								event.preventDefault();
+								toggleSelection(selection, file.path, event.shiftKey);
+								return;
+							}
 							itemKeyDown(event, fileEntry(file), actions);
 						}}
-						className={`atw:group atw:@container atw:flex atw:w-full atw:flex-col atw:overflow-hidden atw:rounded-[12px] atw:border atw:border-border atw:bg-panel atw:text-left atw:transition-[border-color,box-shadow,opacity] atw:hover:border-border-strong atw:hover:shadow-md atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none atw:data-[state=open]:border-border-strong${
-							dimmed ? " atw:opacity-[0.35] atw:hover:opacity-100" : ""
-						}`}
+						className={`atw:flex atw:w-full atw:flex-col atw:overflow-hidden atw:rounded-[12px] atw:border atw:bg-panel atw:text-left atw:transition-[border-color,box-shadow,opacity] atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none ${
+							selected
+								? "atw:border-link atw:ring-1 atw:ring-link"
+								: "atw:border-border atw:hover:border-border-strong atw:hover:shadow-md atw:data-[state=open]:border-border-strong"
+						}${dimmed ? " atw:opacity-[0.35] atw:hover:opacity-100" : ""}`}
 					>
-						<div className="atw:relative atw:aspect-[4/3] atw:w-full atw:overflow-hidden atw:border-b atw:border-border-subtle atw:bg-bg-subtle">
-							<LibraryPreview file={file} />
-							{file.kind === "media" ? null : (
-								<div className="atw:pointer-events-none atw:absolute atw:inset-x-0 atw:bottom-0 atw:h-8 atw:bg-gradient-to-t atw:from-bg-subtle atw:to-transparent" />
-							)}
-						</div>
-						<div className="atw:flex atw:h-10 atw:items-center atw:gap-1.5 atw:px-2.5">
+						<div className="atw:flex atw:h-11 atw:w-full atw:items-center atw:gap-2 atw:px-3">
 							<img
 								src={fileIconUrl(file.path)}
 								alt=""
 								aria-hidden="true"
-								className="atw:size-3.5 atw:shrink-0"
+								className={`atw:size-4 atw:shrink-0 ${
+									!selectable ? "" : selecting ? "atw:invisible" : concealed
+								}`}
 							/>
 							<span
-								className={`atw:min-w-0 atw:flex-auto atw:truncate atw:text-[12.5px] atw:font-medium ${glyph ? glyphTextClass(glyph) : "atw:text-fg"}`}
+								className={`atw:min-w-0 atw:flex-auto atw:truncate atw:text-[13.5px] atw:font-semibold ${glyph ? glyphTextClass(glyph) : "atw:text-fg"}`}
 							>
 								{file.displayName}
 							</span>
 							{glyph ? (
 								<DiffGlyph kind={glyph} size={11} className="atw:shrink-0" />
 							) : null}
-
-							{hint ? (
-								<span className="atw:min-w-0 atw:shrink-[12] atw:truncate atw:text-[11.5px] atw:text-fg-faint atw:@max-[170px]:hidden">
-									{hint}
-								</span>
-							) : null}
-							<span className="atw:shrink-0 atw:text-[11.5px] atw:text-fg-subtle">
+							<span
+								className={`atw:shrink-0 atw:text-[11.5px] atw:text-fg-subtle atw:[@media(hover:none)]:invisible ${concealed}`}
+							>
 								{formatLibraryTime(file.updatedAt)}
 							</span>
+						</div>
+						<div className="atw:relative atw:aspect-[4/3] atw:w-full atw:overflow-hidden atw:border-t atw:border-border-subtle atw:bg-bg-subtle">
+							<LibraryPreview file={file} />
+							{file.kind === "media" ? null : (
+								<div className="atw:pointer-events-none atw:absolute atw:inset-x-0 atw:bottom-0 atw:h-8 atw:bg-gradient-to-t atw:from-bg-subtle atw:to-transparent" />
+							)}
 						</div>
 					</button>
 				</ContextMenuTrigger>
@@ -1756,9 +1900,18 @@ function GridCard({
 					actions={actions}
 				/>
 			</ContextMenu>
+			{selectable ? (
+				<SelectionCheckbox
+					label={`Select ${file.displayName}`}
+					checked={selected}
+					visible={selecting}
+					onToggle={(extend) => toggleSelection(selection, file.path, extend)}
+					className={`atw:absolute atw:top-[9px] atw:left-[7px] ${revealed}`}
+				/>
+			) : null}
 			<ItemMenuButton
 				label={`More actions for ${file.name}`}
-				className="atw:absolute atw:top-2 atw:right-2 atw:border atw:border-border atw:bg-panel atw:opacity-0 atw:shadow-sm atw:group-hover/card:opacity-100"
+				className={`atw:absolute atw:top-[9px] atw:right-[7px] atw:opacity-0 ${revealed}`}
 			>
 				<ItemMenuContent
 					variant="dropdown"
@@ -1774,19 +1927,25 @@ function GridCard({
 function glyphTextClass(glyph: DiffGlyphKind): string {
 	switch (glyph) {
 		case "added":
-			return "text-diff-added";
+			return "atw:text-diff-added";
 		case "removed":
-			return "text-diff-removed";
+			return "atw:text-diff-removed";
 		case "moved":
-			return "text-diff-moved";
+			return "atw:text-diff-moved";
 		default:
-			return "text-link";
+			return "atw:text-link";
 	}
 }
 
 const ENTRY_DRAG_TYPE = "application/x-atelier-library-entries";
 
+/**
+ * Items as rows. "folders" is Files: folders first, each file by its file
+ * name, drag onto a folder to move. "list" is a kind's files by name, with
+ * the folder each is in and when it last changed, under column heads.
+ */
 function RowList({
+	variant,
 	files,
 	folders,
 	kind,
@@ -1794,21 +1953,20 @@ function RowList({
 	marks,
 	actions: listActions,
 	selection,
-	onSelectionChange,
-	selectionAnchor,
 	onOpenFile,
 	onOpenFolder,
 	onMoveInto,
 }: {
+	readonly variant: "folders" | "list";
 	readonly files: readonly LibraryFile[];
 	readonly folders: ReturnType<typeof folderListing>["folders"];
 	readonly kind: LibraryKind;
+	/** Search results from every folder: each row names its folder. */
 	readonly flat?: boolean;
 	readonly marks: LibraryReviewMarks;
 	readonly actions: ItemActions;
-	readonly selection: ReadonlySet<string>;
-	readonly onSelectionChange: (next: ReadonlySet<string>) => void;
-	readonly selectionAnchor: React.MutableRefObject<string | null>;
+	/** Absent, the rows only open. */
+	readonly selection?: LibrarySelection;
 	readonly onOpenFile: (file: LibraryFile, newTab: boolean) => void;
 	readonly onOpenFolder: (path: string, options: { newTab?: boolean }) => void;
 	readonly onMoveInto: (
@@ -1816,13 +1974,6 @@ function RowList({
 		destination: string,
 	) => void;
 }) {
-	const order = useMemo(
-		() => [
-			...folders.map((folder) => folder.directory.path),
-			...files.map((file) => file.path),
-		],
-		[files, folders],
-	);
 	const entryFor = (path: string): LibraryEntry | null => {
 		const file = files.find((candidate) => candidate.path === path);
 		if (file) return fileEntry(file);
@@ -1833,26 +1984,13 @@ function RowList({
 			? { type: "directory", path, name: folder.directory.name }
 			: null;
 	};
-	const toggle = (path: string, extend: boolean) => {
-		const next = new Set(selection);
-		if (
-			extend &&
-			selectionAnchor.current &&
-			order.includes(selectionAnchor.current)
-		) {
-			const from = order.indexOf(selectionAnchor.current);
-			const to = order.indexOf(path);
-			const [start, end] = from < to ? [from, to] : [to, from];
-			for (const candidate of order.slice(start, end + 1)) next.add(candidate);
-		} else if (next.has(path)) next.delete(path);
-		else next.add(path);
-		selectionAnchor.current = path;
-		onSelectionChange(next);
-	};
 	const [dropTarget, setDropTarget] = useState<string | null>(null);
-	const selectionActive = selection.size > 0;
+	const selectionActive = (selection?.selected.size ?? 0) > 0;
+	const canDrag = variant === "folders" && !flat;
 	const draggedEntries = (path: string): LibraryEntry[] => {
-		const paths = selection.has(path) ? [...selection] : [path];
+		const paths = selection?.selected.has(path)
+			? [...selection.selected]
+			: [path];
 		return paths
 			.map(entryFor)
 			.filter((entry): entry is LibraryEntry => entry !== null);
@@ -1863,6 +2001,7 @@ function RowList({
 		name,
 		icon,
 		meta,
+		folder,
 		glyph,
 		dim,
 		open,
@@ -1875,6 +2014,8 @@ function RowList({
 		name: string;
 		icon: string;
 		meta: string;
+		/** The list's Folder column. */
+		folder?: string;
 		glyph: DiffGlyphKind | "contains" | null;
 		dim: boolean;
 		open: (newTab: boolean) => void;
@@ -1888,47 +2029,32 @@ function RowList({
 			removed || (file && isRemovedFile(file))
 				? { ...listActions, readOnly: true }
 				: listActions;
-		const selected = selection.has(path);
+		const selectable = selection !== undefined && !actions.readOnly;
+		const selected = selectable && selection.selected.has(path);
 		return (
 			<li
 				key={path}
 				className="atw:group atw:relative"
 				data-testid={isFolder ? "library-folder-row" : "library-file-row"}
 				data-path={path}
+				data-selected={selected || undefined}
 			>
-				{actions.readOnly || flat ? null : (
-					<button
-						type="button"
-						role="checkbox"
-						aria-checked={selected}
-						aria-label={`Select ${name}`}
-						onClick={(event) => toggle(path, event.shiftKey)}
+				{selectable ? (
+					<SelectionCheckbox
+						label={`Select ${name}`}
+						checked={selected}
+						visible={selectionActive}
+						onToggle={(extend) => toggleSelection(selection, path, extend)}
 						// In the gutter left of the row, level with it: rows stay aligned
 						// with the title, and the page margin is wide enough to hold it.
-						className={`atw:absolute atw:top-1/2 atw:-left-7 atw:grid atw:size-7 atw:-translate-y-1/2 atw:place-items-center atw:rounded-md atw:transition-opacity atw:focus-visible:opacity-100 atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none atw:max-sm:hidden ${
-							selectionActive || selected
-								? "atw:opacity-100"
-								: "atw:opacity-0 atw:group-hover:opacity-100"
-						}`}
-					>
-						<span
-							className={`atw:grid atw:size-4 atw:place-items-center atw:rounded-[5px] atw:border atw:transition-colors ${
-								selected
-									? "atw:border-link atw:bg-link atw:text-accent-on"
-									: "atw:border-border-strong atw:bg-panel"
-							}`}
-						>
-							{selected ? (
-								<Check className="atw:size-3" aria-hidden="true" />
-							) : null}
-						</span>
-					</button>
-				)}
+						className="atw:absolute atw:top-1/2 atw:-left-7 atw:-translate-y-1/2 atw:group-hover:opacity-100 atw:max-sm:hidden"
+					/>
+				) : null}
 				<ContextMenu>
 					<ContextMenuTrigger asChild>
 						<button
 							type="button"
-							draggable={!actions.readOnly && !flat}
+							draggable={canDrag && !actions.readOnly}
 							onDragStart={(event) => {
 								event.dataTransfer.effectAllowed = "move";
 								event.dataTransfer.setData(
@@ -1979,23 +2105,17 @@ function RowList({
 								if (entries.length > 0) onMoveInto(entries, path);
 							}}
 							onClick={(event) => {
-								if (event.shiftKey && !flat && !actions.readOnly) {
-									toggle(path, true);
+								if (selectable && selectionClick(selection, path, event))
 									return;
-								}
-								if ((event.metaKey || event.ctrlKey) && selectionActive) {
-									toggle(path, false);
-									return;
-								}
 								open(isNewTabClick(event));
 							}}
 							onAuxClick={(event) => {
 								if (event.button === 1) open(true);
 							}}
 							onKeyDown={(event) => {
-								if (event.key === " " && !flat && !actions.readOnly) {
+								if (event.key === " " && selectable) {
 									event.preventDefault();
-									toggle(path, event.shiftKey);
+									toggleSelection(selection, path, event.shiftKey);
 									return;
 								}
 								itemKeyDown(event, entry, actions);
@@ -2029,7 +2149,16 @@ function RowList({
 									</span>
 								) : null}
 							</span>
-							<span className="atw:shrink-0 atw:text-right atw:text-[12px] atw:text-fg-faint">
+							{folder !== undefined ? (
+								<span
+									className={`${LIST_FOLDER_COLUMN} atw:text-[13px] atw:text-fg-subtle`}
+								>
+									{folder}
+								</span>
+							) : null}
+							<span
+								className={`atw:shrink-0 atw:text-right atw:text-[12px] atw:text-fg-faint ${variant === "list" ? LIST_TIME_COLUMN : ""}`}
+							>
 								{meta}
 							</span>
 							{/* A fixed column, so the marks line up down the list. */}
@@ -2069,142 +2198,85 @@ function RowList({
 	};
 
 	return (
-		<ul
-			className="atw:-mx-3 atw:flex atw:flex-col atw:gap-px"
-			data-testid="library-rows"
-		>
-			{folders.map((folder) => {
-				const status = marks.directories.get(folder.directory.path);
-				return row({
-					path: folder.directory.path,
-					name: folder.directory.name,
-					icon: folderBlueIconUrl,
-					meta: countLabel(kind, folder.count),
-					// A folder the review removed is marked so, whatever it held.
-					glyph: isRemovedFile(folder.directory)
-						? "removed"
-						: status === "added"
-							? "added"
-							: status
-								? "contains"
-								: null,
-					dim: (marks.active && !status) || folder.directory.hidden,
-					open: (newTab) => onOpenFolder(folder.directory.path, { newTab }),
-					removed: isRemovedFile(folder.directory),
-					entry: {
-						type: "directory",
+		<div className="atw:-mx-3 atw:flex atw:flex-col">
+			{variant === "list" ? (
+				// Column heads, set like the rows so each sits over its column.
+				<div
+					aria-hidden="true"
+					data-testid="library-list-head"
+					className="atw:mb-1 atw:flex atw:h-8 atw:items-center atw:gap-3 atw:border-b atw:border-border-subtle atw:pr-11 atw:pl-3 atw:text-[12px] atw:font-medium atw:text-fg-subtle"
+				>
+					<span className="atw:w-[18px] atw:shrink-0" />
+					<span className="atw:min-w-0 atw:flex-1">Name</span>
+					<span className={`${LIST_FOLDER_COLUMN} atw:text-[12px]`}>
+						Folder
+					</span>
+					<span className={`atw:shrink-0 atw:text-right ${LIST_TIME_COLUMN}`}>
+						Last edited
+					</span>
+					<span className="atw:w-3.5 atw:shrink-0" />
+				</div>
+			) : null}
+			<ul
+				className="atw:flex atw:flex-col atw:gap-px"
+				data-testid="library-rows"
+				data-variant={variant}
+			>
+				{folders.map((folder) => {
+					const status = marks.directories.get(folder.directory.path);
+					return row({
 						path: folder.directory.path,
 						name: folder.directory.name,
-					},
-					isFolder: true,
-				});
-			})}
-			{files.map((file) => {
-				const glyph = marks.files.get(file.path) ?? null;
-				const otherKind = !matchesLibraryKind(kind, file.kind);
-				return row({
-					path: file.path,
-					name: file.name,
-					icon: fileIconUrl(file.path),
-					meta: formatLibraryTime(file.updatedAt),
-					glyph,
-					dim: (marks.active && !glyph) || otherKind || file.hidden,
-					open: (newTab) => onOpenFile(file, newTab),
-					entry: fileEntry(file),
-					file,
-					isFolder: false,
-				});
-			})}
-		</ul>
-	);
-}
-
-function SelectionToolbar({
-	count,
-	onMove,
-	onDelete,
-	onDownload,
-	onOpenInNewTabs,
-	onRename,
-	onClear,
-}: {
-	readonly count: number;
-	readonly onMove: () => void;
-	readonly onDelete: () => void;
-	readonly onDownload: () => void;
-	readonly onOpenInNewTabs: () => void;
-	readonly onRename?: () => void;
-	readonly onClear: () => void;
-}) {
-	return (
-		<div
-			role="toolbar"
-			aria-label="Selection"
-			data-testid="library-selection-toolbar"
-			className="atw:box-border atw:flex atw:h-8 atw:items-center atw:gap-1 atw:rounded-[9px] atw:border atw:border-border atw:bg-panel atw:pr-0.5 atw:pl-3 atw:shadow-sm"
-		>
-			<span className="atw:pr-2 atw:text-[12.5px] atw:font-semibold atw:text-fg">
-				{count} selected
-			</span>
-			<button
-				type="button"
-				onClick={onMove}
-				className="atw:flex atw:h-7 atw:items-center atw:gap-1.5 atw:rounded-md atw:px-2 atw:text-[12.5px] atw:font-medium atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg"
-			>
-				<FolderInput className="atw:size-3.5" aria-hidden="true" />
-				Move
-			</button>
-			<DropdownMenu>
-				<DropdownMenuTrigger asChild>
-					<button
-						type="button"
-						aria-label="More actions"
-						className="atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg"
-					>
-						<MoreHorizontal className="atw:size-3.5" aria-hidden="true" />
-					</button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent
-					align="start"
-					className="atw:min-w-44 atw:text-[13px]"
-				>
-					<DropdownMenuItem onSelect={onOpenInNewTabs}>
-						<SquareArrowOutUpRight aria-hidden="true" />
-						Open in new tabs
-					</DropdownMenuItem>
-					<DropdownMenuItem onSelect={onDownload}>
-						<Download aria-hidden="true" />
-						Download
-					</DropdownMenuItem>
-					{onRename ? (
-						<>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem onSelect={onRename}>
-								<PencilLine aria-hidden="true" />
-								Rename
-							</DropdownMenuItem>
-						</>
-					) : null}
-				</DropdownMenuContent>
-			</DropdownMenu>
-			<button
-				type="button"
-				aria-label="Delete"
-				title="Delete"
-				onClick={onDelete}
-				className="atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-muted atw:hover:bg-danger-subtle atw:hover:text-danger"
-			>
-				<Trash2 className="atw:size-3.5" aria-hidden="true" />
-			</button>
-			<button
-				type="button"
-				aria-label="Clear selection"
-				title="Clear selection (Esc)"
-				onClick={onClear}
-				className="atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg"
-			>
-				<X className="atw:size-3.5" aria-hidden="true" />
-			</button>
+						icon: folderBlueIconUrl,
+						meta: countLabel(kind, folder.count),
+						// A folder the review removed is marked so, whatever it held.
+						glyph: isRemovedFile(folder.directory)
+							? "removed"
+							: status === "added"
+								? "added"
+								: status
+									? "contains"
+									: null,
+						dim: (marks.active && !status) || folder.directory.hidden,
+						open: (newTab) => onOpenFolder(folder.directory.path, { newTab }),
+						removed: isRemovedFile(folder.directory),
+						entry: {
+							type: "directory",
+							path: folder.directory.path,
+							name: folder.directory.name,
+						},
+						isFolder: true,
+					});
+				})}
+				{files.map((file) => {
+					const glyph = marks.files.get(file.path) ?? null;
+					const otherKind = !matchesLibraryKind(kind, file.kind);
+					return row({
+						path: file.path,
+						// A kind reads its files by title, as its cards do.
+						name: variant === "list" ? file.displayName : file.name,
+						icon: fileIconUrl(file.path),
+						meta: formatLibraryTime(file.updatedAt),
+						...(variant === "list"
+							? {
+									folder:
+										file.directory === "/" ? "—" : file.directory.slice(1),
+								}
+							: {}),
+						glyph,
+						dim: (marks.active && !glyph) || otherKind || file.hidden,
+						open: (newTab) => onOpenFile(file, newTab),
+						entry: fileEntry(file),
+						file,
+						isFolder: false,
+					});
+				})}
+			</ul>
 		</div>
 	);
 }
+
+/** The list's Folder column; it gives way first in a narrow tab. */
+const LIST_FOLDER_COLUMN =
+	"atw:w-[28%] atw:min-w-0 atw:shrink-0 atw:truncate atw:@max-[560px]:hidden";
+const LIST_TIME_COLUMN = "atw:w-24";

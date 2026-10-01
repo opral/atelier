@@ -370,7 +370,7 @@ function MarkdownPreview({ text }: { readonly text: string }) {
 		}
 	}, [text]);
 	if (blocks === null) return <TextPreview text={text} />;
-	if (blocks.length === 0) return <EmptyPreviewLine label="Empty page" />;
+	if (blocks.length === 0) return <EmptyPreviewLine label="Empty document" />;
 	return (
 		<div
 			className="atelier-document atw:pointer-events-none atw:px-3.5 atw:py-3 atw:select-none"

@@ -24,7 +24,7 @@ export const LIBRARY_KINDS: readonly LibraryKind[] = [
 
 export type LibraryKindCopy = {
 	readonly label: string;
-	/** "page" / "pages", for counts: "2 pages". */
+	/** "document" / "documents", for counts: "2 documents". */
 	readonly one: string;
 	readonly many: string;
 	readonly emptyTitle: string;
@@ -56,12 +56,12 @@ export const LIBRARY_KIND_COPY: Record<LibraryKind, LibraryKindCopy> = {
 		emptyBody: "Create something with New, or drop files and folders here.",
 	},
 	pages: {
-		label: "Pages",
-		one: "page",
-		many: "pages",
-		emptyTitle: "No pages yet",
+		label: "Documents",
+		one: "document",
+		many: "documents",
+		emptyTitle: "No documents yet",
 		emptyBody: "Create one, or drop a .md file here.",
-		createLabel: "New page",
+		createLabel: "New Markdown",
 	},
 	tables: {
 		label: "Tables",
@@ -69,7 +69,7 @@ export const LIBRARY_KIND_COPY: Record<LibraryKind, LibraryKindCopy> = {
 		many: "tables",
 		emptyTitle: "No tables yet",
 		emptyBody: "Create one, or drop a .csv file here.",
-		createLabel: "New table",
+		createLabel: "New CSV",
 	},
 	drawings: {
 		label: "Drawings",
@@ -77,7 +77,7 @@ export const LIBRARY_KIND_COPY: Record<LibraryKind, LibraryKindCopy> = {
 		many: "drawings",
 		emptyTitle: "No drawings yet",
 		emptyBody: "Create one, or drop an .excalidraw file here.",
-		createLabel: "New drawing",
+		createLabel: "New Drawing",
 	},
 	media: {
 		label: "Media",

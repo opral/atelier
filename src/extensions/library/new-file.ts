@@ -1,7 +1,7 @@
 import { NEW_EXCALIDRAW_FILE_CONTENT } from "../excalidraw/scene";
 import type { DefaultFolderFileType } from "../files/default-folder";
 
-/** What New Page, New Table and New Drawing create. */
+/** What New Markdown, New CSV and New Drawing create. */
 export const NEW_FILE: Record<
 	Exclude<DefaultFolderFileType, "generic">,
 	{ readonly name: string; readonly content: () => Uint8Array }

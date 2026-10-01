@@ -31,7 +31,8 @@ const definition = createReactExtensionDefinition({
 		"bundled:atelier_library/manifest.json",
 		JSON.stringify(manifestJson),
 	),
-	description: "Browse the workspace by kind: pages, tables, drawings, media.",
+	description:
+		"Browse the workspace by kind: documents, tables, drawings, media.",
 	icon: Library,
 	component: ({ atelier, view }) =>
 		view.area === "main" ? (
