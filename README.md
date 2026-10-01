@@ -65,6 +65,11 @@ the utility/reset ownership contract does not rename third-party assets.
 `theme.css`, `document.css` and `layers.css` are also explicit plain CSS exports
 for hosts that need tokens or static document styling independently.
 
+Atelier tokens use native `light-dark()` (Chrome 123+, Firefox 120+, Safari
+17.5+). Keep it native in the host's CSS build too: for Vite, set
+`build.cssTarget: ["chrome123", "firefox120", "safari17.5"]`. Lowering the function
+inside inherited custom properties can freeze or invalidate their scheme values.
+
 Utilities override Atelier's component layer in either stylesheet order. Host
 CSS outside a layer overrides it too. Override `--atelier-*` tokens on an ancestor
 to retheme a workspace or portal. The token export declares no global

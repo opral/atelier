@@ -10,6 +10,7 @@ const repositoryRoot = path.resolve(previewDir, "../..");
 export default defineConfig({
 	root: previewDir,
 	build: {
+		cssTarget: ["chrome123", "firefox120", "safari17.5"],
 		outDir: path.resolve(repositoryRoot, ".preview/web"),
 		emptyOutDir: true,
 	},

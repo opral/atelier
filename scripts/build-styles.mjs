@@ -25,6 +25,7 @@ await build({
 	root,
 	plugins: [tailwindcss()],
 	build: {
+		cssTarget: ["chrome123", "firefox120", "safari17.5"],
 		emptyOutDir: false,
 		rollupOptions: {
 			input: path.join(root, "src/standalone.css"),

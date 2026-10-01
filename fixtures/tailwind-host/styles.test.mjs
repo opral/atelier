@@ -79,7 +79,11 @@ test("packed component CSS and a single host utility build work in either order"
 			root,
 			logLevel: "error",
 			plugins: [tailwindcss()],
-			build: { write: false, rollupOptions: { input: entry } },
+			build: {
+				cssTarget: ["chrome123", "firefox120", "safari17.5"],
+				write: false,
+				rollupOptions: { input: entry },
+			},
 		});
 		const host = result.output.find(
 			(asset) => asset.type === "asset" && asset.fileName.endsWith(".css"),
