@@ -43,7 +43,8 @@ For a host without Tailwind, import `@opral/atelier/standalone.css` as above.
 It includes component styles and global utilities, with a reset scoped to
 `.atelier-root` and `.atelier-portal`. Do not combine it with a host utility build.
 
-Tailwind v4 hosts generate utilities once in their own stylesheet:
+Tailwind v4 hosts install `tailwindcss`, a Tailwind build integration and
+`tw-animate-css`, then generate utilities once in their own stylesheet:
 
 ```css
 @layer theme, base, components, atelier, utilities;
@@ -59,6 +60,8 @@ scoped resets; it emits no global Tailwind utilities or Preflight. `tailwind.css
 is a build-time adapter that registers the published JavaScript as class sources,
 including lazy extension chunks. Vendored source builds use `src/shell/tailwind.css`,
 which registers `src` instead. The host owns Preflight and animation utilities.
+Bundled editor dependencies retain their font-face and keyframe registrations;
+the utility/reset ownership contract does not rename third-party assets.
 `theme.css`, `document.css` and `layers.css` are also explicit plain CSS exports
 for hosts that need tokens or static document styling independently.
 

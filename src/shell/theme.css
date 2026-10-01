@@ -9,11 +9,11 @@
  * `panel` is an island on the `bg` canvas; `subtle` is a tint, `strong` a
  * heavier edge. Each token says, at the end of its line, when to use it.
  *
- * Dark values ride along in light-dark(), but mounted roots pin the scheme to light:
+ * Dark values ride along in light-dark(); mounted roots pin the scheme to light.
  * the dark palette is a first pass nobody has designed yet, so no operating
- * system preference may turn it on. When it is ready, the root declaration becomes
- * `color-scheme: light dark` and `.dark { color-scheme: dark }` (index.css)
- * is the only switch a host needs; nothing else changes.
+ * system preference may turn it on. When it is ready, mounted roots may use
+ * `color-scheme: light dark`. A `.dark` root or ancestor switches mounted
+ * roots to dark (index.css); importing tokens alone never switches a host.
  *
  * A second name for the same role is not a token, it is a future bug. The few
  * aliases below say why they exist.

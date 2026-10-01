@@ -55,6 +55,10 @@ test("packed component CSS and a single host utility build work in either order"
 			!component.includes("--tw-animation-delay"),
 			"component CSS emitted animation globals",
 		);
+		assert.ok(
+			!component.includes("@property --tw-enter-opacity"),
+			"component emitted animation properties",
+		);
 		assert.ok(standalone.includes(".flex{"), "standalone omitted utilities");
 		// source(none) proves the published adapter supplies library classes;
 		// the package is extracted outside this repository and node_modules.
@@ -94,6 +98,7 @@ test("packed component CSS and a single host utility build work in either order"
 <style>.brand { --atelier-panel: rgb(1 2 3); --atelier-fg: rgb(4 5 6); }</style>
 <div class="brand"><div id="root" class="atelier-root"><button id="control" class="border bg-panel text-ui-sm">Control</button></div></div>
 <div class="brand"><div id="portal" class="atelier-portal"><button class="border bg-panel">Portal</button></div></div>
+<p id="outside">Host paragraph</p>
 <div class="dark" id="host-dark">Host dark class</div>
 <div class="dark"><div id="dark-root" class="atelier-root">Dark workspace</div></div>`);
 			for (const [width, hidden, columns] of [
@@ -113,6 +118,9 @@ test("packed component CSS and a single host utility build work in either order"
 							.backgroundColor,
 						hostScheme: style("host-dark").colorScheme,
 						darkScheme: style("dark-root").colorScheme,
+						darkPanel: style("dark-root").backgroundColor,
+						outsideMargin: style("outside").marginTop,
+						outsideBox: style("outside").boxSizing,
 					};
 				});
 				assert.equal(computed.rail, hidden ? "none" : "flex");
@@ -123,6 +131,9 @@ test("packed component CSS and a single host utility build work in either order"
 				assert.equal(computed.border, "1px");
 				assert.equal(computed.hostScheme, "normal");
 				assert.equal(computed.darkScheme, "dark");
+				assert.equal(computed.darkPanel, "rgb(28, 25, 23)");
+				assert.equal(computed.outsideMargin, "16px");
+				assert.equal(computed.outsideBox, "content-box");
 			}
 		}
 		// Non-Tailwind consumers use the complete, opt-in stylesheet.
