@@ -35,10 +35,6 @@ function files(sha = revision) {
 			"packages/js-sdk/dist/index.d.ts": "export declare const sdk: boolean;",
 			"packages/js-sdk/dist/wasm/lix_js_sdk.js": "export default () => {};",
 			"packages/js-sdk/dist/wasm/lix_js_sdk_bg.wasm": "wasm",
-			"packages/js-sdk/dist/migration-wasm/lix_js_sdk.js":
-				"export default () => {};",
-			"packages/js-sdk/dist/migration-wasm/lix_js_sdk_bg.wasm":
-				"migration wasm",
 			"packages/storage-opfs/dist/index.js": "export const opfs = true;",
 		}).map(([path, content]) => [path, encoder.encode(content)]),
 	);
@@ -212,9 +208,9 @@ test("rejects incomplete browser outputs before replacing either package", async
 		/ENOENT/,
 	);
 });
-test("rejects browser artifacts without the migration WASM outputs", async (t) => {
+test("rejects browser artifacts without the shared WASM bindings", async (t) => {
 	const entries = files();
-	delete entries["packages/js-sdk/dist/migration-wasm/lix_js_sdk.js"];
+	delete entries["packages/js-sdk/dist/wasm/lix_js_sdk.js"];
 	const f = await fixture(t, { files: entries });
 	await assert.rejects(f.install(), /ENOENT/);
 	await assert.rejects(
