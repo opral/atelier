@@ -438,6 +438,7 @@ type PublishedBlockComments =
 			readonly state: BlockConversationsState;
 	  }
 	| { readonly kind: "plugin-missing" }
+	| { readonly kind: "no-blocks" }
 	| null;
 
 const BlockConversationsController = memo(
@@ -452,17 +453,36 @@ const BlockConversationsController = memo(
 	}) {
 		const lix = useLix();
 		const viewReady = useEditorViewMounted(editor);
-		const blocksResult = useQueryResult<MarkdownBlockRow>((session) =>
-			selectMarkdownBlocks(session, fileId),
+		// markdown_node exists only while the Markdown plugin is installed. Keep
+		// the capability check on the plugin archive itself so the observers
+		// below never issue SQL against a table that is not present.
+		const markdownPluginResult = useQueryResult((session) =>
+			qb(session)
+				.selectFrom("lix_file as plugin")
+				.select("plugin.id as id")
+				.where("plugin.path", "=", "/.lix/plugins/plugin_markdown.lixplugin")
+				.$castTo<{ readonly id: string }>(),
 		);
-		const commentsResult = useQueryResult((session) =>
-			selectBlockComments(session, fileId),
+		const markdownPluginInstalled =
+			markdownPluginResult.status === "success" &&
+			markdownPluginResult.rows.length > 0;
+		const blocksResult = useQueryResult<MarkdownBlockRow>(
+			(session) => selectMarkdownBlocks(session, fileId),
+			{ enabled: markdownPluginInstalled },
+		);
+		const commentsResult = useQueryResult(
+			(session) => selectBlockComments(session, fileId),
+			{ enabled: markdownPluginInstalled },
 		);
 		const accountResult = useQueryResult(selectActiveAccount);
-		const rows = blocksResult.rows.length ? blocksResult.rows : EMPTY_ROWS;
-		const commentRows = commentsResult.rows.length
-			? commentsResult.rows
-			: EMPTY_ROWS;
+		const rows =
+			blocksResult.status === "success" && blocksResult.rows.length
+				? blocksResult.rows
+				: EMPTY_ROWS;
+		const commentRows =
+			commentsResult.status === "success" && commentsResult.rows.length
+				? commentsResult.rows
+				: EMPTY_ROWS;
 		// Authors are read once per set of comments, not observed.
 		const changeIds = useMemo(
 			() =>
@@ -618,8 +638,11 @@ const BlockConversationsController = memo(
 
 		// A file the plugin does not project (it matches `*.md` by case, so
 		// `NOTES.MD` has no rows) has no block to attach to.
-		const available =
-			blocksResult.status === "success" && blocksResult.rows.length > 0;
+		const markdownDataReady =
+			markdownPluginInstalled &&
+			blocksResult.status === "success" &&
+			commentsResult.status === "success";
+		const available = markdownDataReady && rows.length > 0;
 		// The thread each editor block shows, by its index.
 		const threadAtBlock = useMemo(
 			() => new Map(placed.map((entry) => [entry.index, entry.key])),
@@ -1672,14 +1695,52 @@ const BlockConversationsController = memo(
 		// A completed read with no projected blocks leaves no target for comments.
 		useLayoutEffect(() => {
 			onPublish(
-				!viewReady || blocksResult.status === "pending"
+				!viewReady ||
+					markdownPluginResult.status === "pending" ||
+					(markdownPluginInstalled && !markdownDataReady)
 					? null
-					: available
-						? { kind: "available", api, state }
-						: { kind: "plugin-missing" },
+					: !markdownPluginInstalled
+						? { kind: "plugin-missing" }
+						: available
+							? { kind: "available", api, state }
+							: { kind: "no-blocks" },
 			);
-		}, [api, available, blocksResult.status, onPublish, state, viewReady]);
+		}, [
+			api,
+			available,
+			markdownDataReady,
+			markdownPluginInstalled,
+			markdownPluginResult.status,
+			onPublish,
+			state,
+			viewReady,
+		]);
 		useLayoutEffect(() => () => onPublish(null), [onPublish]);
+
+		// `useQueryResult` keeps observer failures in its result. Surface those
+		// failures to the nearest render boundary instead of treating an
+		// unavailable table as an empty set of comments. Keep these checks after
+		// the hooks above so every render follows the same hook order.
+		if (markdownPluginResult.status === "error")
+			throw markdownPluginResult.error instanceof Error
+				? markdownPluginResult.error
+				: new Error(String(markdownPluginResult.error));
+		if (blocksResult.status === "error")
+			throw blocksResult.error instanceof Error
+				? blocksResult.error
+				: new Error(String(blocksResult.error));
+		if (commentsResult.status === "error")
+			throw commentsResult.error instanceof Error
+				? commentsResult.error
+				: new Error(String(commentsResult.error));
+		if (accountResult.status === "error")
+			throw accountResult.error instanceof Error
+				? accountResult.error
+				: new Error(String(accountResult.error));
+		if (authorsResult.status === "error")
+			throw authorsResult.error instanceof Error
+				? authorsResult.error
+				: new Error(String(authorsResult.error));
 		return null;
 	},
 );
