@@ -29,7 +29,7 @@ product's chrome. Atelier owns none of those.
 
 ```tsx
 import { Atelier } from "@opral/atelier";
-import "@opral/atelier/standalone.css";
+import "@opral/atelier/style.css";
 
 <Atelier lix={lix} location={{ path: "/README.md" }} />;
 ```
@@ -39,42 +39,28 @@ UI, subscriptions, extension loading, and editor lifecycle.
 
 ### CSS ownership
 
-For a host without Tailwind, import `@opral/atelier/standalone.css` as above.
-It includes component styles and global utilities, with a reset scoped to
-`.atelier-root` and `.atelier-portal`. Do not combine it with a host utility build.
+Import `@opral/atelier/style.css` once, whether your host uses Tailwind or plain
+CSS. It includes the shell, every bundled extension, static render styles,
+design tokens and all of Atelier's compiled utilities. No host source scanning,
+Tailwind adapter or additional stylesheet is required.
 
-Tailwind v4 hosts install `tailwindcss`, a Tailwind build integration and
-`tw-animate-css`, then generate utilities once in their own stylesheet:
+Atelier uses Tailwind internally. Its classes have a private `atw:` prefix;
+Tailwind implementation properties and animation names are private too.
+Resets apply only to `.atelier-root` and `.atelier-portal`, and Atelier does not
+ship global Preflight. The public design tokens keep their `--atelier-*` names.
+Bundled editor dependencies retain their font-face and keyframe registrations.
 
-```css
-@layer theme, base, components, atelier, utilities;
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "@opral/atelier/style.css";
-@import "@opral/atelier/tailwind.css";
-@custom-variant dark (&:is(.dark *));
-```
-
-`style.css` contains the shell and extension styles, namespaced tokens and
-scoped resets; it emits no global Tailwind utilities or Preflight. `tailwind.css`
-is a build-time adapter that registers the published JavaScript as class sources,
-including lazy extension chunks. Vendored source builds use `src/shell/tailwind.css`,
-which registers `src` instead. The host owns Preflight and animation utilities.
-Bundled editor dependencies retain their font-face and keyframe registrations;
-the utility/reset ownership contract does not rename third-party assets.
-`theme.css`, `document.css` and `layers.css` are also explicit plain CSS exports
-for hosts that need tokens or static document styling independently.
+Host `className` props pass through unchanged. Supply your own generated host
+utilities or custom classes there; the private classes are implementation details.
+Host Tailwind utilities and unlayered custom CSS can override Atelier's layers
+in either stylesheet order. Override `--atelier-*` tokens on an ancestor to
+retheme a workspace or portal. Mounted roots choose light; a `.dark` root or
+ancestor switches them to dark without changing the host's color scheme.
 
 Atelier tokens use native `light-dark()` (Chrome 123+, Firefox 120+, Safari
 17.5+). Keep it native in the host's CSS build too: for Vite, set
 `build.cssTarget: ["chrome123", "firefox120", "safari17.5"]`. Lowering the function
 inside inherited custom properties can freeze or invalidate their scheme values.
-
-Utilities override Atelier's component layer in either stylesheet order. Host
-CSS outside a layer overrides it too. Override `--atelier-*` tokens on an ancestor
-to retheme a workspace or portal. The token export declares no global
-`color-scheme`; the mounted roots choose light, and a `.dark` root or ancestor
-switches them to dark.
 
 ## Static
 
@@ -109,22 +95,21 @@ throw.
 ### Styling a static view
 
 Put the HTML inside an element with class `atelier-render` and load
-`@opral/atelier/render.css`. Or pass `document: true` to get a complete HTML
+`@opral/atelier/style.css`. Or pass `document: true` to get a complete HTML
 file with the styles inlined.
 
-Colours are `--atelier-*` custom properties from `@opral/atelier/theme.css`, the same file the app uses; a host that redeclares one on any ancestor retints the render.
+Colours are `--atelier-*` custom properties included in the stylesheet, from the same canonical token file the app uses; a host that redeclares one on any ancestor retints the render.
 
 ## Entries
 
-| entry                           | what it is                       | guarantees                                                                          |
-| ------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
-| `@opral/atelier`                | the shell, and the extension API | React                                                                               |
-| `@opral/atelier/render`         | views, without a shell           | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
-| `@opral/atelier/render.css`     | styles for static views          | generated tokens, no colour literals in rules                                       |
-| `@opral/atelier/style.css`      | embeddable component styles      |                                                                                     |
-| `@opral/atelier/file-icons`     | path → icon                      | no React, no DOM                                                                    |
-| `@opral/atelier/state-adapters` | the shell's persistence ports    |                                                                                     |
-| `@opral/atelier/dev-tools`      | tools for working on Atelier     | not for shipping                                                                    |
+| entry                           | what it is                         | guarantees                                                                          |
+| ------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `@opral/atelier`                | the shell, and the extension API   | React                                                                               |
+| `@opral/atelier/render`         | views, without a shell             | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
+| `@opral/atelier/style.css`      | complete mounted and static styles |                                                                                     |
+| `@opral/atelier/file-icons`     | path → icon                        | no React, no DOM                                                                    |
+| `@opral/atelier/state-adapters` | the shell's persistence ports      |                                                                                     |
+| `@opral/atelier/dev-tools`      | tools for working on Atelier       | not for shipping                                                                    |
 
 ## Static rendering
 

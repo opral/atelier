@@ -127,31 +127,31 @@ export function formatGridCell(
 	if (value === null || value === undefined) {
 		return {
 			text: "null",
-			className: "font-mono text-ui-sm text-fg-faint",
+			className: "atw:font-mono atw:text-ui-sm atw:text-fg-faint",
 		};
 	}
 	if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
 		return {
 			text: formatByteSize(value.byteLength),
-			className: "font-mono text-ui-sm text-fg-subtle",
+			className: "atw:font-mono atw:text-ui-sm atw:text-fg-subtle",
 		};
 	}
 	if (typeof value === "number" || typeof value === "bigint") {
 		return {
 			text: String(value),
-			className: "font-mono text-[12px] text-fg-muted",
+			className: "atw:font-mono atw:text-[12px] atw:text-fg-muted",
 		};
 	}
 	if (typeof value === "boolean") {
 		return {
 			text: value ? "true" : "false",
-			className: "font-mono text-[12px] text-fg-muted",
+			className: "atw:font-mono atw:text-[12px] atw:text-fg-muted",
 		};
 	}
 	if (typeof value === "object") {
 		return {
 			text: Array.isArray(value) ? "[…]" : "{…}",
-			className: "font-mono text-ui-sm text-fg-faint",
+			className: "atw:font-mono atw:text-ui-sm atw:text-fg-faint",
 		};
 	}
 	const text = String(value);
@@ -159,18 +159,18 @@ export function formatGridCell(
 	if (name === "id" || name.endsWith("_id") || name.endsWith("_pk")) {
 		return {
 			text,
-			className: "font-mono text-[12px] text-fg-faint",
+			className: "atw:font-mono atw:text-[12px] atw:text-fg-faint",
 		};
 	}
 	if (name.endsWith("_at") || /^\d{4}-\d{2}-\d{2}[ T]/.test(text)) {
 		return {
 			text,
-			className: "font-mono text-ui-sm text-fg-faint",
+			className: "atw:font-mono atw:text-ui-sm atw:text-fg-faint",
 		};
 	}
 	return {
 		text,
-		className: "text-ui font-medium text-fg",
+		className: "atw:text-ui atw:font-medium atw:text-fg",
 	};
 }
 
@@ -209,18 +209,18 @@ export function DataGrid({
 							(isColumnSortable?.(column) ?? true);
 						const header = (
 							<>
-								<span className="text-[10.5px] font-bold tracking-[0.05em] text-fg-muted uppercase">
+								<span className="atw:text-[10.5px] atw:font-bold atw:tracking-[0.05em] atw:text-fg-muted atw:uppercase">
 									{column.name}
 								</span>
 								{column.type === "" ? null : (
-									<span className="ml-1 font-mono text-[9px] text-fg-faint">
+									<span className="atw:ml-1 atw:font-mono atw:text-[9px] atw:text-fg-faint">
 										{column.type}
 									</span>
 								)}
 								{column.description ? (
 									<Info
 										aria-hidden="true"
-										className="ml-1 inline-block h-[11px] w-[11px] align-[-1.5px] text-fg-faint"
+										className="atw:ml-1 atw:inline-block atw:h-[11px] atw:w-[11px] atw:align-[-1.5px] atw:text-fg-faint"
 									/>
 								) : null}
 								<SortChevron
@@ -239,10 +239,10 @@ export function DataGrid({
 											: "descending"
 										: undefined
 								}
-								className={`sticky top-0 h-[34px] border-b border-border bg-bg-subtle px-3.5 whitespace-nowrap ${
+								className={`atw:sticky atw:top-0 atw:h-[34px] atw:border-b atw:border-border atw:bg-bg-subtle atw:px-3.5 atw:whitespace-nowrap ${
 									columnAlign(column.type) === "right"
-										? "text-right"
-										: "text-left"
+										? "atw:text-right"
+										: "atw:text-left"
 								}`}
 							>
 								{!isSortable ? (
@@ -258,7 +258,7 @@ export function DataGrid({
 													isSorted && sort.direction === "asc" ? "desc" : "asc",
 											})
 										}
-										className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										className="atw:cursor-pointer atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 									>
 										{header}
 									</button>
@@ -270,7 +270,7 @@ export function DataGrid({
 			</thead>
 			<tbody>
 				{rows.map((row, rowIndex) => (
-					<tr key={rowIndex} className="hover:bg-bg-hover-strong">
+					<tr key={rowIndex} className="atw:hover:bg-bg-hover-strong">
 						{columns.map((column) => {
 							const rawValue = row[column.name];
 							const lazyCellKey =
@@ -282,14 +282,14 @@ export function DataGrid({
 								return (
 									<td
 										key={column.name}
-										className="h-8 border-b border-border-subtle px-3.5 text-right whitespace-nowrap"
+										className="atw:h-8 atw:border-b atw:border-border-subtle atw:px-3.5 atw:text-right atw:whitespace-nowrap"
 									>
 										<button
 											type="button"
 											onClick={() => onLazyBlobRequest(row, column)}
 											disabled={isLoading}
 											data-attr="sql-lazy-blob"
-											className="font-mono text-[11.5px] text-fg-subtle underline decoration-border underline-offset-2 hover:text-fg disabled:cursor-wait disabled:opacity-60"
+											className="atw:font-mono atw:text-[11.5px] atw:text-fg-subtle atw:underline atw:decoration-border atw:underline-offset-2 atw:hover:text-fg atw:disabled:cursor-wait atw:disabled:opacity-60"
 										>
 											{isLoading ? "Loading…" : "Load"}
 										</button>
@@ -303,7 +303,7 @@ export function DataGrid({
 								return (
 									<td
 										key={column.name}
-										className="h-8 border-b border-border-subtle px-3.5 text-left whitespace-nowrap"
+										className="atw:h-8 atw:border-b atw:border-border-subtle atw:px-3.5 atw:text-left atw:whitespace-nowrap"
 									>
 										<JsonCell
 											columnName={column.name}
@@ -319,10 +319,10 @@ export function DataGrid({
 								<td
 									key={column.name}
 									title={isTruncated ? cell.text : undefined}
-									className={`h-8 border-b border-border-subtle px-3.5 whitespace-nowrap ${
+									className={`atw:h-8 atw:border-b atw:border-border-subtle atw:px-3.5 atw:whitespace-nowrap ${
 										columnAlign(column.type) === "right"
-											? "text-right"
-											: "text-left"
+											? "atw:text-right"
+											: "atw:text-left"
 									} ${cell.className}`}
 								>
 									{isTruncated
@@ -424,10 +424,10 @@ function JsonCell({
 				aria-expanded={isOpen}
 				data-attr={kind === "row_ref" ? "sql-row-ref-cell" : "sql-json-cell"}
 				onClick={toggle}
-				className={`inline-flex items-center rounded-[6px] border px-1.5 py-px font-mono text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+				className={`atw:inline-flex atw:items-center atw:rounded-[6px] atw:border atw:px-1.5 atw:py-px atw:font-mono atw:text-ui-sm atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${
 					isOpen
-						? "border-link text-fg-muted"
-						: "border-transparent text-fg-faint hover:border-border hover:text-fg-muted"
+						? "atw:border-link atw:text-fg-muted"
+						: "atw:border-transparent atw:text-fg-faint atw:hover:border-border atw:hover:text-fg-muted"
 				}`}
 			>
 				{kind === "row_ref" ? "row_ref" : Array.isArray(value) ? "[…]" : "{…}"}
@@ -446,10 +446,10 @@ function JsonCell({
 						maxWidth: "calc(100vw - 24px)",
 						zIndex: 30,
 					}}
-					className="rounded-[10px] border border-border bg-panel p-3 shadow-lg"
+					className="atw:rounded-[10px] atw:border atw:border-border atw:bg-panel atw:p-3 atw:shadow-lg"
 				>
-					<div className="flex items-center justify-between pb-2">
-						<span className="font-mono text-[12px] font-semibold text-fg">
+					<div className="atw:flex atw:items-center atw:justify-between atw:pb-2">
+						<span className="atw:font-mono atw:text-[12px] atw:font-semibold atw:text-fg">
 							{columnName}
 						</span>
 						<button
@@ -465,15 +465,15 @@ function JsonCell({
 									.then(() => setHasCopied(true))
 									.catch(() => undefined);
 							}}
-							className="inline-flex items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-ui-sm font-medium text-fg-muted hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							className="atw:inline-flex atw:items-center atw:gap-1 atw:rounded-[5px] atw:px-1.5 atw:py-0.5 atw:text-ui-sm atw:font-medium atw:text-fg-muted atw:hover:bg-bg-hover atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 						>
-							<Copy aria-hidden="true" className="h-3 w-3" />
+							<Copy aria-hidden="true" className="atw:h-3 atw:w-3" />
 							{hasCopied ? "Copied" : "Copy"}
 						</button>
 					</div>
 					<div
 						style={{ maxHeight: JSON_POPOVER_MAX_HEIGHT - 60 }}
-						className="overflow-auto rounded-[8px] border border-border-subtle bg-bg-subtle px-3.5 py-2.5 font-mono text-[12px] leading-[1.8] break-words whitespace-pre-wrap text-fg-muted"
+						className="atw:overflow-auto atw:rounded-[8px] atw:border atw:border-border-subtle atw:bg-bg-subtle atw:px-3.5 atw:py-2.5 atw:font-mono atw:text-[12px] atw:leading-[1.8] atw:break-words atw:whitespace-pre-wrap atw:text-fg-muted"
 					>
 						{kind === "row_ref" ? String(value) : renderJson(value, "")}
 					</div>
@@ -487,13 +487,15 @@ function JsonCell({
  * amber — matching the SQL editor's token palette. */
 function renderJson(value: unknown, indent: string): ReactNode {
 	if (value === null) {
-		return <span className="text-fg-faint">null</span>;
+		return <span className="atw:text-fg-faint">null</span>;
 	}
 	if (typeof value === "number" || typeof value === "bigint") {
 		return <span className="atelier-sql-tok-number">{String(value)}</span>;
 	}
 	if (typeof value === "boolean") {
-		return <span className="text-fg-muted">{value ? "true" : "false"}</span>;
+		return (
+			<span className="atw:text-fg-muted">{value ? "true" : "false"}</span>
+		);
 	}
 	if (typeof value === "string") {
 		const truncated =
@@ -534,7 +536,7 @@ function renderJson(value: unknown, indent: string): ReactNode {
 			{entries.map(([key, entryValue], index) => (
 				<span key={key}>
 					{childIndent}
-					<span className="text-fg">{JSON.stringify(key)}</span>
+					<span className="atw:text-fg">{JSON.stringify(key)}</span>
 					{": "}
 					{renderJson(entryValue, childIndent)}
 					{index < entries.length - 1 ? "," : ""}
@@ -557,9 +559,9 @@ function SortChevron({ direction }: { readonly direction?: "asc" | "desc" }) {
 			fill="none"
 			stroke="currentColor"
 			strokeWidth="2"
-			className={`ml-0.5 inline-block align-[-1px] ${
-				direction === undefined ? "text-fg-faint" : "text-fg-muted"
-			} ${direction === "asc" ? "rotate-180" : ""}`}
+			className={`atw:ml-0.5 atw:inline-block atw:align-[-1px] ${
+				direction === undefined ? "atw:text-fg-faint" : "atw:text-fg-muted"
+			} ${direction === "asc" ? "atw:rotate-180" : ""}`}
 		>
 			<path d="m6 9 6 6 6-6" />
 		</svg>
@@ -597,17 +599,17 @@ export function GridFooter({
 	const format = (n: number) => n.toLocaleString("en-US");
 
 	return (
-		<div className="atelier-sql-grid-footer flex shrink-0 items-center gap-3">
+		<div className="atelier-sql-grid-footer atw:flex atw:shrink-0 atw:items-center atw:gap-3">
 			<span
 				data-attr="sql-grid-row-range"
-				className="font-mono text-ui-sm text-fg-subtle"
+				className="atw:font-mono atw:text-ui-sm atw:text-fg-subtle"
 			>
 				{format(start)}–{format(end)}{" "}
-				<span className="text-fg-faint">
+				<span className="atw:text-fg-faint">
 					{hasKnownTotal || !hasNext ? "of" : "of more"}
 				</span>{" "}
 				{hasKnownTotal ? format(totalRows) : !hasNext ? format(end) : null}{" "}
-				<span className="text-fg-faint">
+				<span className="atw:text-fg-faint">
 					{hasKnownTotal
 						? totalRows === 1
 							? "row"
@@ -617,26 +619,26 @@ export function GridFooter({
 							: "rows"}
 				</span>
 			</span>
-			<span className="flex-1" />
+			<span className="atw:flex-1" />
 			{/* Sidebar-width hosts drop the page-size chooser — the row range and
 			    pager are the essentials. */}
-			<span className="contents @max-[560px]:hidden">
+			<span className="atw:contents atw:@max-[560px]:hidden">
 				<PageSizeSelect
 					pageSize={pageSize}
 					onPageSizeChange={onPageSizeChange}
 				/>
-				<span className="h-4 w-px bg-border" />
+				<span className="atw:h-4 atw:w-px atw:bg-border" />
 			</span>
-			<span className="inline-flex items-center gap-1">
+			<span className="atw:inline-flex atw:items-center atw:gap-1">
 				<PagerButton
 					label="Previous page"
 					disabled={page === 0}
 					onClick={() => onPageChange(page - 1)}
 					path="m15 18-6-6 6-6"
 				/>
-				<span className="px-1 text-ui-sm text-fg-muted">
+				<span className="atw:px-1 atw:text-ui-sm atw:text-fg-muted">
 					Page {format(page + 1)}{" "}
-					<span className="text-fg-faint">of {format(pageCount)}</span>
+					<span className="atw:text-fg-faint">of {format(pageCount)}</span>
 				</span>
 				<PagerButton
 					label="Next page"
@@ -666,8 +668,10 @@ function PagerButton({
 			aria-label={label}
 			disabled={disabled}
 			onClick={onClick}
-			className={`flex h-[26px] w-[26px] items-center justify-center rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-				disabled ? "text-fg-faint" : "text-fg-muted hover:bg-bg-hover"
+			className={`atw:flex atw:h-[26px] atw:w-[26px] atw:items-center atw:justify-center atw:rounded-[6px] atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${
+				disabled
+					? "atw:text-fg-faint"
+					: "atw:text-fg-muted atw:hover:bg-bg-hover"
 			}`}
 		>
 			<svg
@@ -693,12 +697,12 @@ function PageSizeSelect({
 	readonly onPageSizeChange: (pageSize: number) => void;
 }) {
 	return (
-		<label className="inline-flex h-[26px] items-center gap-1.5 rounded-[6px] px-2 text-ui-sm text-fg-muted hover:bg-bg-hover">
+		<label className="atw:inline-flex atw:h-[26px] atw:items-center atw:gap-1.5 atw:rounded-[6px] atw:px-2 atw:text-ui-sm atw:text-fg-muted atw:hover:bg-bg-hover">
 			<select
 				aria-label="Rows per page"
 				value={pageSize}
 				onChange={(event) => onPageSizeChange(Number(event.target.value))}
-				className="appearance-none bg-transparent focus-visible:outline-none"
+				className="atw:appearance-none atw:bg-transparent atw:focus-visible:outline-none"
 			>
 				{GRID_PAGE_SIZES.map((size) => (
 					<option key={size} value={size}>
@@ -714,7 +718,7 @@ function PageSizeSelect({
 				fill="none"
 				stroke="currentColor"
 				strokeWidth="2"
-				className="text-fg-faint"
+				className="atw:text-fg-faint"
 			>
 				<path d="m6 9 6 6 6-6" />
 			</svg>

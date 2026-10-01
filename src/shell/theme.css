@@ -2,8 +2,8 @@
  * Atelier design tokens. Plain CSS: no build step, no framework. Every colour,
  * radius, size, shadow and duration the workspace uses is named here, and only
  * here — nowhere else in this package, or in a host, or in an extension, is a
- * colour written as a literal. Consumers say `var(--atelier-…)`; Tailwind users get
- * the same names as utilities through ./tailwind.css.
+ * colour written as a literal. Consumers say `var(--atelier-…)`; internal Tailwind utilities map to
+ * these same values through ./tailwind.css.
  *
  * Naming: property → role → emphasis → state. `fg` is text and icons alike;
  * `panel` is an island on the `bg` canvas; `subtle` is a tint, `strong` a

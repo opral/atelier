@@ -432,7 +432,7 @@ function QueryView({
 	);
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+		<div className="atw:flex atw:min-h-0 atw:min-w-0 atw:flex-1 atw:flex-col">
 			<SqlEditor
 				schema={schema}
 				handle={editorHandle}
@@ -440,26 +440,32 @@ function QueryView({
 				onQueryChange={onQueryChange}
 				onRun={() => void runQuery(query)}
 			/>
-			<div className="atelier-sql-runbar flex shrink-0 items-center gap-3">
+			<div className="atelier-sql-runbar atw:flex atw:shrink-0 atw:items-center atw:gap-3">
 				<button
 					type="button"
 					onClick={() => void runQuery(query)}
 					disabled={isRunning}
 					data-attr="sql-run-query"
 					aria-busy={isRunning}
-					className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-3.5 py-1.5 text-ui font-bold text-accent-on shadow-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-100"
+					className="atw:inline-flex atw:items-center atw:gap-1.5 atw:rounded-[8px] atw:bg-accent atw:px-3.5 atw:py-1.5 atw:text-ui atw:font-bold atw:text-accent-on atw:shadow-accent atw:hover:bg-accent-hover atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:disabled:cursor-wait atw:disabled:opacity-100"
 				>
 					{isRunning ? (
 						<LoaderCircle
 							aria-hidden="true"
-							className="h-3.5 w-3.5 animate-spin"
+							className="atw:h-3.5 atw:w-3.5 atw:animate-spin"
 						/>
 					) : (
-						<Play aria-hidden="true" className="h-2.5 w-2.5 fill-current" />
+						<Play
+							aria-hidden="true"
+							className="atw:h-2.5 atw:w-2.5 atw:fill-current"
+						/>
 					)}
 					{isRunning ? "Running…" : "Run"}
 					{isRunning ? null : (
-						<span aria-hidden="true" className="font-semibold opacity-75">
+						<span
+							aria-hidden="true"
+							className="atw:font-semibold atw:opacity-75"
+						>
 							⌘⏎
 						</span>
 					)}
@@ -477,18 +483,18 @@ function QueryView({
 					Results
 					{run && query !== run.source ? <span> · Previous run</span> : null}
 				</span>
-				<span className="flex-1" />
+				<span className="atw:flex-1" />
 				{run === null ? null : (
 					<span
 						data-attr="sql-run-status"
-						className="font-mono text-ui-sm text-fg-subtle"
+						className="atw:font-mono atw:text-ui-sm atw:text-fg-subtle"
 					>
 						{run.hasResultColumns
 							? `${run.rows.length} ${run.rows.length === 1 ? "row" : "rows"}`
 							: `${run.rowsAffected} ${run.rowsAffected === 1 ? "row" : "rows"} affected`}{" "}
 						·{" "}
 						<span
-							className="font-semibold text-success"
+							className="atw:font-semibold atw:text-success"
 							title={formatQueryTimingDetails(
 								run.clientDurationMs,
 								run.serverTimings,
@@ -502,14 +508,14 @@ function QueryView({
 			{error === null ? null : (
 				<div
 					role="alert"
-					className="shrink-0 border-b border-border-subtle px-4 py-2 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-danger"
+					className="atw:shrink-0 atw:border-b atw:border-border-subtle atw:px-4 atw:py-2 atw:font-mono atw:text-[11.5px] atw:leading-relaxed atw:break-words atw:whitespace-pre-wrap atw:text-danger"
 				>
 					{error}
 				</div>
 			)}
-			<div className="atelier-sql-results min-h-0 flex-1 overflow-auto">
+			<div className="atelier-sql-results atw:min-h-0 atw:flex-1 atw:overflow-auto">
 				{run === null || !run.hasResultColumns ? (
-					<div className="flex h-full items-center justify-center p-6 text-ui text-fg-faint">
+					<div className="atw:flex atw:h-full atw:items-center atw:justify-center atw:p-6 atw:text-ui atw:text-fg-faint">
 						{run === null
 							? "Run a query to see results."
 							: "Statement finished without result rows."}

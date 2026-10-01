@@ -1,12 +1,12 @@
 /*
- * Tailwind v4 adapter for the Atelier tokens. Optional: a host that writes
- * plain CSS never needs it. `@theme inline` emits no variables of its own —
+ * Internal Tailwind v4 adapter for the Atelier tokens. Hosts import the
+ * complete compiled style.css instead. `@theme inline` emits no variables of its own —
  * every utility below reads the `--atelier-*` value from theme.css, so there is one
  * source and nothing to keep in step. The stock palette is hidden, so
  * `bg-red-500` is not a class here and `bg-danger` is.
  *
- * Utilities carry the token's name without its prefix: `bg-panel`, `text-fg-muted`,
- * `border-border-strong`, `rounded-control`, `text-ui-sm`, `shadow-md`.
+ * Utilities carry the token's name without its prefix: `atw:bg-panel`, `atw:text-fg-muted`,
+ * `atw:border-border-strong`, `atw:rounded-control`, `atw:text-ui-sm`, `atw:shadow-md`.
  *
  * Only the colour palette is hidden. Tailwind's own type and radius scales stay
  * as they are — `text-sm` is 14px here as everywhere else — and Atelier's UI
@@ -137,8 +137,3 @@
 }
 
 @custom-variant mobile (@media (max-width: 767px));
-
-/* Source consumers and vendored hosts explicitly register Atelier classes.
- * This also works through @reference. The published adapter registers the
- * built JavaScript beside it instead. */
-@source "../";

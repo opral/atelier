@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier {
+@layer atelier.components {
 	/*
 	 * Player chrome is deliberately theme-independent: the stage is always a dark
 	 * surface (like a paused frame), so the glass controls keep the design's fixed

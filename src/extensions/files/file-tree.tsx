@@ -940,7 +940,7 @@ export function FileTree({
 	}
 
 	return (
-		<div ref={treeContainerRef} className="contents">
+		<div ref={treeContainerRef} className="atw:contents">
 			<PierreFileTree
 				aria-label="Files"
 				data-suppress-item-focus-ring={
@@ -988,7 +988,7 @@ function TreeItemContextMenu({
 	return (
 		<div
 			aria-label={`Actions for ${item.name}`}
-			className="z-50 min-w-44 rounded-md border border-border bg-panel p-1 font-sans text-xs text-fg shadow-md"
+			className="atw:z-50 atw:min-w-44 atw:rounded-md atw:border atw:border-border atw:bg-panel atw:p-1 atw:font-sans atw:text-xs atw:text-fg atw:shadow-md"
 			data-file-tree-context-menu-root="true"
 			role="menu"
 			style={style}
@@ -1004,7 +1004,7 @@ function TreeItemContextMenu({
 							<img
 								alt=""
 								aria-hidden="true"
-								className="size-3.5 shrink-0"
+								className="atw:size-3.5 atw:shrink-0"
 								data-attr="file-tree-menu-new-file-icon"
 								src={fileNewIconUrl}
 							/>
@@ -1018,7 +1018,7 @@ function TreeItemContextMenu({
 							<img
 								alt=""
 								aria-hidden="true"
-								className="size-3.5 shrink-0"
+								className="atw:size-3.5 atw:shrink-0"
 								data-attr="file-tree-menu-new-folder-icon"
 								src={folderBlueIconUrl}
 							/>
@@ -1027,7 +1027,7 @@ function TreeItemContextMenu({
 					>
 						New folder
 					</TreeItemContextMenuButton>
-					<div aria-hidden="true" className="my-1 h-px bg-border" />
+					<div aria-hidden="true" className="atw:my-1 atw:h-px atw:bg-border" />
 				</>
 			) : null}
 			{canRename ? (
@@ -1035,7 +1035,7 @@ function TreeItemContextMenu({
 					icon={
 						<PenLine
 							aria-hidden="true"
-							className="size-4 shrink-0 text-fg-muted"
+							className="atw:size-4 atw:shrink-0 atw:text-fg-muted"
 							data-attr="file-tree-menu-rename-icon"
 							strokeWidth={1.7}
 						/>
@@ -1046,7 +1046,7 @@ function TreeItemContextMenu({
 				</TreeItemContextMenuButton>
 			) : null}
 			{canDelete && canRename ? (
-				<div aria-hidden="true" className="my-1 h-px bg-border" />
+				<div aria-hidden="true" className="atw:my-1 atw:h-px atw:bg-border" />
 			) : null}
 			{canDelete ? (
 				<TreeItemContextMenuButton
@@ -1054,7 +1054,7 @@ function TreeItemContextMenu({
 					icon={
 						<Trash2
 							aria-hidden="true"
-							className="size-4 shrink-0"
+							className="atw:size-4 atw:shrink-0"
 							data-attr="file-tree-menu-delete-icon"
 							strokeWidth={1.7}
 						/>
@@ -1093,23 +1093,23 @@ function TreeItemContextMenuButton({
 			type="button"
 			role="menuitem"
 			aria-keyshortcuts={ariaKeyShortcuts}
-			className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+			className={`atw:flex atw:w-full atw:items-center atw:gap-2 atw:rounded-sm atw:px-2 atw:py-1.5 atw:text-left atw:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${
 				destructive
-					? "text-fg-muted hover:bg-danger-subtle hover:text-danger focus-visible:bg-danger-subtle focus-visible:text-danger"
-					: "hover:bg-bg-hover focus-visible:bg-bg-hover"
+					? "atw:text-fg-muted atw:hover:bg-danger-subtle atw:hover:text-danger atw:focus-visible:bg-danger-subtle atw:focus-visible:text-danger"
+					: "atw:hover:bg-bg-hover atw:focus-visible:bg-bg-hover"
 			}`}
 			onClick={onClick}
 		>
 			{icon ? (
-				<span className="flex size-4 shrink-0 items-center justify-center">
+				<span className="atw:flex atw:size-4 atw:shrink-0 atw:items-center atw:justify-center">
 					{icon}
 				</span>
 			) : null}
-			<span className="min-w-0 flex-1 truncate">{children}</span>
+			<span className="atw:min-w-0 atw:flex-1 atw:truncate">{children}</span>
 			{shortcut ? (
 				<kbd
 					aria-label={shortcutLabel}
-					className="ml-auto inline-flex items-center gap-0.5 text-[10px] leading-none font-semibold text-fg-subtle"
+					className="atw:ml-auto atw:inline-flex atw:items-center atw:gap-0.5 atw:text-[10px] atw:leading-none atw:font-semibold atw:text-fg-subtle"
 				>
 					{shortcut}
 				</kbd>

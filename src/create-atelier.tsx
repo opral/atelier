@@ -405,7 +405,7 @@ function AtelierContent({
 	const defaultOpenPanels = configuration.defaultOpenPanels ?? [];
 	return (
 		<div
-			className="atelier-root h-full w-full overflow-hidden"
+			className="atelier-root atw:h-full atw:w-full atw:overflow-hidden"
 			onDragOver={claimUnhandledFileDrag}
 			onDrop={claimUnhandledFileDrag}
 		>
@@ -426,7 +426,7 @@ function AtelierContent({
 }
 
 function AtelierLoadingPlaceholder() {
-	return <div className="h-full w-full bg-bg" />;
+	return <div className="atw:h-full atw:w-full atw:bg-bg" />;
 }
 
 export type AtelierSkeletonProps = {
@@ -453,8 +453,8 @@ export function AtelierSkeleton({
 	children,
 }: AtelierSkeletonProps) {
 	return (
-		<div className="atelier-root h-full w-full overflow-hidden">
-			<div className="relative flex h-full min-h-0 flex-col bg-bg text-fg">
+		<div className="atelier-root atw:h-full atw:w-full atw:overflow-hidden">
+			<div className="atw:relative atw:flex atw:h-full atw:min-h-0 atw:flex-col atw:bg-bg atw:text-fg">
 				<TopBar
 					isLeftSidebarVisible={false}
 					isRightSidebarVisible={false}
@@ -464,8 +464,8 @@ export function AtelierSkeleton({
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
-				<main className="flex min-h-0 flex-1 overflow-hidden px-2 pb-2">
-					<div className="grid min-h-0 flex-1 place-content-center overflow-hidden rounded-[10px] bg-panel p-6 text-center text-fg-subtle">
+				<main className="atw:flex atw:min-h-0 atw:flex-1 atw:overflow-hidden atw:px-2 atw:pb-2">
+					<div className="atw:grid atw:min-h-0 atw:flex-1 atw:place-content-center atw:overflow-hidden atw:rounded-[10px] atw:bg-panel atw:p-6 atw:text-center atw:text-fg-subtle">
 						{children}
 					</div>
 				</main>

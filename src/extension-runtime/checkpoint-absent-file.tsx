@@ -30,7 +30,7 @@ export function CheckpointAbsentFile({
 	const fileName = filePath?.split("/").filter(Boolean).at(-1);
 	return (
 		<div
-			className="flex h-full flex-col items-center justify-center gap-1.5 px-6 text-center"
+			className="atw:flex atw:h-full atw:flex-col atw:items-center atw:justify-center atw:gap-1.5 atw:px-6 atw:text-center"
 			data-attr="checkpoint-absent-file"
 		>
 			<svg
@@ -42,7 +42,7 @@ export function CheckpointAbsentFile({
 				strokeWidth="1.5"
 				strokeLinecap="round"
 				strokeLinejoin="round"
-				className="mb-2 text-fg-subtle"
+				className="atw:mb-2 atw:text-fg-subtle"
 				aria-hidden="true"
 			>
 				<path
@@ -50,13 +50,13 @@ export function CheckpointAbsentFile({
 					strokeDasharray="3 3"
 				/>
 			</svg>
-			<div className="text-sm font-medium text-fg">
+			<div className="atw:text-sm atw:font-medium atw:text-fg">
 				{fileName
 					? `${fileName} did not exist at this point in time`
 					: "This file did not exist at this point in time"}
 			</div>
 			{checkpoint ? (
-				<div className="max-w-95 text-[13px] leading-snug text-fg-muted">
+				<div className="atw:max-w-95 atw:text-[13px] atw:leading-snug atw:text-fg-muted">
 					{`Checkpoint from ${formatCheckpointCreatedAt(checkpoint.created_at)}.`}
 				</div>
 			) : null}

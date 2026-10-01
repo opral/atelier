@@ -7,6 +7,7 @@ const markdownRequire = createRequire(
 );
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { privateTailwind } from "./scripts/private-tailwind.mjs";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -47,6 +48,7 @@ export default defineConfig({
 			},
 		}),
 		tailwindcss(),
+		privateTailwind(),
 	],
 	resolve: {
 		alias: {

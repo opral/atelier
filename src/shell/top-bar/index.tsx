@@ -69,19 +69,25 @@ export function TopBar({
 		<header
 			{...rootProps}
 			className={cn(
-				"relative grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-fg-muted",
+				"atw:relative atw:grid atw:h-[40px] atw:shrink-0 atw:grid-cols-[auto_minmax(0,1fr)_auto] atw:items-center atw:gap-2 atw:px-3.5 atw:text-fg-muted",
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
 		>
-			<div className="flex min-w-0 items-center gap-1 text-sm">
+			<div className="atw:flex atw:min-w-0 atw:items-center atw:gap-1 atw:text-sm">
 				{navbarBrand !== undefined && navbarBrand !== null ? (
-					<div className="flex shrink-0 items-center" data-slot="navbar-brand">
+					<div
+						className="atw:flex atw:shrink-0 atw:items-center"
+						data-slot="navbar-brand"
+					>
 						{navbarBrand}
 					</div>
 				) : null}
 				{navbarStart !== undefined && navbarStart !== null ? (
-					<div className="flex shrink-0 items-center" data-slot="navbar-start">
+					<div
+						className="atw:flex atw:shrink-0 atw:items-center"
+						data-slot="navbar-start"
+					>
 						{navbarStart}
 					</div>
 				) : null}
@@ -90,7 +96,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-control text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
+							className="atw:h-7 atw:w-7 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg"
 							type="button"
 							onClick={onToggleLeftSidebar}
 							aria-label="Toggle left panel"
@@ -101,13 +107,13 @@ export function TopBar({
 							<PanelToggleIcon side="left" isActive={isLeftSidebarVisible} />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent className="bg-overlay text-overlay-fg [&_[class*='bg-bg-subtle']]:bg-overlay [&_[class*='fill-secondary']]:fill-overlay">
+					<TooltipContent className="atw:bg-overlay atw:text-overlay-fg atw:[&_[class*='bg-bg-subtle']]:bg-overlay atw:[&_[class*='fill-secondary']]:fill-overlay">
 						Toggle left area ({leftShortcut})
 					</TooltipContent>
 				</Tooltip>
 				{navbarRepository !== undefined && navbarRepository !== null ? (
 					<div
-						className="flex min-w-0 shrink items-center"
+						className="atw:flex atw:min-w-0 atw:shrink atw:items-center"
 						data-slot="navbar-repository"
 					>
 						{navbarRepository}
@@ -119,13 +125,13 @@ export function TopBar({
 					<span
 						aria-hidden="true"
 						data-atelier-part="top-bar-divider"
-						className="mx-1 h-4 w-px shrink-0 bg-border-strong"
+						className="atw:mx-1 atw:h-4 atw:w-px atw:shrink-0 atw:bg-border-strong"
 					/>
 				) : null}
 			</div>
 			{mainTabStrip !== undefined && mainTabStrip !== null ? (
 				<div
-					className="flex min-w-0 items-center overflow-hidden"
+					className="atw:flex atw:min-w-0 atw:items-center atw:overflow-hidden"
 					data-slot="main-tab-strip"
 				>
 					{mainTabStrip}
@@ -137,38 +143,42 @@ export function TopBar({
 					<span
 						aria-hidden="true"
 						data-atelier-part="top-bar-divider-end"
-						className="ml-3 mr-1 h-4 w-px shrink-0 bg-border-strong opacity-0 transition-opacity duration-150 [[data-overflow-right=true]+&]:opacity-100"
+						className="atw:ml-3 atw:mr-1 atw:h-4 atw:w-px atw:shrink-0 atw:bg-border-strong atw:opacity-0 atw:transition-opacity atw:duration-150 atw:[[data-overflow-right=true]+&]:opacity-100"
 					/>
 				</div>
 			) : navbarCenter !== undefined && navbarCenter !== null ? (
 				<div
-					className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]"
+					className="atw:flex atw:min-w-0 atw:items-center atw:justify-center atw:overflow-hidden atw:px-2 atw:text-[12.5px]"
 					data-slot="navbar-center"
 				>
 					{navbarCenter}
 					{isReadOnly ? (
 						<span
-							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-bg-hover px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-fg-subtle"
+							className="atw:ml-1.5 atw:flex atw:shrink-0 atw:items-center atw:gap-1 atw:rounded-full atw:bg-bg-hover atw:px-2 atw:py-0.75 atw:text-[10.5px] atw:leading-none atw:font-semibold atw:tracking-normal atw:text-fg-subtle"
 							data-attr="workspace-read-only-chip"
 						>
-							<Eye aria-hidden="true" className="size-3" strokeWidth={2.2} />
+							<Eye
+								aria-hidden="true"
+								className="atw:size-3"
+								strokeWidth={2.2}
+							/>
 							Read-only
 						</span>
 					) : null}
 				</div>
 			) : reviewTitle || activeFileName || isReadOnly ? (
-				<div className="flex min-w-0 items-center justify-center overflow-hidden px-2 text-[12.5px]">
+				<div className="atw:flex atw:min-w-0 atw:items-center atw:justify-center atw:overflow-hidden atw:px-2 atw:text-[12.5px]">
 					{reviewTitle ? (
 						<span
-							className="max-w-80 truncate px-1 font-bold text-accent"
+							className="atw:max-w-80 atw:truncate atw:px-1 atw:font-bold atw:text-accent"
 							data-attr="diff-mode-title"
 						>
 							{reviewTitle}
 						</span>
 					) : activeFileName ? (
 						<span
-							className={`ph-mask max-w-60 truncate px-1 font-semibold ${
-								isReviewing ? "text-warning" : "text-fg"
+							className={`ph-mask atw:max-w-60 atw:truncate atw:px-1 atw:font-semibold ${
+								isReviewing ? "atw:text-warning" : "atw:text-fg"
 							}`}
 						>
 							{isReviewing ? `Reviewing ${activeFileName}` : activeFileName}
@@ -176,10 +186,14 @@ export function TopBar({
 					) : null}
 					{isReadOnly ? (
 						<span
-							className="ml-1.5 flex shrink-0 items-center gap-1 rounded-full bg-bg-hover px-2 py-0.75 text-[10.5px] leading-none font-semibold tracking-normal text-fg-subtle"
+							className="atw:ml-1.5 atw:flex atw:shrink-0 atw:items-center atw:gap-1 atw:rounded-full atw:bg-bg-hover atw:px-2 atw:py-0.75 atw:text-[10.5px] atw:leading-none atw:font-semibold atw:tracking-normal atw:text-fg-subtle"
 							data-attr="workspace-read-only-chip"
 						>
-							<Eye aria-hidden="true" className="size-3" strokeWidth={2.2} />
+							<Eye
+								aria-hidden="true"
+								className="atw:size-3"
+								strokeWidth={2.2}
+							/>
 							Read-only
 						</span>
 					) : null}
@@ -187,9 +201,12 @@ export function TopBar({
 			) : (
 				<div aria-hidden="true" />
 			)}
-			<div className="flex items-center justify-end gap-1.5">
+			<div className="atw:flex atw:items-center atw:justify-end atw:gap-1.5">
 				{navbarEnd !== undefined && navbarEnd !== null ? (
-					<div className="flex shrink-0 items-center" data-slot="navbar-end">
+					<div
+						className="atw:flex atw:shrink-0 atw:items-center"
+						data-slot="navbar-end"
+					>
 						{navbarEnd}
 					</div>
 				) : null}
@@ -198,7 +215,7 @@ export function TopBar({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-7 w-7 justify-center rounded-control text-fg-faint hover:bg-bg-hover-strong hover:text-fg"
+							className="atw:h-7 atw:w-7 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg"
 							type="button"
 							onClick={onToggleRightSidebar}
 							aria-label="Toggle right panel"
@@ -209,7 +226,7 @@ export function TopBar({
 							<PanelToggleIcon side="right" isActive={isRightSidebarVisible} />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent className="bg-overlay text-overlay-fg [&_[class*='bg-bg-subtle']]:bg-overlay [&_[class*='fill-secondary']]:fill-overlay">
+					<TooltipContent className="atw:bg-overlay atw:text-overlay-fg atw:[&_[class*='bg-bg-subtle']]:bg-overlay atw:[&_[class*='fill-secondary']]:fill-overlay">
 						Toggle right area ({rightShortcut})
 					</TooltipContent>
 				</Tooltip>
@@ -229,7 +246,7 @@ function PanelToggleIcon({ side, isActive }: PanelToggleIconProps) {
 	return (
 		<svg
 			aria-hidden="true"
-			className="size-3.75 text-current"
+			className="atw:size-3.75 atw:text-current"
 			focusable="false"
 			role="img"
 			viewBox="0 0 24 24"

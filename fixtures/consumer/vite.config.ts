@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
 	build: {
-		// Preserve the inherited light-dark() design tokens in standalone.css.
+		// Preserve the inherited light-dark() design tokens in style.css.
 		cssTarget: ["chrome123", "firefox120", "safari17.5"],
 	},
 });

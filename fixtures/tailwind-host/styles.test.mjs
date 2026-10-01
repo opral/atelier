@@ -9,21 +9,36 @@ import { chromium } from "@playwright/test";
 import tailwindcss from "@tailwindcss/vite";
 import postcss from "postcss";
 import { build } from "vite";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AtelierSkeleton } from "../../dist/atelier.js";
+import { toHtml } from "../../dist/render.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = path.join(root, "fixtures/tailwind-host");
+const cssTarget = ["chrome123", "firefox120", "safari17.5"];
 
-test("packed component CSS and a single host utility build work in either order", async () => {
+async function buildCss(entry, plugins = []) {
+	const result = await build({
+		configFile: false,
+		root,
+		logLevel: "error",
+		plugins,
+		build: { cssTarget, write: false, rollupOptions: { input: entry } },
+	});
+	return result.output.find(
+		(asset) => asset.type === "asset" && asset.fileName.endsWith(".css"),
+	).source;
+}
+
+test("the sole packed stylesheet is complete and isolated in every host", async () => {
 	const temporary = await mkdtemp(path.join(os.tmpdir(), "atelier-styles-"));
 	let browser;
 	try {
 		execFileSync(
 			"pnpm",
 			["pack", "--out", path.join(temporary, "atelier.tgz")],
-			{
-				cwd: root,
-				stdio: "pipe",
-			},
+			{ cwd: root, stdio: "pipe" },
 		);
 		execFileSync("tar", [
 			"-xzf",
@@ -35,33 +50,45 @@ test("packed component CSS and a single host utility build work in either order"
 		const manifest = JSON.parse(
 			await readFile(path.join(packed, "package.json"), "utf8"),
 		);
-		for (const [name, target] of Object.entries(manifest.exports)) {
-			if (name.endsWith(".css")) await readFile(path.join(packed, target));
-		}
-		const component = await readFile(
-			path.join(packed, manifest.exports["./style.css"]),
-			"utf8",
+		assert.deepEqual(
+			Object.keys(manifest.exports).filter((name) => name.endsWith(".css")),
+			["./style.css"],
 		);
-		const standalone = await readFile(
-			path.join(packed, manifest.exports["./standalone.css"]),
-			"utf8",
-		);
-		const utilitySelectors = [".flex", ".grid-cols-1", ".hidden", ".text-sm"];
+		const stylesheet = path.join(packed, manifest.exports["./style.css"]);
+		const component = await readFile(stylesheet, "utf8");
 		const rules = [];
+		const animations = [];
 		postcss.parse(component).walkRules((rule) => rules.push(rule.selector));
-		for (const selector of utilitySelectors)
-			assert.ok(!rules.includes(selector), `component emitted ${selector}`);
+		postcss
+			.parse(component)
+			.walkAtRules("keyframes", (rule) => animations.push(rule.params));
+		for (const selector of [
+			".flex",
+			".grid-cols-1",
+			".hidden",
+			".text-sm",
+			".animate-in",
+		]) {
+			assert.ok(
+				!rules.includes(selector),
+				`library emitted global ${selector}`,
+			);
+		}
+		assert.ok(rules.includes(".atw\\:flex"), "missing private utility");
+		assert.ok(component.includes("--atw-tw-enter-opacity"));
 		assert.ok(
-			!component.includes("--tw-animation-delay"),
-			"component CSS emitted animation globals",
+			!component.includes("--tw-"),
+			"library emitted shared Tailwind implementation properties",
 		);
+		assert.ok(animations.includes("atw-enter"));
+		assert.ok(!animations.includes("enter"));
 		assert.ok(
-			!component.includes("@property --tw-enter-opacity"),
-			"component emitted animation properties",
+			!/@(?:theme|source|reference|tailwind|utility)\b/.test(component),
+			"published CSS needs a Tailwind build",
 		);
-		assert.ok(standalone.includes(".flex{"), "standalone omitted utilities");
-		// source(none) proves the published adapter supplies library classes;
-		// the package is extracted outside this repository and node_modules.
+		// Plain Vite can consume the packed artifact with no Tailwind plugin,
+		// adapter, library source registration, or external stylesheet imports.
+		const plain = await buildCss(stylesheet);
 		const entry = path.join(temporary, "host.css");
 		await writeFile(
 			entry,
@@ -70,41 +97,32 @@ test("packed component CSS and a single host utility build work in either order"
 @import "${path.join(root, "node_modules/tailwindcss/theme.css")}" layer(theme);
 @import "${path.join(root, "node_modules/tailwindcss/utilities.css")}" layer(utilities) source(none);
 @import "${path.join(root, "node_modules/tw-animate-css/dist/tw-animate.css")}";
-@import "${path.join(packed, "dist/tailwind.css")}";
 @source "${path.join(fixture, "host.html")}";
 `,
 		);
-		const result = await build({
-			configFile: false,
-			root,
-			logLevel: "error",
-			plugins: [tailwindcss()],
-			build: {
-				cssTarget: ["chrome123", "firefox120", "safari17.5"],
-				write: false,
-				rollupOptions: { input: entry },
-			},
-		});
-		const host = result.output.find(
-			(asset) => asset.type === "asset" && asset.fileName.endsWith(".css"),
-		).source;
-		assert.match(host, /\.bg-panel\{/);
-		assert.match(host, /\.text-ui-sm\{/);
-		assert.match(host, /\.animate-in\{/);
+		const host = await buildCss(entry, [tailwindcss()]);
+		assert.ok(!host.includes(".atw\\:"), "host generated Atelier utilities");
 		browser = await chromium.launch({ headless: true });
 		const page = await browser.newPage();
 		const layout = await readFile(path.join(fixture, "host.html"), "utf8");
-		for (const sheets of [
-			[host, component],
-			[component, host],
-		]) {
+		const skeleton = renderToStaticMarkup(
+			createElement(AtelierSkeleton, null, "Opening repository…"),
+		);
+		const staticView = toHtml({
+			path: "/README.md",
+			after: new TextEncoder().encode("# A static document"),
+		});
+		assert.ok("html" in staticView);
+		for (const sheets of [[plain], [host, component], [component, host]]) {
 			await page.setContent(`<style>${sheets.join("\n")}</style>${layout}
 <style>.brand { --atelier-panel: rgb(1 2 3); --atelier-fg: rgb(4 5 6); }</style>
-<div class="brand"><div id="root" class="atelier-root"><button id="control" class="border bg-panel text-ui-sm">Control</button></div></div>
-<div class="brand"><div id="portal" class="atelier-portal"><button class="border bg-panel">Portal</button></div></div>
+<div class="brand"><div id="root" class="atelier-root"><button id="control" class="atw:border atw:bg-panel atw:text-ui-sm">Control</button></div></div>
+<div class="brand"><div id="portal" class="atelier-portal"><button class="atw:border atw:bg-panel">Portal</button></div></div>
 <p id="outside">Host paragraph</p>
 <div class="dark" id="host-dark">Host dark class</div>
-<div class="dark"><div id="dark-root" class="atelier-root">Dark workspace</div></div>`);
+<div class="dark"><div id="dark-root" class="atelier-root">Dark workspace</div></div>
+<div id="skeleton">${skeleton}</div>
+<div id="static" class="atelier-render">${staticView.html}</div>`);
 			for (const [width, hidden, columns] of [
 				[390, false, 1],
 				[1440, true, 2],
@@ -118,6 +136,7 @@ test("packed component CSS and a single host utility build work in either order"
 						root: style("root").backgroundColor,
 						fg: style("root").color,
 						border: style("control").borderTopWidth,
+						font: style("control").fontSize,
 						portal: getComputedStyle(document.querySelector("#portal button"))
 							.backgroundColor,
 						hostScheme: style("host-dark").colorScheme,
@@ -125,31 +144,31 @@ test("packed component CSS and a single host utility build work in either order"
 						darkPanel: style("dark-root").backgroundColor,
 						outsideMargin: style("outside").marginTop,
 						outsideBox: style("outside").boxSizing,
+						skeleton: getComputedStyle(
+							document.querySelector("#skeleton .atelier-root > div"),
+						).display,
+						staticSize: getComputedStyle(document.querySelector("#static h1"))
+							.fontSize,
 					};
 				});
-				assert.equal(computed.rail, hidden ? "none" : "flex");
-				assert.equal(computed.columns, columns);
+				if (sheets.length === 2) {
+					assert.equal(computed.rail, hidden ? "none" : "flex");
+					assert.equal(computed.columns, columns);
+				}
 				assert.equal(computed.root, "rgb(1, 2, 3)");
 				assert.equal(computed.fg, "rgb(4, 5, 6)");
 				assert.equal(computed.portal, "rgb(1, 2, 3)");
 				assert.equal(computed.border, "1px");
+				assert.equal(computed.font, "11.5px");
 				assert.equal(computed.hostScheme, "normal");
 				assert.equal(computed.darkScheme, "dark");
 				assert.equal(computed.darkPanel, "rgb(28, 25, 23)");
 				assert.equal(computed.outsideMargin, "16px");
 				assert.equal(computed.outsideBox, "content-box");
+				assert.equal(computed.skeleton, "flex");
+				assert.equal(computed.staticSize, "26.25px");
 			}
 		}
-		// Non-Tailwind consumers use the complete, opt-in stylesheet.
-		await page.setContent(
-			`<style>${standalone}</style><div class="atelier-root"><div id="standalone" class="flex bg-panel">Workspace</div></div>`,
-		);
-		assert.equal(
-			await page
-				.locator("#standalone")
-				.evaluate((node) => getComputedStyle(node).display),
-			"flex",
-		);
 	} finally {
 		await browser?.close();
 		await rm(temporary, { recursive: true, force: true });

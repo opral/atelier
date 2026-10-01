@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier {
+@layer atelier.components {
 	@scope (.atelier-root) {
 		.csv-review-scroll {
 			position: absolute;

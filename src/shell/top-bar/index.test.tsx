@@ -7,13 +7,13 @@ describe("TopBar", () => {
 	test("matches the panel frame horizontal inset", () => {
 		const { container } = render(<TopBar />);
 
-		expect(container.querySelector("header")).toHaveClass("px-3.5");
-		expect(container.querySelector("header")).not.toHaveClass("px-2");
+		expect(container.querySelector("header")).toHaveClass("atw:px-3.5");
+		expect(container.querySelector("header")).not.toHaveClass("atw:px-2");
 		expect(screen.getByLabelText("Toggle left panel")).toHaveClass(
-			"justify-center",
+			"atw:justify-center",
 		);
 		expect(screen.getByLabelText("Toggle right panel")).toHaveClass(
-			"justify-center",
+			"atw:justify-center",
 		);
 	});
 
@@ -53,7 +53,7 @@ describe("TopBar", () => {
 		expect(header).toHaveAttribute("data-atelier-part", "top-bar");
 		expect(header).toHaveAttribute("data-app-titlebar", "true");
 		expect(header).toHaveAttribute("aria-label", "Repository controls");
-		expect(header).toHaveClass("bg-red-500", "px-3.5");
+		expect(header).toHaveClass("bg-red-500", "atw:px-3.5");
 		expect(ref.current).toBe(header);
 		if (!header) throw new Error("Top bar header is unavailable");
 		fireEvent.pointerDown(header);

@@ -475,7 +475,10 @@ function TextMessage({
 		return () => frame?.setMessage(false);
 	}, [frame]);
 	return (
-		<div className="atelier-text-message text-sm text-fg-subtle" role={role}>
+		<div
+			className="atelier-text-message atw:text-sm atw:text-fg-subtle"
+			role={role}
+		>
 			{children}
 		</div>
 	);
@@ -877,7 +880,7 @@ export const extension = createReactExtensionDefinition({
 						<TextPreparedFrame />
 					) : file ? (
 						<TextPreparedFrame>
-							<pre className="whitespace-pre-wrap p-4 font-mono text-sm">
+							<pre className="atw:whitespace-pre-wrap atw:p-4 atw:font-mono atw:text-sm">
 								{file.content}
 							</pre>
 						</TextPreparedFrame>

@@ -278,19 +278,19 @@ export function TableView({
 	}, [lix, tableName, schemaColumns, filters, sort, page, pageSize]);
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-			<div className="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border-subtle bg-bg-subtle px-3.5">
+		<div className="atw:flex atw:min-h-0 atw:min-w-0 atw:flex-1 atw:flex-col">
+			<div className="atw:flex atw:h-[46px] atw:shrink-0 atw:items-center atw:gap-2.5 atw:border-b atw:border-border-subtle atw:bg-bg-subtle atw:px-3.5">
 				<Table
 					aria-hidden="true"
-					className="h-[13px] w-[13px] shrink-0 text-fg-muted"
+					className="atw:h-[13px] atw:w-[13px] atw:shrink-0 atw:text-fg-muted"
 				/>
-				<span className="font-mono text-ui font-semibold text-fg">
+				<span className="atw:font-mono atw:text-ui atw:font-semibold atw:text-fg">
 					{baseTable}
 				</span>
 				{description ? (
 					<span
 						data-attr="sql-table-description"
-						className="min-w-0 max-w-[38ch] truncate text-ui-sm text-fg-subtle"
+						className="atw:min-w-0 atw:max-w-[38ch] atw:truncate atw:text-ui-sm atw:text-fg-subtle"
 						title={description}
 					>
 						{description}
@@ -300,7 +300,7 @@ export function TableView({
 					<span
 						role="tablist"
 						aria-label="Table surface"
-						className="inline-flex gap-0.5 rounded-[7px] bg-bg-hover p-0.5"
+						className="atw:inline-flex atw:gap-0.5 atw:rounded-[7px] atw:bg-bg-hover atw:p-0.5"
 					>
 						{availableSurfaces.map((candidate) => (
 							<button
@@ -315,10 +315,10 @@ export function TableView({
 									setFilters([]);
 									setPage(0);
 								}}
-								className={`inline-flex h-5 items-center rounded-[5px] px-2 font-mono text-[10.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+								className={`atw:inline-flex atw:h-5 atw:items-center atw:rounded-[5px] atw:px-2 atw:font-mono atw:text-[10.5px] atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${
 									surface === candidate
-										? "border border-border bg-panel font-semibold text-fg"
-										: "text-fg-muted hover:bg-bg-hover-strong"
+										? "atw:border atw:border-border atw:bg-panel atw:font-semibold atw:text-fg"
+										: "atw:text-fg-muted atw:hover:bg-bg-hover-strong"
 								}`}
 							>
 								{candidate}
@@ -334,11 +334,11 @@ export function TableView({
 						setPage(0);
 					}}
 				/>
-				<span className="flex-1" />
+				<span className="atw:flex-1" />
 				{data === null ? null : (
-					<span className="font-mono text-ui-sm whitespace-nowrap">
+					<span className="atw:font-mono atw:text-ui-sm atw:whitespace-nowrap">
 						<span
-							className="font-semibold text-success"
+							className="atw:font-semibold atw:text-success"
 							title={formatQueryTimingDetails(
 								data.clientDurationMs,
 								data.serverTimings,
@@ -352,12 +352,12 @@ export function TableView({
 			{error === null ? null : (
 				<div
 					role="alert"
-					className="shrink-0 border-b border-border-subtle px-4 py-2 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-danger"
+					className="atw:shrink-0 atw:border-b atw:border-border-subtle atw:px-4 atw:py-2 atw:font-mono atw:text-[11.5px] atw:leading-relaxed atw:break-words atw:whitespace-pre-wrap atw:text-danger"
 				>
 					{error}
 				</div>
 			)}
-			<div className="atelier-sql-results min-h-0 flex-1 overflow-auto">
+			<div className="atelier-sql-results atw:min-h-0 atw:flex-1 atw:overflow-auto">
 				{data === null ? null : (
 					<DataGrid
 						columns={columns}
@@ -447,13 +447,16 @@ function FilterBar({
 	return (
 		<div
 			ref={containerRef}
-			className="relative ml-2 flex h-7 min-w-0 flex-[0_1_380px] items-center gap-2 rounded-[7px] border border-border-subtle bg-panel px-2.5 focus-within:border-accent-border focus-within:ring-1 focus-within:ring-accent-border"
+			className="atw:relative atw:ml-2 atw:flex atw:h-7 atw:min-w-0 atw:flex-[0_1_380px] atw:items-center atw:gap-2 atw:rounded-[7px] atw:border atw:border-border-subtle atw:bg-panel atw:px-2.5 atw:focus-within:border-accent-border atw:focus-within:ring-1 atw:focus-within:ring-accent-border"
 		>
-			<Search aria-hidden="true" className="h-3 w-3 shrink-0 text-fg-faint" />
+			<Search
+				aria-hidden="true"
+				className="atw:h-3 atw:w-3 atw:shrink-0 atw:text-fg-faint"
+			/>
 			{filters.map((filter, index) => (
 				<span
 					key={`${filter.column}-${index}`}
-					className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-ui-xs text-fg"
+					className="atw:inline-flex atw:h-5 atw:shrink-0 atw:items-center atw:gap-1.5 atw:rounded-[5px] atw:border atw:border-border atw:bg-bg-hover atw:px-1.5 atw:font-mono atw:text-ui-xs atw:text-fg"
 				>
 					{filter.column} {operatorSymbol(filter.operator)} {filter.value}
 					<button
@@ -462,9 +465,9 @@ function FilterBar({
 						onClick={() =>
 							onFiltersChange(filters.filter((_, i) => i !== index))
 						}
-						className="text-fg-faint hover:text-fg focus-visible:outline-none"
+						className="atw:text-fg-faint atw:hover:text-fg atw:focus-visible:outline-none"
 					>
-						<X aria-hidden="true" className="h-2.5 w-2.5" />
+						<X aria-hidden="true" className="atw:h-2.5 atw:w-2.5" />
 					</button>
 				</span>
 			))}
@@ -492,10 +495,10 @@ function FilterBar({
 							setIsColumnListOpen(false);
 						}
 					}}
-					className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-fg placeholder:text-fg-faint focus-visible:outline-none"
+					className="atw:h-full atw:min-w-0 atw:flex-1 atw:bg-transparent atw:text-[12px] atw:text-fg atw:placeholder:text-fg-faint atw:focus-visible:outline-none"
 				/>
 			) : (
-				<span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-border bg-bg-hover px-1.5 font-mono text-ui-xs text-fg">
+				<span className="atw:inline-flex atw:h-5 atw:shrink-0 atw:items-center atw:gap-1.5 atw:rounded-[5px] atw:border atw:border-border atw:bg-bg-hover atw:px-1.5 atw:font-mono atw:text-ui-xs atw:text-fg">
 					{pending.column}
 					{pending.operator === null ? null : (
 						<>
@@ -518,7 +521,7 @@ function FilterBar({
 										setPending(null);
 									}
 								}}
-								className="w-24 bg-transparent font-mono text-ui-xs focus-visible:outline-none"
+								className="atw:w-24 atw:bg-transparent atw:font-mono atw:text-ui-xs atw:focus-visible:outline-none"
 							/>
 						</>
 					)}
@@ -526,9 +529,9 @@ function FilterBar({
 						type="button"
 						aria-label="Cancel filter"
 						onClick={() => setPending(null)}
-						className="text-fg-faint hover:text-fg focus-visible:outline-none"
+						className="atw:text-fg-faint atw:hover:text-fg atw:focus-visible:outline-none"
 					>
-						<X aria-hidden="true" className="h-2.5 w-2.5" />
+						<X aria-hidden="true" className="atw:h-2.5 atw:w-2.5" />
 					</button>
 				</span>
 			)}
@@ -538,7 +541,7 @@ function FilterBar({
 					role="listbox"
 					aria-label="Columns"
 				>
-					<div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-semibold tracking-[0.1em] text-fg-faint">
+					<div className="atw:px-2.5 atw:pt-1.5 atw:pb-1 atw:font-mono atw:text-[9px] atw:font-semibold atw:tracking-[0.1em] atw:text-fg-faint">
 						COLUMNS
 					</div>
 					{suggestions.slice(0, 12).map((column) => (
@@ -553,13 +556,13 @@ function FilterBar({
 								setInput("");
 								setIsColumnListOpen(false);
 							}}
-							className="flex h-7 w-full items-center justify-between rounded-[5px] px-2.5 text-left hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							className="atw:flex atw:h-7 atw:w-full atw:items-center atw:justify-between atw:rounded-[5px] atw:px-2.5 atw:text-left atw:hover:bg-bg-hover-strong atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 						>
-							<span className="font-mono text-[12px] text-fg-muted">
+							<span className="atw:font-mono atw:text-[12px] atw:text-fg-muted">
 								{column.name}
 							</span>
 							{column.type === "" ? null : (
-								<span className="font-mono text-[9.5px] text-fg-faint">
+								<span className="atw:font-mono atw:text-[9.5px] atw:text-fg-faint">
 									{column.type}
 								</span>
 							)}
@@ -575,7 +578,7 @@ function FilterBar({
 				>
 					{(["COMPARISON", "PATTERN MATCHING"] as const).map((group) => (
 						<div key={group}>
-							<div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-semibold tracking-[0.1em] text-fg-faint">
+							<div className="atw:px-2.5 atw:pt-1.5 atw:pb-1 atw:font-mono atw:text-[9px] atw:font-semibold atw:tracking-[0.1em] atw:text-fg-faint">
 								{group}
 							</div>
 							{FILTER_OPERATORS.filter((entry) => entry.group === group).map(
@@ -589,12 +592,12 @@ function FilterBar({
 										onClick={() =>
 											setPending({ ...pending, operator: entry.operator })
 										}
-										className="flex h-7 w-full items-center justify-between rounded-[5px] px-2.5 text-left hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										className="atw:flex atw:h-7 atw:w-full atw:items-center atw:justify-between atw:rounded-[5px] atw:px-2.5 atw:text-left atw:hover:bg-bg-hover-strong atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 									>
-										<span className="text-[12px] text-fg-muted">
+										<span className="atw:text-[12px] atw:text-fg-muted">
 											{entry.label}
 										</span>
-										<span className="rounded-[4px] border border-border bg-bg-hover px-1.5 py-px font-mono text-[10px] text-fg-muted">
+										<span className="atw:rounded-[4px] atw:border atw:border-border atw:bg-bg-hover atw:px-1.5 atw:py-px atw:font-mono atw:text-[10px] atw:text-fg-muted">
 											{entry.symbol}
 										</span>
 									</button>

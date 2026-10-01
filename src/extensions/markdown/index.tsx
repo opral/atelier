@@ -275,7 +275,7 @@ function MarkdownFrame({
 			<DocumentRegionProvider handle={handle}>
 				<EditorProvider>
 					<div
-						className={`markdown-view flex h-full flex-col bg-panel ${
+						className={`markdown-view atw:flex atw:h-full atw:flex-col atw:bg-panel ${
 							review || locks > 0 ? "markdown-review" : ""
 						}`}
 						data-document={shown ? "" : undefined}
@@ -285,7 +285,7 @@ function MarkdownFrame({
 							<FormattingToolbar disabled={toolbarDisabled || locks > 0} />
 						) : null}
 						<div
-							className="relative min-h-0 flex-1"
+							className="atw:relative atw:min-h-0 atw:flex-1"
 							data-attr="markdown-editor"
 							// A document is on its way, out of sight: nothing it paints
 							// meanwhile is the picture the reviewer stepped to.
@@ -331,7 +331,7 @@ function MarkdownMessage({
 	useDocumentReady(true);
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:text-center atw:text-sm atw:text-fg-subtle"
 			role={role}
 		>
 			{children}
@@ -614,7 +614,7 @@ function MarkdownLiveDocument({
 				enabled={!editorReadOnly && liveEditor !== null}
 			>
 				<TipTapEditor
-					className="h-full"
+					className="atw:h-full"
 					fileId={effectiveFileRow.id}
 					activeBranchId={activeBranchId}
 					filePath={editorSourcePath ?? effectiveFileRow.path}
@@ -1018,8 +1018,11 @@ function MarkdownSnapshotDocument({
 	useDocumentReady(true);
 
 	return (
-		<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
-			<EditorContent editor={editor} className="tiptap mx-auto w-full" />
+		<div className="ph-mask tiptap-container atw:h-full atw:w-full atw:overflow-y-auto atw:bg-panel">
+			<EditorContent
+				editor={editor}
+				className="tiptap atw:mx-auto atw:w-full"
+			/>
 		</div>
 	);
 }
@@ -1203,14 +1206,16 @@ function UnsupportedFilePlaceholder({
 }): ReactNode {
 	useDocumentReady(true);
 	return (
-		<div className="flex h-full items-center justify-center px-6 py-8 text-center">
-			<div className="max-w-sm space-y-2 text-sm text-fg-muted">
-				<p className="font-medium text-fg">
+		<div className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:py-8 atw:text-center">
+			<div className="atw:max-w-sm atw:space-y-2 atw:text-sm atw:text-fg-muted">
+				<p className="atw:font-medium atw:text-fg">
 					This file type is not supported yet.
 				</p>
 				<p>
 					Atelier only opens markdown files in this editor, so{" "}
-					<span className="font-mono text-xs text-fg-muted">{filePath}</span>{" "}
+					<span className="atw:font-mono atw:text-xs atw:text-fg-muted">
+						{filePath}
+					</span>{" "}
 					was left blank to avoid damaging its formatting.
 				</p>
 			</div>
@@ -1260,14 +1265,14 @@ export const extension = createReactExtensionDefinition({
 						// strip, container, the ProseMirror column with the
 						// document's type), so the swap to the live editor moves
 						// nothing on screen.
-						<div className="markdown-view flex h-full flex-col bg-panel">
+						<div className="markdown-view atw:flex atw:h-full atw:flex-col atw:bg-panel">
 							{hostReadOnly ? null : (
 								<div
 									aria-hidden="true"
-									className="h-10 shrink-0 border-b border-border-subtle"
+									className="atw:h-10 atw:shrink-0 atw:border-b atw:border-border-subtle"
 								/>
 							)}
-							<div className="tiptap-container relative h-full min-h-0 w-full overflow-y-auto bg-panel">
+							<div className="tiptap-container atw:relative atw:h-full atw:min-h-0 atw:w-full atw:overflow-y-auto atw:bg-panel">
 								{underReview ? null : (
 									<RepositoryMarkdownContent
 										className="ProseMirror atelier-document"

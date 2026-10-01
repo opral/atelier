@@ -93,7 +93,7 @@ test("Glide's stylesheet sits under Atelier's rules, never unlayered", () => {
 	const read = (file: string) =>
 		readFileSync(join(import.meta.dirname, file), "utf8");
 	expect(read("style.css")).toMatch(
-		/@import "@glideapps\/glide-data-grid\/dist\/index\.css" layer\(atelier\.glide\);/,
+		/@import "@glideapps\/glide-data-grid\/dist\/index\.css" layer\(atelier\.components\.glide\);/,
 	);
 	for (const file of ["index.tsx", "csv-properties.tsx", "csv-review-grid.tsx"])
 		expect(read(file)).not.toContain("glide-data-grid/dist/index.css");

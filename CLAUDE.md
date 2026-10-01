@@ -72,8 +72,8 @@ test` (vitest) does not cover it. Run `pnpm build` before calling it directly.
 `:root, :host`, each with its dark value in `light-dark()` and a comment saying
 when to use it. It is plain CSS — no build step, no framework — so the shell,
 every extension, the static render, a chat card, and a host page all read the
-same file. `src/shell/tailwind.css` is an optional adapter: `@theme inline`
-points utilities at the same values, so `bg-panel` and `text-fg-muted` exist
+same file. `src/shell/tailwind.css` is an internal adapter: `@theme inline`
+points utilities at the same values, so `atw:bg-panel` and `atw:text-fg-muted` exist
 and `bg-red-500` does not.
 
 The rules, which `pnpm tokens:check` enforces (a failure names the nearest token):
@@ -82,7 +82,7 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
   nowhere else. Canvas code that cannot read `var()` keeps a fallback marked
   `token-literal: <why>` on the same line, equal to the token's light value.
 - In CSS, say `var(--atelier-…)`. In `className`, say the adapter's name
-  (`bg-panel`, `border-border-subtle`, `text-danger`). Never `bg-[var(…)]`,
+  (`atw:bg-panel`, `atw:border-border-subtle`, `atw:text-danger`). Never `bg-[var(…)]`,
   never a stock palette class.
 - Text and icons share the `fg` scale: `fg`, `fg-muted`, `fg-subtle`, `fg-faint`.
   Surfaces: `bg` (canvas), `panel` (islands), `bg-subtle`, `bg-hover`,
@@ -150,11 +150,15 @@ host.
 
 ## CSS ownership
 
-`style.css` is embeddable component CSS, with scoped resets and no generated
-Tailwind utilities. `@reference` resolves its `@apply` against the stock theme
-and Atelier adapter without emitting them. Hosts own Preflight, animation
-utilities and a single Tailwind build; their first layer declaration includes
-`atelier` before `utilities`. `tailwind.css` registers Atelier source classes
-(the published copy scans built chunks). A host without Tailwind opts into
-`standalone.css`, which includes component CSS and global utilities. New CSS
-exports must ship in `dist`, the package's files whitelist.
+`@opral/atelier/style.css` is the only public stylesheet. It includes mounted
+and static styles, all prefixed Tailwind utilities and scoped resets. Host builds
+never scan Atelier or import its internal adapter. Library utilities use `atw:`;
+`scripts/private-tailwind.mjs` also namespaces Tailwind properties and animations,
+including in vendored development builds. Keep component CSS in
+`atelier.components`, private utilities in `atelier.utilities` and host utilities
+after the outer `atelier` layer. Public `--atelier-*` tokens remain framework
+independent. Host `className` values pass through unchanged.
+
+Static render chrome lives in `src/render/chrome.css`; the CSS generator copies
+it with theme and document rules for the DOM-free renderer. Add styling to the
+canonical CSS, then run `pnpm tokens`.

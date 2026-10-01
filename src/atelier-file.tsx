@@ -105,7 +105,7 @@ export function AtelierFile(props: AtelierFileProps) {
 		<div
 			data-read-only={props.readOnly || undefined}
 			className={cn(
-				"atelier-root atelier-file-view flex min-h-[320px] flex-col",
+				"atelier-root atelier-file-view atw:flex atw:min-h-[320px] atw:flex-col",
 				props.className,
 			)}
 		>
@@ -320,6 +320,9 @@ function MountedFile(
 			view={extensionView}
 		/>
 	) : (
-		<div ref={element} className="flex min-h-0 flex-1 flex-col" />
+		<div
+			ref={element}
+			className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col"
+		/>
 	);
 }

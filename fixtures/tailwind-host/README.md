@@ -1,12 +1,11 @@
-# Tailwind host CSS contract
+# Single stylesheet contract
 
 Run `pnpm build`, `pnpm exec playwright install chromium`, then
-`pnpm test:styles`. On a Linux CI image, use
-`pnpm exec playwright install --with-deps chromium`.
+`pnpm test:styles`. Linux CI can install Chromium with `--with-deps`.
 
-The test packs Atelier, extracts it outside the source tree, verifies every CSS
-export exists, and compiles a host utility sheet using the packed Tailwind
-adapter with automatic detection disabled. It checks desktop and phone layout
-in both stylesheet orders, inherited token overrides, scoped dark mode, portal
-styling and the scoped reset's utility override contract in Chromium. It also
-checks a no-Tailwind consumer using the standalone stylesheet.
+The test packs Atelier outside the source tree and verifies `style.css` is its
+only CSS export. A plain Vite consumer needs no Tailwind plugin. An independent
+Tailwind host generates its own utilities without scanning Atelier. Chromium
+checks phone and desktop layouts in both stylesheet orders, mounted and static
+views, private utility and animation names, inherited token overrides, portal
+styling, scoped resets and light/dark mode.

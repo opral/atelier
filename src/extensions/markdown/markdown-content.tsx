@@ -31,7 +31,7 @@ export function MarkdownContent({
 }) {
 	return (
 		<article
-			className={`tiptap mx-auto w-full ${className ?? ""} [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border-subtle [&_th]:bg-bg-hover [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-border-subtle [&_td]:px-3 [&_td]:py-2`}
+			className={`tiptap atw:mx-auto atw:w-full ${className ?? ""} atw:[&_table]:my-4 atw:[&_table]:w-full atw:[&_table]:border-collapse atw:[&_th]:border atw:[&_th]:border-border-subtle atw:[&_th]:bg-bg-hover atw:[&_th]:px-3 atw:[&_th]:py-2 atw:[&_th]:text-left atw:[&_td]:border atw:[&_td]:border-border-subtle atw:[&_td]:px-3 atw:[&_td]:py-2`}
 			data-atelier-markdown-content=""
 		>
 			{renderNode(astToTiptapDoc(parseMarkdown(content)), 0, href, src)}

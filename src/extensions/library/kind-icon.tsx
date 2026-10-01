@@ -4,15 +4,15 @@ export type LibraryNavKind = LibraryKind | "database";
 
 /** Each section's tint; Files wears the folder blue, Other stays neutral. */
 const KIND_TINT: Record<LibraryNavKind, string> = {
-	home: "text-fg-muted",
-	all: "text-fg-muted",
-	files: "text-folder",
-	pages: "text-kind-pages",
-	tables: "text-kind-tables",
-	drawings: "text-kind-drawings",
-	media: "text-kind-media",
-	database: "text-kind-database",
-	other: "text-fg-subtle",
+	home: "atw:text-fg-muted",
+	all: "atw:text-fg-muted",
+	files: "atw:text-folder",
+	pages: "atw:text-kind-pages",
+	tables: "atw:text-kind-tables",
+	drawings: "atw:text-kind-drawings",
+	media: "atw:text-kind-media",
+	database: "atw:text-kind-database",
+	other: "atw:text-fg-subtle",
 };
 
 /**
@@ -22,7 +22,7 @@ const KIND_TINT: Record<LibraryNavKind, string> = {
  */
 export function KindIcon({
 	kind,
-	className = "size-3.5",
+	className = "atw:size-3.5",
 }: {
 	readonly kind: LibraryNavKind;
 	readonly className?: string;
@@ -37,7 +37,7 @@ export function KindIcon({
 			strokeLinejoin="round"
 			aria-hidden="true"
 			data-kind-icon={kind}
-			className={`shrink-0 ${KIND_TINT[kind]} ${className}`}
+			className={`atw:shrink-0 ${KIND_TINT[kind]} ${className}`}
 		>
 			{kind === "home" ? (
 				<>

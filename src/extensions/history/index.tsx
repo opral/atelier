@@ -60,7 +60,7 @@ import { OpenConversationButton } from "../conversation/open-conversation";
  * is hovered or focused, and stay in the tab order.
  */
 const HEADER_LINK_REVEAL =
-	"pointer-events-none absolute top-1.5 bg-accent-subtle text-history-selected-secondary opacity-0 hover:bg-accent-border/50 focus-visible:pointer-events-auto focus-visible:opacity-100 group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto group-has-[[data-attr=open-conversation]:hover]:opacity-100";
+	"atw:pointer-events-none atw:absolute atw:top-1.5 atw:bg-accent-subtle atw:text-history-selected-secondary atw:opacity-0 atw:hover:bg-accent-border/50 atw:focus-visible:pointer-events-auto atw:focus-visible:opacity-100 atw:group-has-[[data-attr=history-view-checkpoint]:hover]:pointer-events-auto atw:group-has-[[data-attr=history-view-checkpoint]:hover]:opacity-100 atw:group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pointer-events-auto atw:group-has-[[data-attr=history-view-checkpoint]:focus-visible]:opacity-100 atw:group-has-[[data-attr=open-conversation]:hover]:pointer-events-auto atw:group-has-[[data-attr=open-conversation]:hover]:opacity-100";
 
 export type HistoryScope = "file" | "repository";
 
@@ -163,7 +163,7 @@ export function HistoryScopeSwitch({
 			<span
 				data-attr="history-scope-label"
 				aria-label="Showing the repository"
-				className="mr-1.5 flex h-6 shrink-0 items-center self-start px-1.5 text-[11.5px] font-medium text-history-secondary"
+				className="atw:mr-1.5 atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:self-start atw:px-1.5 atw:text-[11.5px] atw:font-medium atw:text-history-secondary"
 			>
 				Repository
 			</span>
@@ -178,12 +178,12 @@ export function HistoryScopeSwitch({
 			title={`Switch to ${other === "file" ? "this file" : "the repository"}`}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={() => setScope(other)}
-			className="group/scope mr-1.5 flex h-6 shrink-0 items-center gap-1 self-start rounded-[5px] px-1.5 text-[11.5px] font-medium text-history-secondary transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="atw:group/scope atw:mr-1.5 atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:gap-1 atw:self-start atw:rounded-[5px] atw:px-1.5 atw:text-[11.5px] atw:font-medium atw:text-history-secondary atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 		>
 			<span>{scope === "file" ? "This file" : "Repository"}</span>
 			<ArrowLeftRight
 				aria-hidden="true"
-				className="size-2.5 text-history-secondary transition-colors group-hover/scope:text-fg-muted"
+				className="atw:size-2.5 atw:text-history-secondary atw:transition-colors atw:group-hover/scope:text-fg-muted"
 				strokeWidth={2}
 			/>
 		</button>
@@ -205,10 +205,14 @@ export function HistoryScopeSwitch({
  * 4a's 6px, so it is 46px. The open row's edge is an inset ring, which takes
  * no space.
  */
-const ROW_INSET = "px-[5px]";
+const ROW_INSET = "atw:px-[5px]";
 
 function HistoryFilePath({ path }: { readonly path: string }) {
-	return <span className="min-w-0 truncate">{splitPathLabel(path).name}</span>;
+	return (
+		<span className="atw:min-w-0 atw:truncate">
+			{splitPathLabel(path).name}
+		</span>
+	);
 }
 
 /**
@@ -296,10 +300,14 @@ export function HistoryView({
 			ref={containerRef}
 			aria-label="Checkpoint history"
 			data-layout={wide ? "wide" : "compact"}
-			className="min-h-0 flex-1 overflow-y-auto py-2 pr-1"
+			className="atw:min-h-0 atw:flex-1 atw:overflow-y-auto atw:py-2 atw:pr-1"
 		>
 			<CheckpointRowMemoryContext.Provider value={rowMemory}>
-				<div className={wide ? "w-full max-w-[60rem] pr-5" : "w-full"}>
+				<div
+					className={
+						wide ? "atw:w-full atw:max-w-[60rem] atw:pr-5" : "atw:w-full"
+					}
+				>
 					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
 					<CheckpointList
 						key={file?.id ?? "repository"}
@@ -371,11 +379,15 @@ function WorkingChangesRow({
 	return (
 		<div
 			aria-current={isViewing ? "true" : undefined}
-			className={`rounded-panel transition-[background-color,box-shadow] duration-200 motion-reduce:transition-none ${
-				isViewing ? "bg-accent-subtle ring-1 ring-accent-border ring-inset" : ""
+			className={`atw:rounded-panel atw:transition-[background-color,box-shadow] atw:duration-200 atw:motion-reduce:transition-none ${
+				isViewing
+					? "atw:bg-accent-subtle atw:ring-1 atw:ring-accent-border atw:ring-inset"
+					: ""
 			}`}
 		>
-			<div className={`flex ${wide ? "items-center" : "items-start"}`}>
+			<div
+				className={`atw:flex ${wide ? "atw:items-center" : "atw:items-start"}`}
+			>
 				<button
 					type="button"
 					aria-label="Working changes"
@@ -383,18 +395,22 @@ function WorkingChangesRow({
 					onClick={toggleWorkingChanges}
 					onMouseDown={(event) => event.preventDefault()}
 					data-attr="history-working-changes"
-					className={`flex min-w-0 flex-1 min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
+					className={`atw:flex atw:min-w-0 atw:flex-1 atw:min-h-10 atw:gap-0.5 atw:rounded-panel atw:py-1.5 atw:text-left atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${wide ? "atw:items-center" : "atw:items-start"} ${ROW_INSET} ${isViewing ? "" : "atw:hover:bg-bg-hover-strong"}`}
 				>
-					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-						<WorkingDot className="ring-3 ring-accent-subtle" />
+					<span className="atw:flex atw:h-5 atw:w-4 atw:shrink-0 atw:items-center atw:justify-center">
+						<WorkingDot className="atw:ring-3 atw:ring-accent-subtle" />
 					</span>
 					<span
-						className={wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0"}
+						className={
+							wide
+								? "atw:flex atw:shrink-0 atw:items-baseline atw:gap-2"
+								: "atw:min-w-0"
+						}
 					>
-						<span className="block truncate text-[13px] leading-4 font-semibold text-fg">
+						<span className="atw:block atw:truncate atw:text-[13px] atw:leading-4 atw:font-semibold atw:text-fg">
 							Working changes
 						</span>
-						<span className="mt-0.5 block text-[11.5px] leading-4 text-history-secondary">
+						<span className="atw:mt-0.5 atw:block atw:text-[11.5px] atw:leading-4 atw:text-history-secondary">
 							{`now · ${workingCountLabel}`}
 						</span>
 					</span>
@@ -456,7 +472,7 @@ function WorkingChangeFileList({
 	return (
 		<ReviewFileList
 			atelier={atelier}
-			className="pb-2.5"
+			className="atw:pb-2.5"
 			label="Files in working changes"
 			attr="history-open-working-change-file"
 			files={files}
@@ -499,7 +515,10 @@ function ReviewFileList({
 	const canCollapse =
 		maxInitiallyVisible !== undefined && files.length > maxInitiallyVisible;
 	return (
-		<ul aria-label={label} className={`pr-[5px] pl-[17px] ${className}`}>
+		<ul
+			aria-label={label}
+			className={`atw:pr-[5px] atw:pl-[17px] ${className}`}
+		>
 			{visibleFiles.map((file) => {
 				const isActive = file.id === activeFileId;
 				return (
@@ -515,18 +534,20 @@ function ReviewFileList({
 							data-active-file={isActive ? "true" : undefined}
 							title={file.path}
 							onMouseDown={(event) => event.preventDefault()}
-							className={`flex h-6 w-full cursor-pointer items-center gap-[7px] rounded-[6px] px-1.5 text-left text-[11.5px] hover:bg-accent-border/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-								isActive ? "font-semibold text-fg" : "font-medium text-fg-muted"
+							className={`atw:flex atw:h-6 atw:w-full atw:cursor-pointer atw:items-center atw:gap-[7px] atw:rounded-[6px] atw:px-1.5 atw:text-left atw:text-[11.5px] atw:hover:bg-accent-border/50 atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${
+								isActive
+									? "atw:font-semibold atw:text-fg"
+									: "atw:font-medium atw:text-fg-muted"
 							}`}
 						>
 							<img
 								src={atelier.icons.fileUrl(file.path)}
 								alt=""
-								className="size-[13px] shrink-0"
+								className="atw:size-[13px] atw:shrink-0"
 							/>
 							<HistoryFilePath path={file.path} />
 							{file.movedFromPath ? (
-								<span className="truncate text-fg-faint">
+								<span className="atw:truncate atw:text-fg-faint">
 									· {movedFromHint(file.movedFromPath, file.path)}
 								</span>
 							) : null}
@@ -534,16 +555,16 @@ function ReviewFileList({
 								<span
 									data-attr="history-file-conversation-count"
 									aria-label={`${conversationCounts.get(file.id)} ${conversationCounts.get(file.id) === 1 ? "conversation" : "conversations"}`}
-									className="mr-0.5 ml-auto flex shrink-0 items-center gap-[3px] text-[10.5px] font-semibold text-accent-hover"
+									className="atw:mr-0.5 atw:ml-auto atw:flex atw:shrink-0 atw:items-center atw:gap-[3px] atw:text-[10.5px] atw:font-semibold atw:text-accent-hover"
 								>
-									<CommentBubble className="size-2.5" />
+									<CommentBubble className="atw:size-2.5" />
 									{conversationCounts.get(file.id)}
 								</span>
 							) : null}
 							<ChangeKindDot
 								changeKind={file.changeKind}
 								moved={Boolean(file.movedFromPath)}
-								className={conversationCounts?.get(file.id) ? "ml-0!" : ""}
+								className={conversationCounts?.get(file.id) ? "atw:ml-0!" : ""}
 							/>
 						</button>
 					</li>
@@ -554,7 +575,7 @@ function ReviewFileList({
 					<button
 						type="button"
 						onClick={() => setShowAll(hiddenCount > 0)}
-						className="cursor-pointer rounded-control px-1.5 py-1 text-[11.5px] font-medium text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="atw:cursor-pointer atw:rounded-control atw:px-1.5 atw:py-1 atw:text-[11.5px] atw:font-medium atw:text-accent-hover atw:hover:underline atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 					>
 						{hiddenCount > 0 ? `Show ${hiddenCount} more files` : "Show less"}
 					</button>
@@ -692,7 +713,7 @@ function CheckpointList({
 		return (
 			<p
 				role="status"
-				className="px-2 py-3 text-[11.5px] leading-4 text-history-secondary"
+				className="atw:px-2 atw:py-3 atw:text-[11.5px] atw:leading-4 atw:text-history-secondary"
 			>
 				{file ? "Loading file history…" : "Loading history…"}
 			</p>
@@ -705,7 +726,7 @@ function CheckpointList({
 		return (
 			<p
 				role="alert"
-				className="px-2 py-3 text-[11.5px] leading-4 text-history-secondary"
+				className="atw:px-2 atw:py-3 atw:text-[11.5px] atw:leading-4 atw:text-history-secondary"
 			>
 				{file ? "Could not load file history." : "Could not load history."}{" "}
 				<button type="button" onClick={() => setRetryKey((value) => value + 1)}>
@@ -724,7 +745,7 @@ function CheckpointList({
 		return (
 			<p
 				role="status"
-				className="px-1.5 py-3 text-[11.5px] leading-4 text-history-secondary"
+				className="atw:px-1.5 atw:py-3 atw:text-[11.5px] atw:leading-4 atw:text-history-secondary"
 			>
 				No checkpoint includes this file yet.
 			</p>
@@ -734,7 +755,7 @@ function CheckpointList({
 	const pages = pageCheckpoints(checkpoints, pageEndsRef.current);
 	return (
 		<>
-			<ol aria-label="Checkpoints" className="space-y-0">
+			<ol aria-label="Checkpoints" className="atw:space-y-0">
 				{pages.map((page) => (
 					<CheckpointPage
 						// By the row that ends it, which stays its last: rows keep
@@ -752,7 +773,7 @@ function CheckpointList({
 			{hasMore && (
 				<button
 					type="button"
-					className="rounded-panel px-2 py-2 text-sm text-fg-muted hover:bg-bg-hover"
+					className="atw:rounded-panel atw:px-2 atw:py-2 atw:text-sm atw:text-fg-muted atw:hover:bg-bg-hover"
 					onClick={() =>
 						setVisibleCount(shownCount + CHECKPOINT_PREVIEW_PAGE_SIZE)
 					}
@@ -1069,7 +1090,7 @@ function CheckpointItem({
 	const title = conversationTitle || label;
 	const time = (
 		<span
-			className={`mt-0.5 block text-[11.5px] leading-4 ${isViewing ? "text-history-selected-secondary" : "text-history-secondary"}`}
+			className={`atw:mt-0.5 atw:block atw:text-[11.5px] atw:leading-4 ${isViewing ? "atw:text-history-selected-secondary" : "atw:text-history-secondary"}`}
 		>
 			<time dateTime={checkpoint.created_at} title={checkpoint.created_at}>
 				{formatCheckpointRelativeTime(checkpoint.created_at)}
@@ -1079,8 +1100,8 @@ function CheckpointItem({
 	);
 	const flag = (
 		<span
-			className={`flex h-5 w-4 shrink-0 items-center justify-center ${
-				isViewing ? "text-accent" : "text-history-flag"
+			className={`atw:flex atw:h-5 atw:w-4 atw:shrink-0 atw:items-center atw:justify-center ${
+				isViewing ? "atw:text-accent" : "atw:text-history-flag"
 			}`}
 		>
 			<FilledFlag />
@@ -1107,16 +1128,18 @@ function CheckpointItem({
 						}
 					: undefined
 			}
-			className={`group relative rounded-panel transition-[background-color,box-shadow] duration-200 motion-reduce:transition-none ${
-				isViewing ? "bg-accent-subtle ring-1 ring-accent-border ring-inset" : ""
+			className={`atw:group atw:relative atw:rounded-panel atw:transition-[background-color,box-shadow] atw:duration-200 atw:motion-reduce:transition-none ${
+				isViewing
+					? "atw:bg-accent-subtle atw:ring-1 atw:ring-accent-border atw:ring-inset"
+					: ""
 			}`}
 		>
 			{editingTitle ? (
 				<div
-					className={`flex min-h-10 items-start gap-0.5 py-1.5 ${ROW_INSET}`}
+					className={`atw:flex atw:min-h-10 atw:items-start atw:gap-0.5 atw:py-1.5 ${ROW_INSET}`}
 				>
 					{flag}
-					<div className="min-w-0 flex-1">
+					<div className="atw:min-w-0 atw:flex-1">
 						<input
 							ref={titleInputRef}
 							type="text"
@@ -1141,11 +1164,14 @@ function CheckpointItem({
 								}
 							}}
 							data-review-shortcut-ignore=""
-							className="-my-0.5 block h-5 w-full rounded-[4px] bg-panel px-1 text-[13px] leading-4 font-semibold text-fg ring-1 ring-accent outline-none placeholder:font-semibold placeholder:text-history-selected-secondary"
+							className="atw:-my-0.5 atw:block atw:h-5 atw:w-full atw:rounded-[4px] atw:bg-panel atw:px-1 atw:text-[13px] atw:leading-4 atw:font-semibold atw:text-fg atw:ring-1 atw:ring-accent atw:outline-none atw:placeholder:font-semibold atw:placeholder:text-history-selected-secondary"
 						/>
 						{time}
 						{titleError ? (
-							<p role="alert" className="mt-0.5 text-[11px] text-danger">
+							<p
+								role="alert"
+								className="atw:mt-0.5 atw:text-[11px] atw:text-danger"
+							>
 								{titleError}
 							</p>
 						) : null}
@@ -1200,19 +1226,21 @@ function CheckpointItem({
 					aria-describedby={wide ? filesDescriptionId : undefined}
 					ref={rowButtonRef}
 					data-attr="history-view-checkpoint"
-					className={`flex w-full min-h-10 gap-0.5 rounded-panel py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${wide ? "items-center" : "items-start"} ${ROW_INSET} ${
+					className={`atw:flex atw:w-full atw:min-h-10 atw:gap-0.5 atw:rounded-panel atw:py-1.5 atw:text-left atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${wide ? "atw:items-center" : "atw:items-start"} ${ROW_INSET} ${
 						// Wide rows end in file names; keep them clear of the hover button.
 						showCommentAction
-							? "group-hover:pr-[91px] group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:pr-[91px]"
+							? "atw:group-hover:pr-[91px] atw:group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:pr-[91px]"
 							: showOpenConversation
-								? "group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 group-has-[[data-attr=open-conversation]:hover]:pr-8 group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
+								? "atw:group-has-[[data-attr=history-view-checkpoint]:hover]:pr-8 atw:group-has-[[data-attr=history-view-checkpoint]:focus-visible]:pr-8 atw:group-has-[[data-attr=open-conversation]:hover]:pr-8 atw:group-has-[[data-attr=open-conversation]:focus-visible]:pr-8"
 								: ""
-					} ${isViewing ? "" : "hover:bg-bg-hover-strong"}`}
+					} ${isViewing ? "" : "atw:hover:bg-bg-hover-strong"}`}
 				>
 					{flag}
 					<span
 						className={
-							wide ? "flex shrink-0 items-baseline gap-2" : "min-w-0 flex-1"
+							wide
+								? "atw:flex atw:shrink-0 atw:items-baseline atw:gap-2"
+								: "atw:min-w-0 atw:flex-1"
 						}
 					>
 						<span
@@ -1222,7 +1250,7 @@ function CheckpointItem({
 									? `${title} — rename (F2)`
 									: title
 							}
-							className={`block truncate text-[13px] leading-4 font-semibold text-fg ${isViewing && !atelier.readOnly ? "cursor-text" : ""}`}
+							className={`atw:block atw:truncate atw:text-[13px] atw:leading-4 atw:font-semibold atw:text-fg ${isViewing && !atelier.readOnly ? "atw:cursor-text" : ""}`}
 						>
 							{title}
 						</span>
@@ -1239,7 +1267,7 @@ function CheckpointItem({
 					) : null}
 					{!isViewing && hasDraft ? (
 						<span
-							className={`flex h-5 shrink-0 items-center pr-1 pl-2 text-[11px] font-semibold text-accent-hover ${showCommentAction ? "group-hover:invisible group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:invisible" : ""}`}
+							className={`atw:flex atw:h-5 atw:shrink-0 atw:items-center atw:pr-1 atw:pl-2 atw:text-[11px] atw:font-semibold atw:text-accent-hover ${showCommentAction ? "atw:group-hover:invisible atw:group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:invisible" : ""}`}
 						>
 							Draft
 						</span>
@@ -1248,9 +1276,9 @@ function CheckpointItem({
 						<span
 							data-attr="history-comment-count"
 							aria-label={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`}
-							className={`flex h-5 shrink-0 items-center gap-1 pr-1 pl-2 text-[11px] font-semibold text-history-secondary ${showCommentAction ? "group-hover:invisible group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:invisible" : ""}`}
+							className={`atw:flex atw:h-5 atw:shrink-0 atw:items-center atw:gap-1 atw:pr-1 atw:pl-2 atw:text-[11px] atw:font-semibold atw:text-history-secondary ${showCommentAction ? "atw:group-hover:invisible atw:group-has-[[data-attr=history-comment-checkpoint]:focus-visible]:invisible" : ""}`}
 						>
-							<CommentBubble className="size-3" />
+							<CommentBubble className="atw:size-3" />
 							{commentCount}
 						</span>
 					) : null}
@@ -1262,7 +1290,7 @@ function CheckpointItem({
 				<OpenConversationButton
 					atelier={{ views: atelier.views }}
 					conversationId={conversations[0].id}
-					className={`right-[5px] ${HEADER_LINK_REVEAL}`}
+					className={`atw:right-[5px] ${HEADER_LINK_REVEAL}`}
 				/>
 			) : null}
 			{showCommentAction ? (
@@ -1280,14 +1308,14 @@ function CheckpointItem({
 							setHoldFocus(false);
 						});
 					}}
-					className="pointer-events-none absolute top-1.5 right-[5px] inline-flex h-[22px] cursor-pointer items-center gap-[5px] rounded-[6px] bg-panel px-[7px] text-[11px] font-semibold text-fg-muted opacity-0 ring-1 ring-border-strong group-hover:pointer-events-auto group-hover:opacity-100 hover:text-fg focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="atw:pointer-events-none atw:absolute atw:top-1.5 atw:right-[5px] atw:inline-flex atw:h-[22px] atw:cursor-pointer atw:items-center atw:gap-[5px] atw:rounded-[6px] atw:bg-panel atw:px-[7px] atw:text-[11px] atw:font-semibold atw:text-fg-muted atw:opacity-0 atw:ring-1 atw:ring-border-strong atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:hover:text-fg atw:focus-visible:pointer-events-auto atw:focus-visible:opacity-100 atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 				>
-					<CommentBubble plus className="size-3" />
+					<CommentBubble plus className="atw:size-3" />
 					Comment
 				</button>
 			) : null}
 			<AnimatedHistoryDisclosure open={open}>
-				<div className="flex flex-col gap-2 pt-2 pb-2.5">
+				<div className="atw:flex atw:flex-col atw:gap-2 atw:pt-2 atw:pb-2.5">
 					{!wide ? (
 						<CheckpointFileList
 							atelier={atelier}
@@ -1356,7 +1384,7 @@ function CheckpointFilePreview({
 	return (
 		<span
 			ref={previewRef}
-			className="ml-auto flex min-h-4 min-w-0 flex-1 justify-end pl-6"
+			className="atw:ml-auto atw:flex atw:min-h-4 atw:min-w-0 atw:flex-1 atw:justify-end atw:pl-6"
 		>
 			<InlineFilePreview
 				atelier={atelier}
@@ -1386,7 +1414,7 @@ function InlineFilePreview({
 		return (
 			<span
 				id={descriptionId}
-				className="ml-auto truncate pl-4 text-[11.5px] text-history-secondary"
+				className="atw:ml-auto atw:truncate atw:pl-4 atw:text-[11.5px] atw:text-history-secondary"
 			>
 				{result.status === "error" ? "Files unavailable" : "Loading files…"}
 			</span>
@@ -1400,31 +1428,33 @@ function InlineFilePreview({
 			<span
 				id={descriptionId}
 				aria-hidden="true"
-				className="sr-only"
+				className="atw:sr-only"
 			>{`Changed files: ${files.map((file) => file.path).join(", ")}`}</span>
 			<span
 				data-attr="history-inline-files"
 				aria-hidden="true"
 				title={files.map((file) => file.path).join("\n")}
-				className="ml-auto flex min-w-0 items-center justify-end gap-4 pl-4 text-[11.5px] text-history-secondary"
+				className="atw:ml-auto atw:flex atw:min-w-0 atw:items-center atw:justify-end atw:gap-4 atw:pl-4 atw:text-[11.5px] atw:text-history-secondary"
 			>
 				{files.slice(0, 2).map((file) => (
 					<span
 						key={file.id}
 						data-active-file={file.id === activeFileId ? "true" : undefined}
-						className={`flex min-w-0 items-center gap-1.5 ${
-							file.id === activeFileId ? "font-semibold text-fg" : ""
+						className={`atw:flex atw:min-w-0 atw:items-center atw:gap-1.5 ${
+							file.id === activeFileId ? "atw:font-semibold atw:text-fg" : ""
 						}`}
 					>
 						<img
 							src={atelier.icons.fileUrl(file.path)}
 							alt=""
-							className="h-3.5 w-3.5 shrink-0"
+							className="atw:h-3.5 atw:w-3.5 atw:shrink-0"
 						/>
 						<HistoryFilePath path={file.path} />
 					</span>
 				))}
-				{remaining > 0 ? <span className="shrink-0">+{remaining}</span> : null}
+				{remaining > 0 ? (
+					<span className="atw:shrink-0">+{remaining}</span>
+				) : null}
 			</span>
 		</>
 	);
@@ -1475,13 +1505,13 @@ function AnimatedHistoryDisclosure({
 			data-attr="history-disclosure"
 			data-state={open ? "open" : "closed"}
 			inert={open ? undefined : true}
-			className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${
+			className={`atw:grid atw:transition-[grid-template-rows,opacity] atw:duration-200 atw:ease-out atw:motion-reduce:transition-none ${
 				isExpanded
-					? "grid-rows-[1fr] opacity-100"
-					: "pointer-events-none grid-rows-[0fr] opacity-0"
+					? "atw:grid-rows-[1fr] atw:opacity-100"
+					: "atw:pointer-events-none atw:grid-rows-[0fr] atw:opacity-0"
 			}`}
 		>
-			<div className="min-h-0 overflow-hidden">
+			<div className="atw:min-h-0 atw:overflow-hidden">
 				{/* Mounted in the render that opens it, not an effect later: a
 				    field inside may be focused by the same click. */}
 				{isMounted || open ? children : null}
@@ -1567,7 +1597,7 @@ function ChangeKindDot({
 		<DiffGlyph
 			kind={moved && changeKind === "modified" ? "moved" : changeKind}
 			size={10}
-			className={`ml-auto shrink-0 ${className}`}
+			className={`atw:ml-auto atw:shrink-0 ${className}`}
 		/>
 	);
 }
@@ -1603,7 +1633,7 @@ function FilledFlag() {
 		<svg
 			aria-hidden="true"
 			data-checkpoint-flag=""
-			className="h-3 w-3"
+			className="atw:h-3 atw:w-3"
 			viewBox="0 0 16 16"
 			fill="none"
 		>

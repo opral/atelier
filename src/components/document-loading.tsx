@@ -10,12 +10,12 @@ export function DocumentLoading({
 		<div
 			role="status"
 			aria-live="polite"
-			className="flex min-h-32 flex-1 items-center justify-center gap-2 p-6 text-sm text-fg-subtle"
+			className="atw:flex atw:min-h-32 atw:flex-1 atw:items-center atw:justify-center atw:gap-2 atw:p-6 atw:text-sm atw:text-fg-subtle"
 			data-atelier-document-loading=""
 		>
 			<LoaderCircle
 				aria-hidden="true"
-				className="size-4 motion-safe:animate-spin"
+				className="atw:size-4 atw:motion-safe:animate-spin"
 			/>
 			<span>{label}</span>
 		</div>

@@ -1,11 +1,3 @@
-/* The preview is a Tailwind host: one reset and one utility build. */
-@import "../../src/shell/layers.css";
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "../../src/shell/tailwind.css";
-@import "../../src/index.css";
-@custom-variant dark (&:is(.dark *));
-
 html,
 body,
 #atelier {

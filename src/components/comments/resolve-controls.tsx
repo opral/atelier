@@ -4,7 +4,7 @@
  */
 
 function CheckIcon({
-	className = "size-3.5",
+	className = "atw:size-3.5",
 }: {
 	readonly className?: string;
 }) {
@@ -45,7 +45,7 @@ export function ResolveButton({
 				type="button"
 				data-attr="resolve-conversation"
 				onClick={onResolve}
-				className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-control px-2.5 text-[12.5px] font-semibold text-fg-muted ring-1 ring-border-strong ring-inset hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`}
+				className={`atw:inline-flex atw:h-7 atw:shrink-0 atw:cursor-pointer atw:items-center atw:gap-1.5 atw:rounded-control atw:px-2.5 atw:text-[12.5px] atw:font-semibold atw:text-fg-muted atw:ring-1 atw:ring-border-strong atw:ring-inset atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${className}`}
 			>
 				<CheckIcon />
 				Resolve conversation
@@ -61,7 +61,7 @@ export function ResolveButton({
 				event.stopPropagation();
 				onResolve();
 			}}
-			className={`inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-control text-history-secondary hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`}
+			className={`atw:inline-flex atw:size-6 atw:shrink-0 atw:cursor-pointer atw:items-center atw:justify-center atw:rounded-control atw:text-history-secondary atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${className}`}
 		>
 			<CheckIcon />
 		</button>
@@ -73,10 +73,10 @@ export function ResolvedChip({ onReopen }: { readonly onReopen?: () => void }) {
 	return (
 		<p
 			data-attr="resolved-conversation"
-			className="flex items-center gap-2 text-[13px] leading-5"
+			className="atw:flex atw:items-center atw:gap-2 atw:text-[13px] atw:leading-5"
 		>
-			<span className="inline-flex h-6 items-center gap-1 rounded-full bg-success-subtle px-2 text-[12px] font-semibold text-success">
-				<CheckIcon className="size-3" />
+			<span className="atw:inline-flex atw:h-6 atw:items-center atw:gap-1 atw:rounded-full atw:bg-success-subtle atw:px-2 atw:text-[12px] atw:font-semibold atw:text-success">
+				<CheckIcon className="atw:size-3" />
 				Resolved
 			</span>
 			{onReopen ? (
@@ -84,7 +84,7 @@ export function ResolvedChip({ onReopen }: { readonly onReopen?: () => void }) {
 					type="button"
 					data-attr="reopen-conversation"
 					onClick={onReopen}
-					className="cursor-pointer font-semibold text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-[4px]"
+					className="atw:cursor-pointer atw:font-semibold atw:text-accent-hover atw:hover:underline atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:rounded-[4px]"
 				>
 					Reopen
 				</button>

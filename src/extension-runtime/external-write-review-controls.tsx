@@ -1043,7 +1043,7 @@ export function ExternalWriteReviewControls({
 							}
 						>
 							{isCommitting ? (
-								<LoaderCircle aria-hidden="true" className="animate-spin" />
+								<LoaderCircle aria-hidden="true" className="atw:animate-spin" />
 							) : (
 								<PrimaryVerbIcon mode={mode} />
 							)}

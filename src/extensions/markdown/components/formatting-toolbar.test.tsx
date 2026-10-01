@@ -191,7 +191,7 @@ describe("FormattingToolbar", () => {
 			"[data-attr='markdown-format-controls']",
 		);
 
-		expect(controls).toHaveClass("overflow-x-auto");
+		expect(controls).toHaveClass("atw:overflow-x-auto");
 		expect(controls).toHaveAttribute("aria-label", "Text formatting controls");
 		expect(controls).not.toContainElement(
 			screen.getByLabelText("Copy markdown"),

@@ -702,7 +702,7 @@ describe("FileTree", () => {
 		);
 		expect(deleteIcon).not.toBeNull();
 		expect(deleteIcon).toHaveAttribute("fill", "none");
-		expect(deleteIcon).toHaveClass("size-4");
+		expect(deleteIcon).toHaveClass("atw:size-4");
 
 		fireEvent.click(getTreeContextMenuButton(menu, "New file"));
 		expect(handleCreateAtDirectory).toHaveBeenCalledWith("/docs/", "file");

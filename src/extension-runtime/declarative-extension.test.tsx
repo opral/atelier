@@ -56,7 +56,9 @@ describe("declarative extension hydration", () => {
 			expect(mounted.getByRole("status")).toHaveTextContent(
 				"Opening document…",
 			);
-			expect(mounted.getByText("Opening document…")).not.toHaveClass("sr-only");
+			expect(mounted.getByText("Opening document…")).not.toHaveClass(
+				"atw:sr-only",
+			);
 			await waitFor(() => expect(load).toHaveBeenCalled());
 			// Let the observer's initial frame settle while the document fetch is blocked.
 			await act(async () => {
@@ -404,11 +406,11 @@ describe("declarative extension hydration", () => {
 			const mounted = render(tree(false));
 			const initial = () =>
 				mounted.container.querySelector("[data-atelier-initial-content]");
-			expect(initial()).toHaveClass("invisible");
+			expect(initial()).toHaveClass("atw:invisible");
 			act(() => vi.advanceTimersByTime(399));
-			expect(initial()).toHaveClass("invisible");
+			expect(initial()).toHaveClass("atw:invisible");
 			act(() => vi.advanceTimersByTime(1));
-			expect(initial()).not.toHaveClass("invisible");
+			expect(initial()).not.toHaveClass("atw:invisible");
 			// A quick open never shows it at all.
 			const quick = render(tree(false));
 			quick.rerender(tree(true));

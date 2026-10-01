@@ -40,10 +40,14 @@ describe("CheckpointStatusBar", () => {
 		fireEvent.click(screen.getByText("Auto-accept"));
 		expect(switchControl).toBeChecked();
 		expect(switchControl).toHaveAttribute("aria-checked", "true");
-		expect(label).toHaveClass("text-accent");
-		expect(label?.querySelector(".h-3.w-5")).not.toBeNull();
+		expect(label).toHaveClass("atw:text-accent");
 		expect(
-			label?.querySelector(".top-px.left-px.size-2.translate-x-2"),
+			label?.querySelector('[class~="atw:h-3"][class~="atw:w-5"]'),
+		).not.toBeNull();
+		expect(
+			label?.querySelector(
+				'[class~="atw:top-px"][class~="atw:left-px"][class~="atw:size-2"][class~="atw:translate-x-2"]',
+			),
 		).not.toBeNull();
 
 		fireEvent.click(screen.getByText("Auto-accept"));

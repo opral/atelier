@@ -68,12 +68,12 @@ export function OpenConversationButton({
 		event.stopPropagation();
 		void openConversation(atelier, conversationId);
 	};
-	const classes = `inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-control text-history-secondary hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`;
+	const classes = `atw:inline-flex atw:size-6 atw:shrink-0 atw:cursor-pointer atw:items-center atw:justify-center atw:rounded-control atw:text-history-secondary atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring ${className}`;
 	const icon = (
 		<svg
 			aria-hidden="true"
 			viewBox="0 0 24 24"
-			className="size-3.5"
+			className="atw:size-3.5"
 			fill="none"
 			stroke="currentColor"
 			strokeWidth={2}

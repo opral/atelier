@@ -145,13 +145,13 @@ export function CommitConversationView({
 		<div
 			ref={rootRef}
 			aria-label="Checkpoint conversation"
-			className="comment-surface flex flex-col gap-2"
+			className="comment-surface atw:flex atw:flex-col atw:gap-2"
 		>
 			{rows.length > 0 ? (
 				<>
 					<div
 						aria-hidden="true"
-						className="mt-0.5 mr-2 mb-0.5 ml-[23px] h-px bg-accent-border"
+						className="atw:mt-0.5 atw:mr-2 atw:mb-0.5 atw:ml-[23px] atw:h-px atw:bg-accent-border"
 					/>
 					<CommentThread
 						comments={rows}
@@ -173,7 +173,7 @@ export function CommitConversationView({
 			{loadFailed ? (
 				<p
 					role="alert"
-					className="comment-secondary mr-2 ml-[23px] text-[11.5px] leading-4"
+					className="comment-secondary atw:mr-2 atw:ml-[23px] atw:text-[11.5px] atw:leading-4"
 				>
 					Could not load the conversation.{" "}
 					<button
@@ -182,7 +182,7 @@ export function CommitConversationView({
 							onRefresh();
 							setRetryKey((key) => key + 1);
 						}}
-						className="cursor-pointer font-semibold text-accent-hover underline"
+						className="atw:cursor-pointer atw:font-semibold atw:text-accent-hover atw:underline"
 					>
 						Retry
 					</button>
@@ -190,7 +190,7 @@ export function CommitConversationView({
 			) : firstLoad ? (
 				<p
 					role="status"
-					className="comment-secondary mr-2 ml-[23px] text-[11.5px] leading-4"
+					className="comment-secondary atw:mr-2 atw:ml-[23px] atw:text-[11.5px] atw:leading-4"
 				>
 					Loading conversation…
 				</p>
@@ -206,7 +206,7 @@ export function CommitConversationView({
 					focusRequest={focusRequest}
 					onFocusHandled={onFocusHandled}
 					holdFocus={holdFocus}
-					className="mr-2 ml-[23px]"
+					className="atw:mr-2 atw:ml-[23px]"
 				/>
 			) : null}
 		</div>

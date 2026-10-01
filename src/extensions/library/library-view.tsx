@@ -714,12 +714,12 @@ export function LibraryView({
 		body = error ? (
 			<div
 				role="alert"
-				className="grid flex-1 place-content-center text-[13px] text-fg-muted"
+				className="atw:grid atw:flex-1 atw:place-content-center atw:text-[13px] atw:text-fg-muted"
 			>
 				Unable to load the Library.
 			</div>
 		) : (
-			<div role="status" aria-busy="true" className="flex-1" />
+			<div role="status" aria-busy="true" className="atw:flex-1" />
 		);
 	} else if (results) {
 		body =
@@ -767,7 +767,7 @@ export function LibraryView({
 						<section aria-labelledby="library-home-recent">
 							<h2
 								id="library-home-recent"
-								className="m-0 pb-3 text-[13px] font-semibold text-fg-muted"
+								className="atw:m-0 atw:pb-3 atw:text-[13px] atw:font-semibold atw:text-fg-muted"
 							>
 								Recent
 							</h2>
@@ -788,7 +788,7 @@ export function LibraryView({
 		body =
 			files.length === 0 ? (
 				showsOnboarding && EmptyWorkspace ? (
-					<div className="flex flex-1 flex-col">
+					<div className="atw:flex atw:flex-1 atw:flex-col">
 						<EmptyWorkspace atelier={atelier} />
 					</div>
 				) : (
@@ -814,7 +814,7 @@ export function LibraryView({
 		const listing = folderListing(data, dirPath, kind, { showHidden });
 		body =
 			showsOnboarding && EmptyWorkspace ? (
-				<div className="flex flex-1 flex-col">
+				<div className="atw:flex atw:flex-1 atw:flex-col">
 					<EmptyWorkspace atelier={atelier} />
 				</div>
 			) : listing.folders.length === 0 && listing.files.length === 0 ? (
@@ -897,7 +897,7 @@ export function LibraryView({
 	return (
 		<div
 			ref={rootRef}
-			className="@container relative flex h-full min-h-0 flex-col overflow-y-auto bg-panel font-sans text-fg"
+			className="atw:@container atw:relative atw:flex atw:h-full atw:min-h-0 atw:flex-col atw:overflow-y-auto atw:bg-panel atw:font-sans atw:text-fg"
 			data-testid="library-view"
 			data-library-kind={kind}
 			data-library-mode={mode}
@@ -919,9 +919,9 @@ export function LibraryView({
 					);
 				}}
 			/>
-			<div className="mx-auto flex w-[min(1080px,calc(100%-112px))] flex-1 flex-col pt-9 pb-16 max-sm:w-[calc(100%-32px)]">
-				<header className="flex items-center gap-3 pb-6 @max-[520px]:flex-wrap">
-					<div className="flex min-w-0 flex-auto">
+			<div className="atw:mx-auto atw:flex atw:w-[min(1080px,calc(100%-112px))] atw:flex-1 atw:flex-col atw:pt-9 atw:pb-16 atw:max-sm:w-[calc(100%-32px)]">
+				<header className="atw:flex atw:items-center atw:gap-3 atw:pb-6 atw:@max-[520px]:flex-wrap">
+					<div className="atw:flex atw:min-w-0 atw:flex-auto">
 						<FolderBreadcrumb
 							rootLabel={copy.label}
 							segments={inSubfolder ? folderSegments : []}
@@ -929,7 +929,7 @@ export function LibraryView({
 						/>
 					</div>
 					{selecting ? (
-						<div className="flex shrink-0 items-center">
+						<div className="atw:flex atw:shrink-0 atw:items-center">
 							<SelectionToolbar
 								count={selection.size}
 								onMove={() => {
@@ -953,9 +953,9 @@ export function LibraryView({
 						</div>
 					) : (
 						<>
-							<label className="relative flex h-8 w-56 min-w-24 shrink-[4] items-center @max-[760px]:w-40 @max-[520px]:order-last @max-[520px]:w-full">
+							<label className="atw:relative atw:flex atw:h-8 atw:w-56 atw:min-w-24 atw:shrink-[4] atw:items-center atw:@max-[760px]:w-40 atw:@max-[520px]:order-last atw:@max-[520px]:w-full">
 								<Search
-									className="pointer-events-none absolute left-2.5 size-3.5 text-fg-subtle"
+									className="atw:pointer-events-none atw:absolute atw:left-2.5 atw:size-3.5 atw:text-fg-subtle"
 									aria-hidden="true"
 								/>
 								<input
@@ -966,24 +966,24 @@ export function LibraryView({
 									placeholder="Search"
 									aria-label={`Search ${copy.label}`}
 									data-testid="library-search"
-									className="h-8 w-full rounded-lg border border-border bg-panel pr-7 pl-8 text-[13px] text-fg outline-none placeholder:text-fg-subtle focus:border-border-strong focus:ring-2 focus:ring-ring/25 [&::-webkit-search-cancel-button]:hidden"
+									className="atw:h-8 atw:w-full atw:rounded-lg atw:border atw:border-border atw:bg-panel atw:pr-7 atw:pl-8 atw:text-[13px] atw:text-fg atw:outline-none atw:placeholder:text-fg-subtle atw:focus:border-border-strong atw:focus:ring-2 atw:focus:ring-ring/25 atw:[&::-webkit-search-cancel-button]:hidden"
 								/>
 								{query ? (
 									<button
 										type="button"
 										aria-label="Clear search"
-										className="absolute right-1.5 grid size-5 place-items-center rounded text-fg-subtle hover:bg-bg-hover hover:text-fg"
+										className="atw:absolute atw:right-1.5 atw:grid atw:size-5 atw:place-items-center atw:rounded atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg"
 										onClick={() => {
 											setQuery("");
 											searchRef.current?.focus();
 										}}
 									>
-										<X className="size-3" aria-hidden="true" />
+										<X className="atw:size-3" aria-hidden="true" />
 									</button>
 								) : null}
 							</label>
 							{readOnly ? null : (
-								<div className="shrink-0">
+								<div className="atw:shrink-0">
 									<NewFileMenu
 										align="end"
 										defaultFolders={defaultFolders}
@@ -1032,9 +1032,12 @@ export function LibraryView({
 					)}
 				</header>
 				{results ? (
-					<div className="flex min-h-8 items-center gap-2 pb-4">
+					<div className="atw:flex atw:min-h-8 atw:items-center atw:gap-2 atw:pb-4">
 						{results ? (
-							<p className="text-[12.5px] text-fg-subtle" aria-live="polite">
+							<p
+								className="atw:text-[12.5px] atw:text-fg-subtle"
+								aria-live="polite"
+							>
 								{resultCount === 1 ? "1 result" : `${resultCount} results`}
 								{mode === "folders" ? " from every folder" : ""}
 							</p>
@@ -1044,10 +1047,12 @@ export function LibraryView({
 				{body}
 			</div>
 			{dragOver ? (
-				<div className="pointer-events-none absolute inset-2 z-40 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent-border bg-[color-mix(in_srgb,var(--atelier-accent-subtle)_70%,transparent)]">
-					<FileUp className="size-9 text-link" aria-hidden="true" />
-					<p className="mt-3 text-[14px] font-semibold text-fg">Drop to add</p>
-					<p className="mt-1 text-[12.5px] text-fg-subtle">
+				<div className="atw:pointer-events-none atw:absolute atw:inset-2 atw:z-40 atw:flex atw:flex-col atw:items-center atw:justify-center atw:rounded-xl atw:border-2 atw:border-dashed atw:border-accent-border atw:bg-[color-mix(in_srgb,var(--atelier-accent-subtle)_70%,transparent)]">
+					<FileUp className="atw:size-9 atw:text-link" aria-hidden="true" />
+					<p className="atw:mt-3 atw:text-[14px] atw:font-semibold atw:text-fg">
+						Drop to add
+					</p>
+					<p className="atw:mt-1 atw:text-[12.5px] atw:text-fg-subtle">
 						{mode === "folders" && dirPath !== "/"
 							? `Into ${folderSegments.at(-1)}`
 							: "Into the workspace root"}
@@ -1249,12 +1254,12 @@ const NewButton = forwardRef<
 			data-attr="file-new-wide"
 			data-testid="library-new"
 			title="Create something new"
-			className="h-8 px-3 py-0 text-[13px]"
+			className="atw:h-8 atw:px-3 atw:py-0 atw:text-[13px]"
 			{...props}
 		>
-			<Plus aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+			<Plus aria-hidden="true" className="atw:size-3.5" strokeWidth={2.4} />
 			<span>New</span>
-			<ChevronDown aria-hidden="true" className="size-3 opacity-80" />
+			<ChevronDown aria-hidden="true" className="atw:size-3 atw:opacity-80" />
 		</AtelierActionButton>
 	);
 });
@@ -1287,27 +1292,30 @@ function FolderBreadcrumb({
 	const shownTrail =
 		folded.length > 0 ? [trail[0]!, ...trail.slice(-2)] : trail;
 	const crumbClass =
-		"min-w-0 max-w-[14rem] truncate rounded-[6px] px-1 py-0.5 text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+		"atw:min-w-0 atw:max-w-[14rem] atw:truncate atw:rounded-[6px] atw:px-1 atw:py-0.5 atw:text-fg-subtle atw:transition-colors atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none";
 	const separator = (
-		<span aria-hidden="true" className="shrink-0 text-fg-faint select-none">
+		<span
+			aria-hidden="true"
+			className="atw:shrink-0 atw:text-fg-faint atw:select-none"
+		>
 			/
 		</span>
 	);
 	return (
-		<div className="relative flex w-full min-w-0 flex-col">
+		<div className="atw:relative atw:flex atw:w-full atw:min-w-0 atw:flex-col">
 			{trail.length > 0 ? (
 				<nav
 					aria-label="Folder path"
 					data-testid="library-breadcrumb"
 					// Above the title, out of flow: the header keeps one height inside
 					// a folder and out of it, so Search and New never move.
-					className="absolute bottom-full left-0 -ml-1 flex max-w-full min-w-0 items-center whitespace-nowrap gap-0.5 pb-0.5 text-[13px] font-medium"
+					className="atw:absolute atw:bottom-full atw:left-0 atw:-ml-1 atw:flex atw:max-w-full atw:min-w-0 atw:items-center atw:whitespace-nowrap atw:gap-0.5 atw:pb-0.5 atw:text-[13px] atw:font-medium"
 				>
 					{shownTrail.map((crumb, index) => (
 						<span
 							key={crumb.path}
 							// The section name never shrinks: folders give way first.
-							className={`flex items-center gap-0.5 ${index === 0 ? "shrink-0" : "min-w-0"}`}
+							className={`atw:flex atw:items-center atw:gap-0.5 ${index === 0 ? "atw:shrink-0" : "atw:min-w-0"}`}
 						>
 							{index > 0 ? separator : null}
 							{index === 1 && folded.length > 0 ? (
@@ -1317,14 +1325,14 @@ function FolderBreadcrumb({
 											<button
 												type="button"
 												aria-label="Show hidden folders"
-												className={`${crumbClass} shrink-0`}
+												className={`${crumbClass} atw:shrink-0`}
 											>
 												…
 											</button>
 										</DropdownMenuTrigger>
 										<DropdownMenuContent
 											align="start"
-											className="min-w-44 text-[13px]"
+											className="atw:min-w-44 atw:text-[13px]"
 										>
 											{folded.map((hidden) => (
 												<DropdownMenuItem
@@ -1358,7 +1366,7 @@ function FolderBreadcrumb({
 			<h1
 				aria-current={trail.length > 0 ? "location" : undefined}
 				title={current.label}
-				className="min-w-0 truncate text-[22px] leading-8 font-semibold tracking-[-0.01em] text-fg"
+				className="atw:min-w-0 atw:truncate atw:text-[22px] atw:leading-8 atw:font-semibold atw:tracking-[-0.01em] atw:text-fg"
 			>
 				{current.label}
 			</h1>
@@ -1379,19 +1387,21 @@ function EmptyState({
 }) {
 	return (
 		<div
-			className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-16 text-center"
+			className="atw:flex atw:flex-col atw:items-center atw:justify-center atw:gap-2 atw:rounded-xl atw:border atw:border-dashed atw:border-border atw:px-6 atw:py-16 atw:text-center"
 			data-testid="library-empty"
 		>
 			{icon ? (
-				<span className="mb-1 grid size-10 place-items-center rounded-xl bg-bg-subtle">
+				<span className="atw:mb-1 atw:grid atw:size-10 atw:place-items-center atw:rounded-xl atw:bg-bg-subtle">
 					{icon}
 				</span>
 			) : null}
-			<p className="text-[14px] font-semibold text-fg">{title}</p>
-			<p className="max-w-sm text-[13px] leading-relaxed text-fg-subtle">
+			<p className="atw:text-[14px] atw:font-semibold atw:text-fg">{title}</p>
+			<p className="atw:max-w-sm atw:text-[13px] atw:leading-relaxed atw:text-fg-subtle">
 				{body}
 			</p>
-			{children ? <div className="mt-3 flex gap-2">{children}</div> : null}
+			{children ? (
+				<div className="atw:mt-3 atw:flex atw:gap-2">{children}</div>
+			) : null}
 		</div>
 	);
 }
@@ -1414,24 +1424,24 @@ function KindEmptyState({
 		<EmptyState
 			title={copy.emptyTitle}
 			body={copy.emptyBody}
-			icon={<KindIcon kind={kind} className="size-5" />}
+			icon={<KindIcon kind={kind} className="atw:size-5" />}
 		>
 			{copy.createLabel ? (
 				<AtelierActionButton
-					className="h-8 px-3 py-0 text-[13px]"
+					className="atw:h-8 atw:px-3 atw:py-0 atw:text-[13px]"
 					onClick={onCreate}
 				>
-					<Plus aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+					<Plus aria-hidden="true" className="atw:size-3.5" strokeWidth={2.4} />
 					{copy.createLabel}
 				</AtelierActionButton>
 			) : null}
 			{kind === "files" ? null : (
 				<AtelierActionButton
 					variant="secondary"
-					className="h-8 px-3 py-0 text-[13px]"
+					className="atw:h-8 atw:px-3 atw:py-0 atw:text-[13px]"
 					onClick={onUpload}
 				>
-					<FileUp aria-hidden="true" className="size-3.5" />
+					<FileUp aria-hidden="true" className="atw:size-3.5" />
 					Upload
 				</AtelierActionButton>
 			)}
@@ -1488,7 +1498,7 @@ function ItemMenuContent({
 				opensDialog.current = false;
 				event.preventDefault();
 			}}
-			className="min-w-44 text-[13px]"
+			className="atw:min-w-44 atw:text-[13px]"
 			data-testid="library-item-menu"
 			{...(variant === "dropdown" ? { align: "end" as const } : {})}
 		>
@@ -1526,7 +1536,7 @@ function ItemMenuContent({
 				<>
 					<Separator />
 					<Item
-						className="text-danger focus:text-danger [&_svg:not([class*='text-'])]:text-danger"
+						className="atw:text-danger atw:focus:text-danger atw:[&_svg:not([class*='text-'])]:text-danger"
 						onSelect={toDialog(() => actions.remove([entry]))}
 					>
 						<Trash2 aria-hidden="true" />
@@ -1559,9 +1569,9 @@ function ItemMenuButton({
 					data-testid="library-item-menu-button"
 					onClick={(event) => event.stopPropagation()}
 					onPointerDown={(event) => event.stopPropagation()}
-					className={`grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle transition-opacity hover:bg-bg-hover-strong hover:text-fg focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-bg-hover-strong data-[state=open]:text-fg data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100 ${className}`}
+					className={`atw:grid atw:size-7 atw:shrink-0 atw:place-items-center atw:rounded-md atw:text-fg-subtle atw:transition-opacity atw:hover:bg-bg-hover-strong atw:hover:text-fg atw:focus-visible:opacity-100 atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none atw:data-[state=open]:bg-bg-hover-strong atw:data-[state=open]:text-fg atw:data-[state=open]:opacity-100 atw:[@media(hover:none)]:opacity-100 ${className}`}
 				>
-					<MoreHorizontal className="size-4" aria-hidden="true" />
+					<MoreHorizontal className="atw:size-4" aria-hidden="true" />
 				</button>
 			</DropdownMenuTrigger>
 			{children}
@@ -1571,7 +1581,7 @@ function ItemMenuButton({
 
 function MenuShortcut({ children }: { readonly children: ReactNode }) {
 	return (
-		<kbd className="ml-auto pl-4 font-sans text-[11px] text-fg-subtle">
+		<kbd className="atw:ml-auto atw:pl-4 atw:font-sans atw:text-[11px] atw:text-fg-subtle">
 			{children}
 		</kbd>
 	);
@@ -1647,13 +1657,13 @@ function FileGrid({
 			ref={ref}
 			className={
 				singleRow
-					? "grid grid-cols-[repeat(auto-fill,minmax(164px,1fr))] gap-4"
-					: "grid grid-cols-[repeat(auto-fill,minmax(204px,1fr))] gap-4"
+					? "atw:grid atw:grid-cols-[repeat(auto-fill,minmax(164px,1fr))] atw:gap-4"
+					: "atw:grid atw:grid-cols-[repeat(auto-fill,minmax(204px,1fr))] atw:gap-4"
 			}
 			data-testid="library-grid"
 		>
 			{shown.map((file) => (
-				<li key={file.id} className="min-w-0">
+				<li key={file.id} className="atw:min-w-0">
 					<GridCard
 						file={file}
 						glyph={marks.files.get(file.path) ?? null}
@@ -1687,7 +1697,7 @@ function GridCard({
 	const hint =
 		file.directory === "/" ? "" : `${file.directory.split("/").at(-1)}/`;
 	return (
-		<div className="group/card relative">
+		<div className="atw:group/card atw:relative">
 			<ContextMenu>
 				<ContextMenuTrigger asChild>
 					<button
@@ -1703,38 +1713,38 @@ function GridCard({
 						onKeyDown={(event) => {
 							itemKeyDown(event, fileEntry(file), actions);
 						}}
-						className={`group @container flex w-full flex-col overflow-hidden rounded-[12px] border border-border bg-panel text-left transition-[border-color,box-shadow,opacity] hover:border-border-strong hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:border-border-strong${
-							dimmed ? " opacity-[0.35] hover:opacity-100" : ""
+						className={`atw:group atw:@container atw:flex atw:w-full atw:flex-col atw:overflow-hidden atw:rounded-[12px] atw:border atw:border-border atw:bg-panel atw:text-left atw:transition-[border-color,box-shadow,opacity] atw:hover:border-border-strong atw:hover:shadow-md atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none atw:data-[state=open]:border-border-strong${
+							dimmed ? " atw:opacity-[0.35] atw:hover:opacity-100" : ""
 						}`}
 					>
-						<div className="relative aspect-[4/3] w-full overflow-hidden border-b border-border-subtle bg-bg-subtle">
+						<div className="atw:relative atw:aspect-[4/3] atw:w-full atw:overflow-hidden atw:border-b atw:border-border-subtle atw:bg-bg-subtle">
 							<LibraryPreview file={file} />
 							{file.kind === "media" ? null : (
-								<div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-bg-subtle to-transparent" />
+								<div className="atw:pointer-events-none atw:absolute atw:inset-x-0 atw:bottom-0 atw:h-8 atw:bg-gradient-to-t atw:from-bg-subtle atw:to-transparent" />
 							)}
 						</div>
-						<div className="flex h-10 items-center gap-1.5 px-2.5">
+						<div className="atw:flex atw:h-10 atw:items-center atw:gap-1.5 atw:px-2.5">
 							<img
 								src={fileIconUrl(file.path)}
 								alt=""
 								aria-hidden="true"
-								className="size-3.5 shrink-0"
+								className="atw:size-3.5 atw:shrink-0"
 							/>
 							<span
-								className={`min-w-0 flex-auto truncate text-[12.5px] font-medium ${glyph ? glyphTextClass(glyph) : "text-fg"}`}
+								className={`atw:min-w-0 atw:flex-auto atw:truncate atw:text-[12.5px] atw:font-medium ${glyph ? glyphTextClass(glyph) : "atw:text-fg"}`}
 							>
 								{file.displayName}
 							</span>
 							{glyph ? (
-								<DiffGlyph kind={glyph} size={11} className="shrink-0" />
+								<DiffGlyph kind={glyph} size={11} className="atw:shrink-0" />
 							) : null}
 
 							{hint ? (
-								<span className="min-w-0 shrink-[12] truncate text-[11.5px] text-fg-faint @max-[170px]:hidden">
+								<span className="atw:min-w-0 atw:shrink-[12] atw:truncate atw:text-[11.5px] atw:text-fg-faint atw:@max-[170px]:hidden">
 									{hint}
 								</span>
 							) : null}
-							<span className="shrink-0 text-[11.5px] text-fg-subtle">
+							<span className="atw:shrink-0 atw:text-[11.5px] atw:text-fg-subtle">
 								{formatLibraryTime(file.updatedAt)}
 							</span>
 						</div>
@@ -1748,7 +1758,7 @@ function GridCard({
 			</ContextMenu>
 			<ItemMenuButton
 				label={`More actions for ${file.name}`}
-				className="absolute top-2 right-2 border border-border bg-panel opacity-0 shadow-sm group-hover/card:opacity-100"
+				className="atw:absolute atw:top-2 atw:right-2 atw:border atw:border-border atw:bg-panel atw:opacity-0 atw:shadow-sm atw:group-hover/card:opacity-100"
 			>
 				<ItemMenuContent
 					variant="dropdown"
@@ -1882,7 +1892,7 @@ function RowList({
 		return (
 			<li
 				key={path}
-				className="group relative"
+				className="atw:group atw:relative"
 				data-testid={isFolder ? "library-folder-row" : "library-file-row"}
 				data-path={path}
 			>
@@ -1895,21 +1905,21 @@ function RowList({
 						onClick={(event) => toggle(path, event.shiftKey)}
 						// In the gutter left of the row, level with it: rows stay aligned
 						// with the title, and the page margin is wide enough to hold it.
-						className={`absolute top-1/2 -left-7 grid size-7 -translate-y-1/2 place-items-center rounded-md transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-sm:hidden ${
+						className={`atw:absolute atw:top-1/2 atw:-left-7 atw:grid atw:size-7 atw:-translate-y-1/2 atw:place-items-center atw:rounded-md atw:transition-opacity atw:focus-visible:opacity-100 atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none atw:max-sm:hidden ${
 							selectionActive || selected
-								? "opacity-100"
-								: "opacity-0 group-hover:opacity-100"
+								? "atw:opacity-100"
+								: "atw:opacity-0 atw:group-hover:opacity-100"
 						}`}
 					>
 						<span
-							className={`grid size-4 place-items-center rounded-[5px] border transition-colors ${
+							className={`atw:grid atw:size-4 atw:place-items-center atw:rounded-[5px] atw:border atw:transition-colors ${
 								selected
-									? "border-link bg-link text-accent-on"
-									: "border-border-strong bg-panel"
+									? "atw:border-link atw:bg-link atw:text-accent-on"
+									: "atw:border-border-strong atw:bg-panel"
 							}`}
 						>
 							{selected ? (
-								<Check className="size-3" aria-hidden="true" />
+								<Check className="atw:size-3" aria-hidden="true" />
 							) : null}
 						</span>
 					</button>
@@ -1990,44 +2000,44 @@ function RowList({
 								}
 								itemKeyDown(event, entry, actions);
 							}}
-							className={`relative flex min-h-11 w-full items-center gap-3 rounded-lg py-2 pr-11 pl-3 text-left text-[14px] transition-[background-color,opacity] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-bg-hover ${
+							className={`atw:relative atw:flex atw:min-h-11 atw:w-full atw:items-center atw:gap-3 atw:rounded-lg atw:py-2 atw:pr-11 atw:pl-3 atw:text-left atw:text-[14px] atw:transition-[background-color,opacity] atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none atw:data-[state=open]:bg-bg-hover ${
 								selected
-									? "bg-bg-active"
+									? "atw:bg-bg-active"
 									: dropTarget === path
-										? "bg-bg-active ring-2 ring-ring"
-										: "hover:bg-bg-hover"
-							}${dim ? " opacity-[0.4] hover:opacity-100" : ""}`}
+										? "atw:bg-bg-active atw:ring-2 atw:ring-ring"
+										: "atw:hover:bg-bg-hover"
+							}${dim ? " atw:opacity-[0.4] atw:hover:opacity-100" : ""}`}
 						>
 							<img
 								src={icon}
 								alt=""
 								aria-hidden="true"
 								draggable={false}
-								className="size-[18px] shrink-0"
+								className="atw:size-[18px] atw:shrink-0"
 							/>
 							<span
-								className={`min-w-0 flex-1 truncate font-medium ${
+								className={`atw:min-w-0 atw:flex-1 atw:truncate atw:font-medium ${
 									glyph && glyph !== "contains"
 										? glyphTextClass(glyph)
-										: "text-fg"
+										: "atw:text-fg"
 								}`}
 							>
 								{name}
 								{flat && parentDirectoryOf(path) !== "/" ? (
-									<span className="ml-2 font-normal text-fg-faint">
+									<span className="atw:ml-2 atw:font-normal atw:text-fg-faint">
 										{parentDirectoryOf(path).slice(1)}/
 									</span>
 								) : null}
 							</span>
-							<span className="shrink-0 text-right text-[12px] text-fg-faint">
+							<span className="atw:shrink-0 atw:text-right atw:text-[12px] atw:text-fg-faint">
 								{meta}
 							</span>
 							{/* A fixed column, so the marks line up down the list. */}
-							<span className="grid w-3.5 shrink-0 place-items-center">
+							<span className="atw:grid atw:w-3.5 atw:shrink-0 atw:place-items-center">
 								{glyph ? (
 									<DiffGlyph
 										kind={glyph === "contains" ? "modified" : glyph}
-										className={glyph === "contains" ? "opacity-60" : ""}
+										className={glyph === "contains" ? "atw:opacity-60" : ""}
 									/>
 								) : null}
 							</span>
@@ -2043,7 +2053,7 @@ function RowList({
 				</ContextMenu>
 				<ItemMenuButton
 					label={`More actions for ${name}`}
-					className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
+					className="atw:absolute atw:top-1/2 atw:right-2 atw:-translate-y-1/2 atw:opacity-0 atw:group-hover:opacity-100"
 				>
 					<ItemMenuContent
 						variant="dropdown"
@@ -2059,7 +2069,10 @@ function RowList({
 	};
 
 	return (
-		<ul className="-mx-3 flex flex-col gap-px" data-testid="library-rows">
+		<ul
+			className="atw:-mx-3 atw:flex atw:flex-col atw:gap-px"
+			data-testid="library-rows"
+		>
 			{folders.map((folder) => {
 				const status = marks.directories.get(folder.directory.path);
 				return row({
@@ -2128,17 +2141,17 @@ function SelectionToolbar({
 			role="toolbar"
 			aria-label="Selection"
 			data-testid="library-selection-toolbar"
-			className="box-border flex h-8 items-center gap-1 rounded-[9px] border border-border bg-panel pr-0.5 pl-3 shadow-sm"
+			className="atw:box-border atw:flex atw:h-8 atw:items-center atw:gap-1 atw:rounded-[9px] atw:border atw:border-border atw:bg-panel atw:pr-0.5 atw:pl-3 atw:shadow-sm"
 		>
-			<span className="pr-2 text-[12.5px] font-semibold text-fg">
+			<span className="atw:pr-2 atw:text-[12.5px] atw:font-semibold atw:text-fg">
 				{count} selected
 			</span>
 			<button
 				type="button"
 				onClick={onMove}
-				className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[12.5px] font-medium text-fg-muted hover:bg-bg-hover hover:text-fg"
+				className="atw:flex atw:h-7 atw:items-center atw:gap-1.5 atw:rounded-md atw:px-2 atw:text-[12.5px] atw:font-medium atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg"
 			>
-				<FolderInput className="size-3.5" aria-hidden="true" />
+				<FolderInput className="atw:size-3.5" aria-hidden="true" />
 				Move
 			</button>
 			<DropdownMenu>
@@ -2146,12 +2159,15 @@ function SelectionToolbar({
 					<button
 						type="button"
 						aria-label="More actions"
-						className="grid size-7 place-items-center rounded-md text-fg-muted hover:bg-bg-hover hover:text-fg"
+						className="atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg"
 					>
-						<MoreHorizontal className="size-3.5" aria-hidden="true" />
+						<MoreHorizontal className="atw:size-3.5" aria-hidden="true" />
 					</button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="start" className="min-w-44 text-[13px]">
+				<DropdownMenuContent
+					align="start"
+					className="atw:min-w-44 atw:text-[13px]"
+				>
 					<DropdownMenuItem onSelect={onOpenInNewTabs}>
 						<SquareArrowOutUpRight aria-hidden="true" />
 						Open in new tabs
@@ -2176,18 +2192,18 @@ function SelectionToolbar({
 				aria-label="Delete"
 				title="Delete"
 				onClick={onDelete}
-				className="grid size-7 place-items-center rounded-md text-fg-muted hover:bg-danger-subtle hover:text-danger"
+				className="atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-muted atw:hover:bg-danger-subtle atw:hover:text-danger"
 			>
-				<Trash2 className="size-3.5" aria-hidden="true" />
+				<Trash2 className="atw:size-3.5" aria-hidden="true" />
 			</button>
 			<button
 				type="button"
 				aria-label="Clear selection"
 				title="Clear selection (Esc)"
 				onClick={onClear}
-				className="grid size-7 place-items-center rounded-md text-fg-muted hover:bg-bg-hover hover:text-fg"
+				className="atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg"
 			>
-				<X className="size-3.5" aria-hidden="true" />
+				<X className="atw:size-3.5" aria-hidden="true" />
 			</button>
 		</div>
 	);

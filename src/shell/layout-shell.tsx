@@ -1208,7 +1208,7 @@ function useAtelierStoreSnapshot<T>(store: {
 }
 
 function AtelierShellLoadingPlaceholder() {
-	return <div className="h-full w-full bg-bg" />;
+	return <div className="atw:h-full atw:w-full atw:bg-bg" />;
 }
 
 function LayoutShellLoadedContent(props: LayoutShellLoadedContentProps) {
@@ -4972,7 +4972,7 @@ function LayoutShellLoadedContentResolved({
 			onDragEnd={handleDragEnd}
 		>
 			<div
-				className="relative flex h-full min-h-0 flex-col bg-bg text-fg"
+				className="atw:relative atw:flex atw:h-full atw:min-h-0 atw:flex-col atw:bg-bg atw:text-fg"
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
 				<AtelierAutosaveHint />
@@ -4993,7 +4993,7 @@ function LayoutShellLoadedContentResolved({
 					navbarEnd={slots?.navbarEnd}
 					rootProps={topBarProps}
 				/>
-				<main className="flex flex-1 min-h-0 overflow-hidden px-2">
+				<main className="atw:flex atw:flex-1 atw:min-h-0 atw:overflow-hidden atw:px-2">
 					<Group
 						orientation="horizontal"
 						groupRef={panelGroupRef}
@@ -5045,18 +5045,18 @@ function LayoutShellLoadedContentResolved({
 							// at all, and nothing to resize with either.
 							disabled={isLeftCollapsed}
 							aria-label="Resize the left area"
-							className={`group relative z-10 flex items-center justify-center ${
-								isLeftCollapsed ? "w-0" : "w-1"
+							className={`atw:group atw:relative atw:z-10 atw:flex atw:items-center atw:justify-center ${
+								isLeftCollapsed ? "atw:w-0" : "atw:w-1"
 							}`}
 						>
 							{/* Wider invisible hit zone keeps the thin gutter grabbable. */}
-							<div className="absolute inset-y-0 -left-1 -right-1" />
+							<div className="atw:absolute atw:inset-y-0 atw:-left-1 atw:-right-1" />
 							{/* The drag indicator rides the main island's own border,
 							    not the middle of the gutter. */}
-							<div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--atelier-link)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+							<div className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:right-0 atw:w-0.5 atw:translate-x-1/2 atw:rounded-full atw:bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--atelier-link)_50%,transparent),transparent)] atw:opacity-0 atw:transition-opacity atw:duration-150 atw:group-hover:opacity-100" />
 						</Separator>
 						<Panel id="main" defaultSize={`${panelSizes.main}%`} minSize="30%">
-							<div className="h-full min-h-0">
+							<div className="atw:h-full atw:min-h-0">
 								<MainArea
 									area={mainArea}
 									showTabBar={false}
@@ -5097,13 +5097,13 @@ function LayoutShellLoadedContentResolved({
 						<Separator
 							disabled={isRightCollapsed}
 							aria-label="Resize the right area"
-							className={`group relative z-10 flex items-center justify-center ${
-								isRightCollapsed ? "w-0" : "w-1"
+							className={`atw:group atw:relative atw:z-10 atw:flex atw:items-center atw:justify-center ${
+								isRightCollapsed ? "atw:w-0" : "atw:w-1"
 							}`}
 						>
-							<div className="absolute inset-y-0 -left-1 -right-1" />
+							<div className="atw:absolute atw:inset-y-0 atw:-left-1 atw:-right-1" />
 							{/* Mirrored: the indicator hugs the island's right border. */}
-							<div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--atelier-link)_50%,transparent),transparent)] opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+							<div className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:left-0 atw:w-0.5 atw:-translate-x-1/2 atw:rounded-full atw:bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--atelier-link)_50%,transparent),transparent)] atw:opacity-0 atw:transition-opacity atw:duration-150 atw:group-hover:opacity-100" />
 						</Separator>
 						<Panel
 							id="right"
@@ -5213,7 +5213,7 @@ function LayoutShellLoadedContentResolved({
 			</div>
 			<DragOverlay>
 				{activeId && activeDragView ? (
-					<div className="cursor-grabbing">
+					<div className="atw:cursor-grabbing">
 						<PanelTabPreview
 							icon={activeDragView.icon}
 							label={activeDragView.label}

@@ -2043,7 +2043,7 @@ function PendingComposer({
 			data-side={placement.side}
 			style={{ ...placement.style, left: popoverLeft(box, surfaceWidth) }}
 		>
-			<div className="flex items-start gap-2">
+			<div className="atw:flex atw:items-start atw:gap-2">
 				<CommentAvatar name={state.authorName} size="xl" />
 				<Composer
 					// The field reads its draft when it mounts: another block's
@@ -2059,7 +2059,7 @@ function PendingComposer({
 					focusRequest={pending?.focus ?? 0}
 					tone="neutral"
 					size="document"
-					className="min-w-0 flex-1"
+					className="atw:min-w-0 atw:flex-1"
 				/>
 			</div>
 		</div>
@@ -2381,21 +2381,21 @@ function MarginCards({
 							state.activate(nodeId, true);
 						}}
 					>
-						<div className="flex gap-2">
+						<div className="atw:flex atw:gap-2">
 							<CommentAvatar
 								name={authorName(first)}
 								profileUri={first.author_profile_uri}
 								size="lg"
 							/>
-							<div className="min-w-0 flex-1">
-								<div className="flex items-baseline gap-1.5 leading-[18px]">
-									<span className="truncate text-[12.5px] font-semibold text-fg">
+							<div className="atw:min-w-0 atw:flex-1">
+								<div className="atw:flex atw:items-baseline atw:gap-1.5 atw:leading-[18px]">
+									<span className="atw:truncate atw:text-[12.5px] atw:font-semibold atw:text-fg">
 										{authorName(first)}
 									</span>
 									{first.lixcol_created_at ? (
 										<time
 											dateTime={first.lixcol_created_at}
-											className="shrink-0 text-[11.5px] text-history-secondary"
+											className="atw:shrink-0 atw:text-[11.5px] atw:text-history-secondary"
 										>
 											{formatCommentTime(first.lixcol_created_at)}
 										</time>
@@ -2410,7 +2410,7 @@ function MarginCards({
 							</div>
 						</div>
 						{replies > 0 || otherThreads > 0 ? (
-							<div className="pl-7 text-[12px] leading-[normal] font-semibold text-history-secondary">
+							<div className="atw:pl-7 atw:text-[12px] atw:leading-[normal] atw:font-semibold atw:text-history-secondary">
 								{[
 									replies > 0
 										? `${replies} ${replies === 1 ? "reply" : "replies"}`

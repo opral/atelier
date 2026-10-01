@@ -99,14 +99,14 @@ export function CommentAvatar({
 	}, [profileUri]);
 	const dimensions =
 		size === "sm"
-			? "size-3.5 text-[6px]"
+			? "atw:size-3.5 atw:text-[6px]"
 			: size === "lg"
-				? "size-5 text-[9px]"
+				? "atw:size-5 atw:text-[9px]"
 				: size === "xl"
-					? "size-5.5 text-[10px]"
+					? "atw:size-5.5 atw:text-[10px]"
 					: size === "2xl"
-						? "size-6 text-[10px]"
-						: "size-4.5 text-[8px]";
+						? "atw:size-6 atw:text-[10px]"
+						: "atw:size-4.5 atw:text-[8px]";
 	const profileUrl = webUrl(profileUri);
 	if (profileUrl && photo?.profileUri === profileUrl && photo.url) {
 		return (
@@ -115,7 +115,7 @@ export function CommentAvatar({
 				alt=""
 				aria-hidden="true"
 				data-comment-avatar="profile"
-				className={`${dimensions} shrink-0 rounded-full object-cover`}
+				className={`${dimensions} atw:shrink-0 atw:rounded-full atw:object-cover`}
 				onError={() => setPhoto({ profileUri: profileUrl, url: null })}
 			/>
 		);
@@ -127,7 +127,7 @@ export function CommentAvatar({
 				alt=""
 				aria-hidden="true"
 				data-comment-avatar="claude"
-				className={`${dimensions} shrink-0 rounded-full`}
+				className={`${dimensions} atw:shrink-0 atw:rounded-full`}
 			/>
 		);
 	}
@@ -136,7 +136,7 @@ export function CommentAvatar({
 		<span
 			aria-hidden="true"
 			data-comment-avatar={tone}
-			className={`comment-avatar comment-avatar-${tone} flex ${dimensions} shrink-0 items-center justify-center rounded-full font-bold`}
+			className={`comment-avatar comment-avatar-${tone} atw:flex ${dimensions} atw:shrink-0 atw:items-center atw:justify-center atw:rounded-full atw:font-bold`}
 		>
 			{initial(name)}
 		</span>

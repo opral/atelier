@@ -116,7 +116,7 @@ export function CsvToolbarSelect({
 				</button>
 			</Menu.Trigger>
 			{multiple && (
-				<span id={descriptionId} className="sr-only">
+				<span id={descriptionId} className="atw:sr-only">
 					{selected.length
 						? `${matchHint}: ${selected.map((option) => option.label).join(", ")}`
 						: "All values"}

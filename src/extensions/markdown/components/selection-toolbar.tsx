@@ -439,14 +439,14 @@ export function SelectionToolbar() {
 								</Select.Value>
 								<Select.Icon className="markdown-selection-toolbar-trigger-chevron">
 									<ChevronRight
-										className="size-[13px] stroke-[2]"
+										className="atw:size-[13px] atw:stroke-[2]"
 										aria-hidden
 									/>
 								</Select.Icon>
 							</Toolbar.Button>
 							<Select.Portal container={portalContainer}>
 								<Select.Positioner
-									className="z-50 outline-none"
+									className="atw:z-50 atw:outline-none"
 									side="right"
 									align="start"
 									sideOffset={6}
@@ -454,29 +454,32 @@ export function SelectionToolbar() {
 									alignItemWithTrigger={false}
 								>
 									<Select.Popup
-										className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100"
+										className="atw:min-w-[10.75rem] atw:origin-[var(--transform-origin)] atw:rounded-[8px] atw:border atw:border-border atw:bg-panel atw:p-1 atw:shadow-lg atw:transition-[transform,opacity] atw:duration-150 atw:data-[starting-style]:scale-95 atw:data-[starting-style]:opacity-0 atw:data-[ending-style]:scale-100 atw:data-[ending-style]:opacity-100"
 										data-attr="markdown-selection-block-menu"
 										onMouseEnter={cancelHoverClose}
 										onMouseLeave={closeBlockMenuFromHover}
 									>
-										<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-fg-subtle">
+										<div className="atw:px-2 atw:pb-0.75 atw:pt-1 atw:text-[11px] atw:font-medium atw:leading-4 atw:text-fg-subtle">
 											Turn into
 										</div>
 										{SELECTION_BLOCK_OPTIONS.map((option) => (
 											<Select.Item
 												key={option.value}
 												value={option.value}
-												className="group flex h-8 cursor-default items-center gap-2 rounded-[7px] px-2 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-bg-hover data-[highlighted]:text-fg"
+												className="atw:group atw:flex atw:h-8 atw:cursor-default atw:items-center atw:gap-2 atw:rounded-[7px] atw:px-2 atw:text-[12.5px] atw:outline-none atw:focus-visible:ring-0 atw:data-[highlighted]:bg-bg-hover atw:data-[highlighted]:text-fg"
 											>
-												<span className="flex size-4.5 items-center justify-center text-fg-subtle group-data-[highlighted]:text-fg-muted [&_svg]:stroke-[1.8]">
-													<option.icon className="h-3.5 w-3.5" aria-hidden />
+												<span className="atw:flex atw:size-4.5 atw:items-center atw:justify-center atw:text-fg-subtle atw:group-data-[highlighted]:text-fg-muted atw:[&_svg]:stroke-[1.8]">
+													<option.icon
+														className="atw:h-3.5 atw:w-3.5"
+														aria-hidden
+													/>
 												</span>
-												<span className="flex-1 font-medium leading-4 text-fg">
+												<span className="atw:flex-1 atw:font-medium atw:leading-4 atw:text-fg">
 													{option.label}
 												</span>
-												<Select.ItemIndicator className="text-link-hover">
+												<Select.ItemIndicator className="atw:text-link-hover">
 													<Check
-														className="h-3.5 w-3.5 stroke-[2]"
+														className="atw:h-3.5 atw:w-3.5 atw:stroke-[2]"
 														aria-hidden
 													/>
 												</Select.ItemIndicator>
@@ -501,7 +504,7 @@ export function SelectionToolbar() {
 								portalContainer={portalContainer}
 								data-attr="markdown-selection-bold"
 							>
-								<Bold className="size-3.5" aria-hidden />
+								<Bold className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 							<ToolbarIconButton
 								label="Italic"
@@ -511,7 +514,7 @@ export function SelectionToolbar() {
 								portalContainer={portalContainer}
 								data-attr="markdown-selection-italic"
 							>
-								<Italic className="size-3.5" aria-hidden />
+								<Italic className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 							<ToolbarIconButton
 								label="Strikethrough"
@@ -521,7 +524,7 @@ export function SelectionToolbar() {
 								portalContainer={portalContainer}
 								data-attr="markdown-selection-strike"
 							>
-								<Strikethrough className="size-3.5" aria-hidden />
+								<Strikethrough className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 							<ToolbarIconButton
 								label="Inline code"
@@ -531,7 +534,7 @@ export function SelectionToolbar() {
 								portalContainer={portalContainer}
 								data-attr="markdown-selection-code"
 							>
-								<Code2 className="size-3.5" aria-hidden />
+								<Code2 className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 							<LinkPopover
 								editor={editor}
@@ -548,7 +551,7 @@ export function SelectionToolbar() {
 								portalContainer={portalContainer}
 								data-attr="markdown-selection-clear"
 							>
-								<RemoveFormatting className="size-3.5" aria-hidden />
+								<RemoveFormatting className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 						</Toolbar.Group>
 					</>
@@ -591,7 +594,7 @@ export function SelectionToolbar() {
 							>
 								<Toolbar.Button
 									render={<Popover.Trigger />}
-									className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment opacity-50"
+									className="markdown-selection-toolbar-trigger markdown-selection-toolbar-comment atw:opacity-50"
 									aria-disabled="true"
 									data-attr="markdown-selection-comment"
 								>
@@ -605,13 +608,13 @@ export function SelectionToolbar() {
 								</Toolbar.Button>
 								<Popover.Portal container={portalContainer}>
 									<Popover.Positioner
-										className="z-50 outline-none"
+										className="atw:z-50 atw:outline-none"
 										side="bottom"
 										align="start"
 										sideOffset={6}
 									>
 										<Popover.Popup
-											className="max-w-[16rem] rounded-[8px] border border-border bg-panel p-3 text-[12.5px] leading-5 text-fg-muted shadow-lg"
+											className="atw:max-w-[16rem] atw:rounded-[8px] atw:border atw:border-border atw:bg-panel atw:p-3 atw:text-[12.5px] atw:leading-5 atw:text-fg-muted atw:shadow-lg"
 											data-attr="markdown-comment-plugin-missing"
 										>
 											Install the Markdown plugin to comment on this file.

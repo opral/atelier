@@ -29,7 +29,7 @@ export function pathLabelText(path: string): string {
 
 export function PathLabel({
 	path,
-	parentClassName = "text-fg-faint",
+	parentClassName = "atw:text-fg-faint",
 	layout = "inline",
 	className = "",
 }: {
@@ -46,16 +46,16 @@ export function PathLabel({
 	const { parent, name } = splitPathLabel(path);
 	if (layout === "row") {
 		return (
-			<span className={`flex min-w-0 items-baseline ${className}`}>
+			<span className={`atw:flex atw:min-w-0 atw:items-baseline ${className}`}>
 				{parent ? (
 					<span
 						data-attr="path-parent"
-						className={`max-w-[40%] flex-none truncate ${parentClassName}`}
+						className={`atw:max-w-[40%] atw:flex-none atw:truncate ${parentClassName}`}
 					>
 						{parent}
 					</span>
 				) : null}
-				<span className="min-w-0 truncate">{name}</span>
+				<span className="atw:min-w-0 atw:truncate">{name}</span>
 			</span>
 		);
 	}

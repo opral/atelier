@@ -421,7 +421,7 @@ export function CsvReviewGrid({
 				<thead>
 					<tr aria-rowindex={1}>
 						<th className="csv-review-gutter" scope="col">
-							<span className="sr-only">Row change</span>
+							<span className="atw:sr-only">Row change</span>
 						</th>
 						{model.columns.map((column) => {
 							const Icon =

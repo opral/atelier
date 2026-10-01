@@ -7,7 +7,7 @@ import {
 	type AtelierSlots,
 } from "@opral/atelier";
 import { fileIconUrl } from "@opral/atelier/file-icons";
-import "@opral/atelier/standalone.css";
+import "@opral/atelier/style.css";
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 

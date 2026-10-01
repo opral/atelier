@@ -284,7 +284,7 @@ function FilesViewLoaded({ context }: FilesViewProps) {
 		return (
 			<div
 				role="status"
-				className="min-h-0 flex flex-1 items-center justify-center text-[12px] text-fg-subtle"
+				className="atw:min-h-0 atw:flex atw:flex-1 atw:items-center atw:justify-center atw:text-[12px] atw:text-fg-subtle"
 				data-atelier-extension-suspended=""
 			>
 				Loading Files…
@@ -433,7 +433,7 @@ function FilesViewContent({
 	// the rest of the untouched chrome while a review marks rows.
 	const reviewFocusDim =
 		reviewStatuses.size > 0 || pendingReviewPaths.size > 0
-			? "opacity-[0.35] hover:opacity-100"
+			? "atw:opacity-[0.35] atw:hover:opacity-100"
 			: undefined;
 	// A directory whose every file is newly added is itself new: it reads
 	// green like its contents. Anything mixed keeps the contains-changes tone.
@@ -1468,10 +1468,10 @@ function FilesViewContent({
 		<div
 			className={
 				context?.area === "main"
-					? "relative flex min-h-0 flex-1 flex-col"
+					? "atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col"
 					: // No horizontal padding: the rows' own 8px padding puts row icons
 						// on the same x as the section label's text (its px-2).
-						"relative flex min-h-0 flex-1 flex-col pt-1 pb-2"
+						"atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:pt-1 atw:pb-2"
 			}
 			onDragEnter={handleDragEnter}
 			onDragOver={handleDragOver}
@@ -1480,13 +1480,13 @@ function FilesViewContent({
 		>
 			{context?.area === "main" ? (
 				<div
-					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+					className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden"
 					data-testid="files-view-wide"
 				>
-					<div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col px-3.5 pt-13 pb-10">
+					<div className="atw:mx-auto atw:flex atw:min-h-0 atw:w-full atw:max-w-[760px] atw:flex-1 atw:flex-col atw:px-3.5 atw:pt-13 atw:pb-10">
 						{readOnly ? null : (
 							<div
-								className={`flex shrink-0 justify-end pb-6 transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
+								className={`atw:flex atw:shrink-0 atw:justify-end atw:pb-6 atw:transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
 							>
 								{createRequest ? (
 									<WideNewButton disabled />
@@ -1513,7 +1513,7 @@ function FilesViewContent({
 						<div
 							data-testid="files-view-tree-scroll"
 							data-attr="file-tree"
-							className="ph-mask min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
+							className="ph-mask atw:min-h-0 atw:flex-1 atw:overflow-x-hidden atw:overflow-y-auto atw:pr-1"
 						>
 							{fileTree}
 						</div>
@@ -1523,7 +1523,7 @@ function FilesViewContent({
 			{/* Compact New row for side-panel use. */}
 			{context?.area !== "main" && !readOnly ? (
 				<div
-					className={`transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
+					className={`atw:transition-opacity${reviewFocusDim ? ` ${reviewFocusDim}` : ""}`}
 				>
 					{createRequest ? (
 						<CompactNewButton disabled />
@@ -1548,12 +1548,12 @@ function FilesViewContent({
 				</div>
 			) : null}
 			{isDraggingOver && (
-				<div className="absolute inset-1 z-50 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-warning-border bg-[color-mix(in_srgb,var(--atelier-warning-subtle)_50%,transparent)] backdrop-blur-sm pointer-events-none">
-					<FileUp className="h-12 w-12 text-fg" />
-					<p className="mt-3 text-center text-sm font-medium text-fg">
+				<div className="atw:absolute atw:inset-1 atw:z-50 atw:flex atw:flex-col atw:items-center atw:justify-center atw:rounded-lg atw:border-2 atw:border-dashed atw:border-warning-border atw:bg-[color-mix(in_srgb,var(--atelier-warning-subtle)_50%,transparent)] atw:backdrop-blur-sm atw:pointer-events-none">
+					<FileUp className="atw:h-12 atw:w-12 atw:text-fg" />
+					<p className="atw:mt-3 atw:text-center atw:text-sm atw:font-medium atw:text-fg">
 						Drop markdown files here
 					</p>
-					<p className="mt-1 text-center text-xs text-fg-subtle">
+					<p className="atw:mt-1 atw:text-center atw:text-xs atw:text-fg-subtle">
 						Only .md and .markdown files supported
 					</p>
 				</div>
@@ -1562,7 +1562,7 @@ function FilesViewContent({
 				<div
 					data-testid="files-view-tree-scroll"
 					data-attr="file-tree"
-					className="ph-mask min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
+					className="ph-mask atw:min-h-0 atw:flex-1 atw:overflow-x-hidden atw:overflow-y-auto atw:pr-1"
 				>
 					{fileTree}
 				</div>
@@ -1586,9 +1586,9 @@ const WideNewButton = forwardRef<
 			title={title}
 			{...props}
 		>
-			<Plus aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+			<Plus aria-hidden="true" className="atw:size-3.5" strokeWidth={2.4} />
 			<span>New</span>
-			<ChevronDown aria-hidden="true" className="size-3 opacity-80" />
+			<ChevronDown aria-hidden="true" className="atw:size-3 atw:opacity-80" />
 		</AtelierActionButton>
 	);
 });
@@ -1608,7 +1608,7 @@ const CompactNewButton = forwardRef<
 		<button
 			ref={ref}
 			type="button"
-			className="mb-px flex h-7 w-full select-none items-center gap-2 rounded-control px-1.5 text-left text-[13px] text-fg-muted transition-colors hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="atw:mb-px atw:flex atw:h-7 atw:w-full atw:select-none atw:items-center atw:gap-2 atw:rounded-control atw:px-1.5 atw:text-left atw:text-[13px] atw:text-fg-muted atw:transition-colors atw:hover:bg-bg-hover-strong atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 			data-attr="file-new"
 			onMouseDown={(event) => event.preventDefault()}
 			disabled={disabled}
@@ -1619,7 +1619,7 @@ const CompactNewButton = forwardRef<
 				src={fileNewIconUrl}
 				alt=""
 				aria-hidden="true"
-				className="size-3.5 shrink-0"
+				className="atw:size-3.5 atw:shrink-0"
 				data-attr="file-new-icon"
 			/>
 			<span>New</span>

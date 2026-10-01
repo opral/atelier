@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Copies the two stylesheets the static render inlines — src/shell/theme.css
+ * Copies the canonical stylesheets the static render inlines — src/shell/theme.css
  * (the tokens) and src/shell/document.css (the document) — into generated
  * TypeScript modules for the DOM-free render entry, which cannot load a
  * stylesheet and whose tests run where a CSS import resolves to nothing. The
@@ -16,6 +16,12 @@ import { dirname, join } from "node:path";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const SHEETS = [
+	{
+		source: "src/render/chrome.css",
+		out: "src/render/chrome.generated.ts",
+		name: "CHROME_CSS",
+		doc: "Static render chrome, shared with the mounted stylesheet.",
+	},
 	{
 		source: "src/shell/theme.css",
 		out: "src/shell/theme.generated.ts",

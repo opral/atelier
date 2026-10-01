@@ -11,7 +11,7 @@
  *
  *   node scripts/tokens/check-tokens.mjs            fail on any finding
  *   node scripts/tokens/check-tokens.mjs --report   list, exit 0
- *   node scripts/tokens/check-tokens.mjs --root ../lixray/web-app/src --theme node_modules/@opral/atelier/theme.css
+ *   node scripts/tokens/check-tokens.mjs --root ../lixray/web-app/src --theme ../vendor/atelier/src/shell/theme.css
  *
  * Escape hatches, both visible in the diff: a `token-literal:` comment on the
  * same line for the few places a literal is the only option (a canvas cannot

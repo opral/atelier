@@ -27,9 +27,13 @@ export function StatusBar({
 	readonly right?: ReactNode;
 }): JSX.Element {
 	return (
-		<footer className="flex h-6 shrink-0 items-center justify-between px-3 text-[11.5px] text-fg-subtle">
-			<div className="flex min-w-0 items-center gap-1.5">{left}</div>
-			<div className="flex min-w-0 items-center gap-1.5">{right}</div>
+		<footer className="atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:justify-between atw:px-3 atw:text-[11.5px] atw:text-fg-subtle">
+			<div className="atw:flex atw:min-w-0 atw:items-center atw:gap-1.5">
+				{left}
+			</div>
+			<div className="atw:flex atw:min-w-0 atw:items-center atw:gap-1.5">
+				{right}
+			</div>
 		</footer>
 	);
 }
@@ -126,7 +130,7 @@ export function CheckpointStatusBar({
 			}
 			right={
 				readOnly ? undefined : (
-					<div className="flex items-center gap-2">
+					<div className="atw:flex atw:items-center atw:gap-2">
 						<AutoAcceptToggle
 							checked={autoAcceptAgentChanges}
 							onCheckedChange={onAutoAcceptAgentChangesChange}
@@ -155,17 +159,17 @@ function ReviewBehindNotice({
 			aria-label={`${label}. Refresh the review`}
 			onClick={onRefresh}
 			onMouseDown={(event) => event.preventDefault()}
-			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 text-accent transition-colors hover:bg-bg-hover-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="atw:inline-flex atw:h-5 atw:items-center atw:gap-1.5 atw:rounded-[5px] atw:px-1.5 atw:text-accent atw:transition-colors atw:hover:bg-bg-hover-strong atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 		>
-			<RefreshCw aria-hidden="true" className="h-3 w-3" />
+			<RefreshCw aria-hidden="true" className="atw:h-3 atw:w-3" />
 			<span>{label} · Refresh</span>
 		</button>
 	) : (
 		<span
 			data-attr="review-behind-refresh"
-			className="inline-flex h-5 items-center gap-1.5 px-1.5 text-accent"
+			className="atw:inline-flex atw:h-5 atw:items-center atw:gap-1.5 atw:px-1.5 atw:text-accent"
 		>
-			<RefreshCw aria-hidden="true" className="h-3 w-3" />
+			<RefreshCw aria-hidden="true" className="atw:h-3 atw:w-3" />
 			<span>{label}</span>
 		</span>
 	);
@@ -180,8 +184,8 @@ function AutoAcceptToggle({
 }) {
 	return (
 		<label
-			className={`inline-flex h-5 cursor-pointer select-none items-center gap-1.5 font-semibold transition-colors ${
-				checked ? "text-accent" : "text-fg-subtle"
+			className={`atw:inline-flex atw:h-5 atw:cursor-pointer atw:select-none atw:items-center atw:gap-1.5 atw:font-semibold atw:transition-colors ${
+				checked ? "atw:text-accent" : "atw:text-fg-subtle"
 			}`}
 		>
 			<span>Auto-accept</span>
@@ -192,18 +196,20 @@ function AutoAcceptToggle({
 				aria-checked={checked}
 				checked={checked}
 				onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
-				className="peer sr-only"
+				className="atw:peer atw:sr-only"
 			/>
 			<span
 				aria-hidden="true"
-				className={`relative h-3 w-5 shrink-0 rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-1 ${
-					checked ? "border-link bg-link" : "border-border bg-border-strong"
+				className={`atw:relative atw:h-3 atw:w-5 atw:shrink-0 atw:rounded-full atw:border atw:transition-colors atw:peer-focus-visible:ring-2 atw:peer-focus-visible:ring-ring atw:peer-focus-visible:ring-offset-1 ${
+					checked
+						? "atw:border-link atw:bg-link"
+						: "atw:border-border atw:bg-border-strong"
 				}`}
 			>
 				<span
 					aria-hidden="true"
-					className={`absolute top-px left-px size-2 rounded-full bg-panel shadow-sm transition-transform ${
-						checked ? "translate-x-2" : "translate-x-0"
+					className={`atw:absolute atw:top-px atw:left-px atw:size-2 atw:rounded-full atw:bg-panel atw:shadow-sm atw:transition-transform ${
+						checked ? "atw:translate-x-2" : "atw:translate-x-0"
 					}`}
 				/>
 			</span>
@@ -235,18 +241,18 @@ function CheckpointStatus({
 			aria-pressed={reviewing}
 			onClick={onActivate}
 			onMouseDown={(event) => event.preventDefault()}
-			className="inline-flex h-5 items-center gap-1.5 rounded-[5px] px-1.5 transition-colors hover:bg-bg-hover-strong hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="atw:inline-flex atw:h-5 atw:items-center atw:gap-1.5 atw:rounded-[5px] atw:px-1.5 atw:transition-colors atw:hover:bg-bg-hover-strong atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 		>
 			{hasWorkingChanges ? null : (
-				<Flag aria-hidden="true" className="h-3 w-3" />
+				<Flag aria-hidden="true" className="atw:h-3 atw:w-3" />
 			)}
 			{hasWorkingChanges ? <WorkingDot /> : null}
 			<span>{statusLabel}</span>
 		</button>
 	) : (
-		<span className="inline-flex items-center gap-1.5">
+		<span className="atw:inline-flex atw:items-center atw:gap-1.5">
 			{hasWorkingChanges ? null : (
-				<Flag aria-hidden="true" className="h-3 w-3" />
+				<Flag aria-hidden="true" className="atw:h-3 atw:w-3" />
 			)}
 			{hasWorkingChanges ? <WorkingDot /> : null}
 			<span>{statusLabel}</span>

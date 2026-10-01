@@ -317,11 +317,11 @@ describe("HistoryView", () => {
 			step = step.parentElement
 		) {
 			for (const token of step.className.split(/\s+/)) {
-				const padding = /^p[xl]-(\d+(?:\.\d+)?)$/.exec(token);
+				const padding = /^atw:p[xl]-(\d+(?:\.\d+)?)$/.exec(token);
 				if (padding) total += Number(padding[1]) * 4;
-				const pixels = /^p[xl]-\[(\d+(?:\.\d+)?)px\]$/.exec(token);
+				const pixels = /^atw:p[xl]-\[(\d+(?:\.\d+)?)px\]$/.exec(token);
 				if (pixels) total += Number(pixels[1]);
-				if (token === "border") total += 1;
+				if (token === "atw:border") total += 1;
 			}
 		}
 		return total;
@@ -370,7 +370,7 @@ describe("HistoryView", () => {
 				parent = parent.parentElement
 			) {
 				for (const token of parent.className.split(/\s+/)) {
-					const padding = /^p[yt]-(\d+(?:\.\d+)?)$/.exec(token);
+					const padding = /^atw:p[yt]-(\d+(?:\.\d+)?)$/.exec(token);
 					if (padding) topInset += Number(padding[1]) * 4;
 				}
 			}

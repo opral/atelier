@@ -376,18 +376,18 @@ function CsvFrame({ children }: { readonly children: ReactNode }) {
 		<CsvFrameContext.Provider value={frame}>
 			<DocumentRegionProvider handle={handle}>
 				<div
-					className="csv-view flex min-h-0 flex-1 flex-col bg-panel"
+					className="csv-view atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:bg-panel"
 					data-document={shown ? "" : undefined}
 					aria-busy={shown ? undefined : "true"}
 				>
 					<div
 						ref={setToolbarNode}
-						className={`csv-toolbar ${toolbarHidden > 0 ? "hidden" : ""}`}
+						className={`csv-toolbar ${toolbarHidden > 0 ? "atw:hidden" : ""}`}
 						role="group"
 						aria-label="Table controls"
 					/>
 					<div
-						className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+						className="atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden"
 						data-attr="csv-grid"
 						// A table is on its way, out of sight: nothing it paints
 						// meanwhile is the picture the reviewer stepped to.
@@ -419,7 +419,7 @@ function CsvMessage({
 	useCsvToolbarHidden(true);
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:text-center atw:text-sm atw:text-fg-subtle"
 			role={role}
 		>
 			{children}
@@ -1156,12 +1156,12 @@ function CsvDocument({
 	return (
 		<>
 			{parsed.warnings.length > 0 ? (
-				<div className="mx-5 mt-3 flex shrink-0 items-start gap-2 rounded-[8px] border border-warning-border bg-warning-subtle px-3 py-2 text-xs text-warning">
-					<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-					<span className="min-w-0 truncate">{parsed.warnings[0]}</span>
+				<div className="atw:mx-5 atw:mt-3 atw:flex atw:shrink-0 atw:items-start atw:gap-2 atw:rounded-[8px] atw:border atw:border-warning-border atw:bg-warning-subtle atw:px-3 atw:py-2 atw:text-xs atw:text-warning">
+					<AlertTriangle className="atw:mt-0.5 atw:h-3.5 atw:w-3.5 atw:shrink-0" />
+					<span className="atw:min-w-0 atw:truncate">{parsed.warnings[0]}</span>
 				</div>
 			) : null}
-			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div className="atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden">
 				{parsed.columns.length === 0 && !reviewData ? (
 					<CsvEmptyState
 						filePath={fileRow.path}
@@ -2634,7 +2634,7 @@ function CsvTable({
 								? "columns"
 								: "none"
 				}
-				className="ph-mask ph-no-capture relative h-full min-h-0 flex-1 bg-panel"
+				className="ph-mask ph-no-capture atw:relative atw:h-full atw:min-h-0 atw:flex-1 atw:bg-panel"
 			>
 				<CsvOverlayScrollbars
 					containerRef={containerRef}
@@ -3282,12 +3282,12 @@ function CsvEmptyState({
 		// empty file, so the grid could put a file into that state itself.
 		<div
 			role="alert"
-			className="flex h-full items-center justify-center px-6 py-8 text-center"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:py-8 atw:text-center"
 		>
-			<div className="max-w-sm space-y-2 text-sm text-fg-muted">
-				<p className="font-medium text-fg">No CSV rows to display.</p>
+			<div className="atw:max-w-sm atw:space-y-2 atw:text-sm atw:text-fg-muted">
+				<p className="atw:font-medium atw:text-fg">No CSV rows to display.</p>
 				<p>
-					<span className="ph-mask font-mono text-xs text-fg-muted">
+					<span className="ph-mask atw:font-mono atw:text-xs atw:text-fg-muted">
 						{filePath}
 					</span>{" "}
 					is empty or does not contain a header row.
@@ -3455,11 +3455,11 @@ function assertFileId(fileId: unknown): asserts fileId is string {
 function CsvPreparedFrame({ children }: { readonly children?: ReactNode }) {
 	return (
 		<div
-			className="csv-view flex min-h-0 flex-1 flex-col bg-panel"
+			className="csv-view atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:bg-panel"
 			aria-busy="true"
 		>
 			<div className="csv-toolbar" aria-hidden="true" />
-			<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div className="atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden">
 				{children}
 			</div>
 		</div>

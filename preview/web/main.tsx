@@ -19,6 +19,7 @@ import { seedCommentsDemo } from "./seed-comments-demo";
 import { seedConversationDemo } from "./seed-conversation-demo";
 import { seedCsvDemo } from "./seed-csv-demo";
 import { seedWorkspace } from "./seed-workspace";
+import "@opral/atelier/style.css";
 import "./style.css";
 
 const element = document.querySelector<HTMLElement>("#atelier");
