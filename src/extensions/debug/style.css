@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier.components {
+@layer components.atelier.components {
 	@scope (.atelier-root) {
 		.atelier-debug-view {
 			display: flex;

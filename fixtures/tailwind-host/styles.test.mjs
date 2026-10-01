@@ -93,7 +93,6 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 		await writeFile(
 			entry,
 			`
-@layer theme, base, components, atelier, utilities;
 @import "${path.join(root, "node_modules/tailwindcss/index.css")}" source(none);
 @import "${path.join(root, "node_modules/tw-animate-css/dist/tw-animate.css")}";
 @source "${path.join(fixture, "host.html")}";
@@ -118,10 +117,13 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 <div class="brand"><div id="root" class="atelier-root"><button id="control" class="atw:border atw:bg-panel atw:text-ui-sm">Control</button></div></div>
 <div class="brand"><div id="portal" class="atelier-portal"><button class="atw:border atw:bg-panel">Portal</button></div></div>
 <p id="outside">Host paragraph</p>
+<div id="outside-markdown" class="md-diff">Host diff</div>
+<div id="outside-csv" class="csv-diff"><table><tr><td>Host cell</td></tr></table></div>
 <div class="dark" id="host-dark">Host dark class</div>
 <div class="dark"><div id="dark-root" class="atelier-root">Dark workspace</div></div>
 <div id="skeleton">${skeleton}</div>
 <div id="static" class="atelier-render">${staticView.html}</div>
+<div id="conflict" class="atw:flex sm:hidden">Host override</div>
 <div class="atelier-root">
  <div id="group" class="atw:group"><span id="group-action" class="atw:opacity-0 atw:group-hover:opacity-100">Reveal</span></div>
  <button id="arbitrary" class="atw:[&_svg:not([class*='size-'])]:size-4"><svg></svg></button>
@@ -149,6 +151,8 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 						darkPanel: style("dark-root").backgroundColor,
 						outsideMargin: style("outside").marginTop,
 						outsideBox: style("outside").boxSizing,
+						outsideMarkdown: style("outside-markdown").overflowWrap,
+						outsideCsv: style("outside-csv").borderTopWidth,
 						skeleton: getComputedStyle(
 							document.querySelector("#skeleton .atelier-root > div"),
 						).display,
@@ -159,6 +163,12 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 				if (sheets.length === 2) {
 					assert.equal(computed.rail, hidden ? "none" : "flex");
 					assert.equal(computed.columns, columns);
+					assert.equal(
+						await page
+							.locator("#conflict")
+							.evaluate((node) => getComputedStyle(node).display),
+						hidden ? "none" : "flex",
+					);
 				}
 				assert.equal(computed.root, "rgb(1, 2, 3)");
 				assert.equal(computed.fg, "rgb(4, 5, 6)");
@@ -178,6 +188,8 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 				);
 				assert.equal(computed.skeleton, "flex");
 				assert.equal(computed.staticSize, "26.25px");
+				assert.equal(computed.outsideMarkdown, "normal");
+				assert.equal(computed.outsideCsv, "0px");
 			}
 
 			assert.equal(

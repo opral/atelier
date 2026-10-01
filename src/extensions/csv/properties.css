@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier.components {
+@layer components.atelier.components {
 	.csv-property-popover {
 		box-sizing: border-box;
 		z-index: 10001;

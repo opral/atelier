@@ -103,10 +103,10 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
   redeclaring tokens on an ancestor; it never overrides
   component classes.
 - Cascade layers are the override contract: `src/index.css` orders
-  `theme, base, components, atelier, utilities`, and every Atelier stylesheet
+  `theme, base, components, utilities`, and every Atelier stylesheet
   (`theme.css`, `document.css`, each extension's `style.css`, the runtime's
-  sheets) lives in `@layer atelier.components` — imported with `layer(atelier.components)` or wrapped
-  in one `@layer atelier.components { … }` block that starts with
+  sheets) lives in `@layer components.atelier.components` — imported with `layer(components.atelier.components)` or wrapped
+  in one `@layer components.atelier.components { … }` block that starts with
   `@import "…/shell/layers.css"`, so the order holds whichever sheet a
   bundler emits first. A host's unlayered CSS and a Tailwind utility on the
   element beat Atelier's rules by design; extension authors do not declare
@@ -155,8 +155,8 @@ and static styles, all prefixed Tailwind utilities and scoped resets. Host build
 never scan Atelier or import its internal adapter. Library utilities use `atw:`;
 `scripts/private-tailwind.mjs` also namespaces Tailwind properties and animations,
 including in vendored development builds. Keep component CSS in
-`atelier.components`, private utilities in `atelier.utilities` and host utilities
-after the outer `atelier` layer. Public `--atelier-*` tokens remain framework
+`components.atelier.components`, private utilities in `components.atelier.utilities` and host utilities
+after the standard `components` layer. Public `--atelier-*` tokens remain framework
 independent. Host `className` values pass through unchanged.
 
 Static render chrome lives in `src/render/chrome.css`; the CSS generator copies

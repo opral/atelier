@@ -27,7 +27,8 @@ export function isolateTailwind(css) {
 		}
 	});
 	ast.walkAtRules("layer", (rule) => {
-		if (rule.params === "properties") rule.params = "atelier.properties";
+		if (rule.params === "properties")
+			rule.params = "components.atelier.properties";
 	});
 	ast.walkRules((rule) => {
 		// Tailwind's fallback for browsers without @property initializes its
@@ -42,10 +43,10 @@ export function isolateTailwind(css) {
 	});
 	// Tailwind prepends its fallback layer before source layer declarations.
 	// Restore the public layer order at the very start: otherwise loading the
-	// library first registers `atelier` before host Preflight's `base` layer.
+	// library first can register its layer before host Preflight's `base` layer.
 	const layers = [
-		"theme, base, components, atelier, utilities",
-		"atelier.properties, atelier.theme, atelier.components, atelier.utilities",
+		"theme, base, components, utilities",
+		"components.atelier.properties, components.atelier.theme, components.atelier.components, components.atelier.utilities",
 	];
 	ast.walkAtRules("layer", (rule) => {
 		if (!rule.nodes && layers.includes(rule.params)) rule.remove();

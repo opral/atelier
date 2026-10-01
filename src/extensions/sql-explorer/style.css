@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier.components {
+@layer components.atelier.components {
 	@scope (.atelier-root) {
 		/* No background of its own: the hosting panel island decides the surface.
 		 * Central paints it white; side islands stay canvas-transparent. */

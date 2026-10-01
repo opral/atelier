@@ -1,6 +1,6 @@
 @import "../shell/layers.css";
 
-@layer atelier.components {
+@layer components.atelier.components {
 	@scope (.atelier-root) {
 		/* Values mirror the diff-mode mocks: #1C1917 pill, 12px radius, 7px pad. */
 		/* The float spans the review area so the pill can use all of it. It was

@@ -1,4 +1,4 @@
 /* All library styles live below host utilities and unlayered host CSS.
  * Declare the internal order before any extension is injected in development. */
-@layer theme, base, components, atelier, utilities;
-@layer atelier.properties, atelier.theme, atelier.components, atelier.utilities;
+@layer theme, base, components, utilities;
+@layer components.atelier.properties, components.atelier.theme, components.atelier.components, components.atelier.utilities;

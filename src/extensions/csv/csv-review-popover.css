@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier.components {
+@layer components.atelier.components {
 	.csv-review-trigger {
 		font: inherit;
 		color: inherit;

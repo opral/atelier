@@ -12,28 +12,28 @@ color: var(--atelier-fg);
 .atelier-render *::after {
 box-sizing: border-box;
 }
-.md-diff {
+.atelier-render .md-diff {
 overflow-wrap: anywhere;
 }
-.md-diff pre code {
+.atelier-render .md-diff pre code {
 white-space: pre-wrap;
 overflow-wrap: anywhere;
 }
-.md-diff > *:first-child {
+.atelier-render .md-diff > *:first-child {
 margin-top: 0;
 }
-.md-diff > *:last-child {
+.atelier-render .md-diff > *:last-child {
 margin-bottom: 0;
 }
-.md-diff .md-diff-raw {
+.atelier-render .md-diff .md-diff-raw {
 color: var(--atelier-fg-subtle);
 white-space: pre-wrap;
 }
-.md-diff .md-diff-missing {
+.atelier-render .md-diff .md-diff-missing {
 color: var(--atelier-fg-subtle);
 font-style: italic;
 }
-.md-diff .md-diff-image {
+.atelier-render .md-diff .md-diff-image {
 display: inline-flex;
 align-items: baseline;
 gap: 5px;
@@ -44,27 +44,27 @@ border-radius: 6px;
 color: var(--atelier-fg-muted);
 font-size: 0.93em;
 }
-.md-diff .md-diff-image::before {
+.atelier-render .md-diff .md-diff-image::before {
 content: "▨";
 color: var(--atelier-fg-subtle);
 }
-.md-diff .md-diff-image-src {
+.atelier-render .md-diff .md-diff-image-src {
 color: var(--atelier-fg-subtle);
 font-size: 0.86em;
 }
-.csv-diff {
+.atelier-render .csv-diff {
 overflow-x: auto;
 border: 1px solid var(--atelier-border);
 border-radius: var(--atelier-radius-panel);
 }
-.csv-diff table {
+.atelier-render .csv-diff table {
 width: 100%;
 border: 0;
 border-collapse: collapse;
 font-size: 13px;
 }
-.csv-diff th,
-.csv-diff td {
+.atelier-render .csv-diff th,
+.atelier-render .csv-diff td {
 padding: 7px 9px;
 border-bottom: 1px solid var(--atelier-border-subtle);
 text-align: left;
@@ -74,55 +74,55 @@ max-width: 24ch;
 overflow-wrap: anywhere;
 unicode-bidi: plaintext;
 }
-.csv-diff thead th {
+.atelier-render .csv-diff thead th {
 background: var(--atelier-bg-subtle);
 font-weight: 600;
 }
-.csv-diff tbody tr:last-child > td {
+.atelier-render .csv-diff tbody tr:last-child > td {
 border-bottom: 0;
 }
-.csv-diff tr.csv-diff-gap > td {
+.atelier-render .csv-diff tr.csv-diff-gap > td {
 background: var(--atelier-bg-subtle);
 color: var(--atelier-fg-subtle);
 font-size: 12px;
 max-width: none;
 }
-.csv-diff [data-diff-status="added"] {
+.atelier-render .csv-diff [data-diff-status="added"] {
 background: var(--atelier-diff-added-subtle);
 color: var(--atelier-diff-added);
 }
-.csv-diff [data-diff-status="removed"] {
+.atelier-render .csv-diff [data-diff-status="removed"] {
 background: var(--atelier-diff-removed-subtle);
 color: var(--atelier-diff-removed);
 }
-.csv-diff [data-diff-mode="words"] [data-diff-status="removed"],
-.csv-diff tr[data-diff-status="removed"] > td {
+.atelier-render .csv-diff [data-diff-mode="words"] [data-diff-status="removed"],
+.atelier-render .csv-diff tr[data-diff-status="removed"] > td {
 text-decoration: line-through;
 text-decoration-color: var(--atelier-diff-removed);
 }
-.csv-diff [data-diff-mode="words"] [data-diff-status="added"] {
+.atelier-render .csv-diff [data-diff-mode="words"] [data-diff-status="added"] {
 text-decoration: none;
 }
-.csv-diff [data-diff-status="modified"] {
+.atelier-render .csv-diff [data-diff-status="modified"] {
 background: var(--atelier-accent-subtle);
 }
-.csv-diff td span[data-diff-status],
-.csv-diff th span[data-diff-status] {
+.atelier-render .csv-diff td span[data-diff-status],
+.atelier-render .csv-diff th span[data-diff-status] {
 padding: 0 2px;
 margin: 0 -1px;
 border-radius: var(--atelier-radius-tag);
 unicode-bidi: isolate;
 }
-.csv-diff td[data-diff-status],
-.csv-diff th[data-diff-status] {
+.atelier-render .csv-diff td[data-diff-status],
+.atelier-render .csv-diff th[data-diff-status] {
 border-radius: 0;
 }
-.csv-diff tr.csv-diff-gap > td {
+.atelier-render .csv-diff tr.csv-diff-gap > td {
 color: var(--atelier-fg-subtle);
 font-size: 12px;
 text-align: center;
 }
-.csv-diff .csv-diff-gap-column {
+.atelier-render .csv-diff .csv-diff-gap-column {
 background: var(--atelier-bg-subtle);
 color: var(--atelier-fg-subtle);
 font-size: 12px;

@@ -5,9 +5,9 @@
    clicking into a cell shifted its text (Glide's 16px lines and 16.5px top
    inset against the canvas's 20px lines and centred text). Inside a sublayer
    of `atelier`, Glide's defaults sit under Atelier's own rules. */
-@import "@glideapps/glide-data-grid/dist/index.css" layer(atelier.components.glide);
+@import "@glideapps/glide-data-grid/dist/index.css" layer(components.atelier.components.glide);
 
-@layer atelier.components {
+@layer components.atelier.components {
 	@scope (.atelier-root) {
 		.csv-view {
 			position: relative;

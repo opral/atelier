@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier.components {
+@layer components.atelier.components {
 	.atelier-excalidraw-view {
 		position: relative;
 		display: flex;

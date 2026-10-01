@@ -1,19 +1,19 @@
 /* Atelier compiles its private utilities; a host only imports the result. */
 @import "./shell/layers.css";
-@import "tailwindcss/theme.css" layer(atelier.theme) prefix(atw);
-@import "tailwindcss/utilities.css" layer(atelier.utilities) prefix(atw)
-	source(none);
+@import "tailwindcss/theme.css" layer(components.atelier.theme) prefix(atw);
+@import "tailwindcss/utilities.css" layer(components.atelier.utilities)
+	prefix(atw) source(none);
 @import "tw-animate-css";
-@import "./shell/theme.css" layer(atelier.components);
-@import "./shell/document.css" layer(atelier.components);
-@import "./render/chrome.css" layer(atelier.components);
+@import "./shell/theme.css" layer(components.atelier.components);
+@import "./shell/document.css" layer(components.atelier.components);
+@import "./render/chrome.css" layer(components.atelier.components);
 @import "./shell/tailwind.css";
 @source "./";
 @source not "./**/*.test.{ts,tsx}";
 @custom-variant dark (&:is(.dark *));
 
 /* Every token carries its dark value in light-dark(); the scheme is the switch. */
-@layer atelier.components {
+@layer components.atelier.components {
 	.atelier-root.dark,
 	.atelier-portal.dark,
 	.dark .atelier-root,
@@ -440,7 +440,7 @@
 	}
 }
 
-@layer atelier.components {
+@layer components.atelier.components {
 	.atelier-root,
 	.atelier-portal,
 	.atelier-root *,
@@ -506,7 +506,7 @@
 	}
 }
 
-@layer atelier.components {
+@layer components.atelier.components {
 	/* Utility to temporarily hide scrollbars (e.g., during programmatic scroll) */
 	.atelier-root .scrollbar-hidden {
 		scrollbar-width: none; /* Firefox */
@@ -538,7 +538,7 @@
 	/* TipTap / ProseMirror base styles */
 }
 
-@layer atelier.components {
+@layer components.atelier.components {
 	.atelier-root
 		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror
