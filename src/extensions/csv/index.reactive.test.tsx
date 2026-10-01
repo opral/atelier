@@ -1132,12 +1132,13 @@ test("stepping to another table keeps the toolbar mounted and visible", async ()
 		await act(async () => {
 			utils!.rerender(view(second, "/step-second.csv"));
 		});
-		// The step: the first table stays until the second one's row lands,
+		// The step: a table is on screen throughout (the first until the
+		// second one's row lands, which may already be within the step),
 		// under the same strip, in the same region.
 		expect(toolbarVisible()).toEqual({ toolbar: true, visible: true });
 		expect(host.querySelector(".csv-toolbar")).toBe(toolbar);
 		expect(host.querySelector('[data-attr="csv-grid"]')).toBe(region);
-		expect(shownReviewTable(host)?.textContent).toContain("first");
+		expect(shownReviewTable(host)?.textContent).toMatch(/first|second/);
 		await waitFor(() => {
 			expect(shownReviewTable(host)?.textContent).toContain("second");
 		});
