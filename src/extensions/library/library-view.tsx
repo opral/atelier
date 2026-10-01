@@ -995,7 +995,9 @@ export function LibraryView({
 			/>
 			<div className="atw:mx-auto atw:flex atw:w-[min(1080px,calc(100%-112px))] atw:flex-1 atw:flex-col atw:pt-9 atw:pb-16 atw:max-sm:w-[calc(100%-32px)]">
 				<header className="atw:flex atw:items-center atw:gap-3 atw:pb-6 atw:@max-[520px]:flex-wrap">
-					<div className="atw:flex atw:min-w-0 atw:flex-auto">
+					<div
+						className={`atw:flex atw:min-w-0 atw:flex-auto ${selecting ? "atw:shrink-0" : ""}`}
+					>
 						{selecting ? (
 							<SelectionToolbar
 								count={selection.size}
@@ -1028,7 +1030,9 @@ export function LibraryView({
 							/>
 						)}
 					</div>
-					{mode === "grid" && kind !== "home" ? (
+					{/* While selecting, the bar needs the room: Search stays (Esc
+					    clears it first), the switch and New wait. */}
+					{mode === "grid" && kind !== "home" && !selecting ? (
 						<LayoutSwitch layout={layout} onChange={setLayout} />
 					) : null}
 					<label className="atw:relative atw:flex atw:h-8 atw:w-56 atw:min-w-24 atw:shrink-[4] atw:items-center atw:@max-[760px]:w-40 atw:@max-[520px]:order-last atw:@max-[520px]:w-full">
@@ -1060,7 +1064,7 @@ export function LibraryView({
 							</button>
 						) : null}
 					</label>
-					{readOnly ? null : (
+					{readOnly || selecting ? null : (
 						<div className="atw:shrink-0">
 							<NewFileMenu
 								align="end"

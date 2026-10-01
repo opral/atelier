@@ -155,8 +155,9 @@ export function SelectionCheckbox({
 	);
 }
 
+// Icon-only below 760px; tighter still on a phone.
 const toolbarButton =
-	"atw:flex atw:h-8 atw:shrink-0 atw:items-center atw:gap-1.5 atw:rounded-lg atw:px-2.5 atw:text-[13px] atw:font-medium atw:text-fg-muted atw:transition-colors atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none";
+	"atw:flex atw:h-8 atw:shrink-0 atw:items-center atw:justify-center atw:gap-1.5 atw:rounded-lg atw:px-2.5 atw:@max-[760px]:w-8 atw:@max-[760px]:px-0 atw:@max-[480px]:w-7 atw:text-[13px] atw:font-medium atw:text-fg-muted atw:transition-colors atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none";
 
 /**
  * What can be done with the selection. Its labels give way to icons in a
@@ -215,7 +216,7 @@ export function SelectionToolbar({
 				<SelectionBox state={all ? true : "mixed"} />
 			</button>
 			<span
-				className="atw:shrink-0 atw:pr-2 atw:pl-1.5 atw:text-[15px] atw:font-semibold atw:text-fg"
+				className="atw:shrink-0 atw:pr-2 atw:pl-1.5 atw:text-[15px] atw:font-semibold atw:text-fg atw:@max-[480px]:pr-1 atw:@max-[480px]:text-[14px]"
 				aria-live="polite"
 			>
 				{count} selected
@@ -228,7 +229,7 @@ export function SelectionToolbar({
 				className={toolbarButton}
 			>
 				<FolderInput className="atw:size-3.5" aria-hidden="true" />
-				<span className="atw:@max-[860px]:hidden">Move</span>
+				<span className="atw:@max-[760px]:hidden">Move</span>
 			</button>
 			<button
 				type="button"
@@ -238,7 +239,7 @@ export function SelectionToolbar({
 				className={toolbarButton}
 			>
 				<Download className="atw:size-3.5" aria-hidden="true" />
-				<span className="atw:@max-[860px]:hidden">Download</span>
+				<span className="atw:@max-[760px]:hidden">Download</span>
 			</button>
 			<button
 				type="button"
@@ -248,7 +249,7 @@ export function SelectionToolbar({
 				className={`${toolbarButton} atw:hover:bg-danger-subtle atw:hover:text-danger`}
 			>
 				<Trash2 className="atw:size-3.5" aria-hidden="true" />
-				<span className="atw:@max-[860px]:hidden">Delete</span>
+				<span className="atw:@max-[760px]:hidden">Delete</span>
 			</button>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
