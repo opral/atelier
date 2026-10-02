@@ -18,3 +18,12 @@ test("keeps utilities that only set private variables on their class", () => {
 	assert.match(css, /\.atw\\:ring-inset \{ --atw-tw-ring-inset: inset/);
 	assert.doesNotMatch(css, /atelier-root/);
 });
+
+test("leaves nested and mixed selectors alone", () => {
+	const css = isolateTailwind(
+		".x { &:focus-visible { --tw-ring-color: red; } }\n*, .foo { --tw-a: 1; }",
+	);
+	assert.match(css, /&:focus-visible \{ --atw-tw-ring-color: red/);
+	assert.match(css, /\*, \.foo \{ --atw-tw-a: 1/);
+	assert.doesNotMatch(css, /atelier-root/);
+});

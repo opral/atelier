@@ -1654,6 +1654,10 @@ function LayoutShellLoadedContentResolved({
 	const preHistoricalDocumentsRef = useRef<readonly PreHistoricalDocument[]>(
 		[],
 	);
+	// The non-document tab (History, Library, a host view) a historical file
+	// opened beside; Exit returns to it wherever it sits in the strip.
+	const historicalOriginRef = useRef<string | null>(null);
+	const activateMainViewRef = useRef<((instance: string) => void) | null>(null);
 	const restoreLiveDocumentsRef = useRef<
 		| ((
 				documents: readonly PreHistoricalDocument[],
@@ -1666,6 +1670,8 @@ function LayoutShellLoadedContentResolved({
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
 			historicalRequestRef.current += 1;
 			historicalOpenPathRef.current = null;
+			const origin = historicalOriginRef.current;
+			historicalOriginRef.current = null;
 			// State updaters must stay pure: read the current review through the
 			// ref and run the close/restore side effects here, outside React's
 			// updater pass, or their queued panel updates can be dropped.
@@ -1688,6 +1694,8 @@ function LayoutShellLoadedContentResolved({
 						focusActive: restoreLiveDocument,
 					});
 				}
+				if (origin && restoreLiveDocument)
+					activateMainViewRef.current?.(origin);
 			}
 			setDiffReview(null);
 		},
@@ -2458,6 +2466,18 @@ function LayoutShellLoadedContentResolved({
 		[openResolvedFileView, updateWorkspace],
 	);
 	restoreLiveDocumentsRef.current = restoreLiveDocuments;
+	activateMainViewRef.current = (instance: string) =>
+		updateWorkspace((current) =>
+			current.areas.main.views.some((view) => view.instance === instance)
+				? {
+						...current,
+						areas: {
+							...current.areas,
+							main: { ...current.areas.main, activeInstance: instance },
+						},
+					}
+				: current,
+		);
 	const navigationActiveView = mainArea.views.find(
 		(view) => view.instance === mainArea.activeInstance,
 	);
@@ -2954,6 +2974,12 @@ function LayoutShellLoadedContentResolved({
 				const historicalPath = snapshotPaths.get(file.id);
 				if (!historicalPath) return;
 				historicalOpenPathRef.current = historicalPath;
+				const main = panelStatesRef.current.main;
+				const active = main.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				if (active && !isDocumentView(active))
+					historicalOriginRef.current = active.instance;
 				openResolvedFileView({
 					area: "main",
 					fileId: file.id,
@@ -4627,8 +4653,14 @@ function LayoutShellLoadedContentResolved({
 				previousCommitId: base?.commitId ?? null,
 				...(createdAt ? { createdAt } : {}),
 			});
+			// A newer open or an Exit may have superseded this one while it
+			// read; reveal only the checkpoint that was asked for.
 			const session = diffReviewRef.current;
-			const first = session?.kind === "historical" ? session.files[0] : null;
+			const first =
+				session?.kind === "historical" &&
+				session.range?.afterCommitId === options.target.commitId
+					? session.files[0]
+					: null;
 			if (options.reveal && first) {
 				openHistoricalCheckpointFileRef.current?.(first.path);
 			}
