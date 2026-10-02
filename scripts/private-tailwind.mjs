@@ -5,6 +5,14 @@ import postcss from "postcss";
 
 const entry = fileURLToPath(new URL("../src/index.css", import.meta.url));
 const scope = ":where(.atelier-root, .atelier-portal)";
+const UNIVERSAL_SELECTORS = new Set([
+	"*",
+	"::before",
+	"::after",
+	"::backdrop",
+	":before",
+	":after",
+]);
 
 export function isolateTailwind(css) {
 	const ast = postcss.parse(css.replaceAll("--tw-", "--atw-tw-"));
@@ -33,7 +41,12 @@ export function isolateTailwind(css) {
 	ast.walkRules((rule) => {
 		// Tailwind's fallback for browsers without @property initializes its
 		// private variables on universal selectors. Keep even this scoped.
+		// Only those: utilities such as `ring-accent` or `ring-inset` also set
+		// nothing but private variables, and must keep their class selector.
 		if (
+			rule.selectors.every((selector) =>
+				UNIVERSAL_SELECTORS.has(selector.trim()),
+			) &&
 			rule.nodes.every(
 				(node) => node.type === "decl" && node.prop.startsWith("--atw-tw-"),
 			)

@@ -110,3 +110,56 @@ describe("pinned home", () => {
 		expect(next.activeInstance).toBe("home_view-2");
 	});
 });
+
+describe("preview tab", () => {
+	const doc = (id: string, extra: Record<string, unknown> = {}) => ({
+		kind: "atelier_file",
+		instance: `atelier_file:${id}`,
+		state: { fileId: id, filePath: `/${id}.md` },
+		...extra,
+	});
+	const kept = { views: [doc("kept")], activeInstance: "atelier_file:kept" };
+
+	test("opens beside the tab in front and is replaced by the next preview", () => {
+		const first = behavior.place(kept, doc("a"), { preview: true });
+		expect(first.views.map((view) => view.instance)).toEqual([
+			"atelier_file:kept",
+			"atelier_file:a",
+		]);
+		expect(first.views[1]?.isPending).toBe(true);
+		// Stepping through files keeps one preview, wherever it sits.
+		const activeKept = { ...first, activeInstance: "atelier_file:kept" };
+		const second = behavior.place(activeKept, doc("b"), { preview: true });
+		expect(second.views.map((view) => view.instance)).toEqual([
+			"atelier_file:kept",
+			"atelier_file:b",
+		]);
+		expect(second.activeInstance).toBe("atelier_file:b");
+	});
+
+	test("an open document is brought to the front as it is", () => {
+		const area = {
+			views: [doc("kept"), doc("a", { isPending: true })],
+			activeInstance: "atelier_file:a",
+		};
+		const toKept = behavior.place(area, doc("kept"), { preview: true });
+		expect(toKept.views).toHaveLength(2);
+		expect(toKept.activeInstance).toBe("atelier_file:kept");
+		expect(toKept.views[0]?.isPending).toBeFalsy();
+		// A route re-opening the preview does not keep it.
+		const again = behavior.place(area, doc("a"));
+		expect(again.views[1]?.isPending).toBe(true);
+		// ⌘-click on the preview's file keeps it.
+		const keep = behavior.place(area, doc("a"), { newTab: true });
+		expect(keep.views).toHaveLength(2);
+		expect(keep.views[1]?.isPending).toBeFalsy();
+	});
+
+	test("a new tab wins over preview", () => {
+		const next = behavior.place(kept, doc("a"), {
+			preview: true,
+			newTab: true,
+		});
+		expect(next.views[1]?.isPending).toBeFalsy();
+	});
+});

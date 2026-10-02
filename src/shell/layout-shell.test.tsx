@@ -37,6 +37,7 @@ import type {
 	AtelierExtensionRegistration,
 	AtelierExtensionRuntime,
 } from "@/extension-api";
+import { ATELIER_BUILTIN_EXTENSION_IDS } from "@/extension-api";
 
 // History scopes itself to the active file; these flows exercise the
 // repository timeline, so switch back when a file is on screen.
@@ -1682,6 +1683,110 @@ describe("diff review navigation", () => {
 			// The switch that used to lag.
 			await viewCheckpoint(first.commitId, second.commitId);
 			await viewCheckpoint(second.commitId, third.commitId);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	// The History tab opens a checkpoint with its first file. The file opens
+	// beside History, not over it, and Exit returns to History even when other
+	// tabs sit to its right.
+	test("a revealed checkpoint opens beside the History tab and Exit returns to it", async () => {
+		const lix = await openLix();
+		const sessionStateStore = createMemorySessionStateStore();
+		let runtime: AtelierExtensionRuntime | null = null;
+		const extensions = [
+			{
+				id: "atelier.test.diff-probe",
+				name: "Diff probe",
+				placement: ["left"] as const,
+				Component: ({
+					atelier,
+				}: {
+					readonly atelier: AtelierExtensionRuntime;
+				}) => {
+					runtime = atelier;
+					return <div data-testid="diff-probe" />;
+				},
+			},
+		] as unknown as readonly AtelierExtensionRegistration[];
+		const atelier = createAtelier({ lix, sessionStateStore, extensions });
+		let utils: ReturnType<typeof render> | undefined;
+		const fileId = fakeUuid("checkpoint-reveal");
+		try {
+			await qb(lix)
+				.insertInto("lix_file")
+				.values([
+					{
+						id: fileId,
+						path: "/reveal.md",
+						content: new TextEncoder().encode("# one\n"),
+					},
+					{
+						id: fakeUuid("checkpoint-reveal-other"),
+						path: "/other.md",
+						content: new TextEncoder().encode("# other\n"),
+					},
+				])
+				.execute();
+			const first = await createCheckpoint(lix);
+			await qb(lix)
+				.updateTable("lix_file")
+				.where("id", "=", fileId)
+				.set({ content: new TextEncoder().encode("# two\n") })
+				.execute();
+			const second = await createCheckpoint(lix);
+
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<V2LayoutShell instance={atelier} extensions={extensions} />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await screen.findByRole("heading", { name: "Start writing" });
+			await act(async () => {
+				await atelier.views.open("atelier.test.diff-probe", { area: "left" });
+				await atelier.views.open(ATELIER_BUILTIN_EXTENSION_IDS.history, {
+					newTab: true,
+				});
+				await atelier.documents.open("/other.md", { newTab: true });
+				await atelier.views.open(ATELIER_BUILTIN_EXTENSION_IDS.history);
+			});
+			await screen.findByTestId("diff-probe");
+			const main = () => sessionStateStore.getSnapshot()?.areas.main;
+			const active = () =>
+				main()?.views.find((view) => view.instance === main()?.activeInstance);
+			await waitFor(() =>
+				expect(active()?.kind).toBe(ATELIER_BUILTIN_EXTENSION_IDS.history),
+			);
+			const tabsBefore = main()?.views.length ?? 0;
+
+			const diff = runtime!.diff;
+			await act(async () => {
+				await diff.open({
+					base: { commitId: first.commitId },
+					target: { commitId: second.commitId },
+					reveal: true,
+				});
+			});
+			await waitFor(
+				() => {
+					expect(active()?.state?.filePath).toBe("/reveal.md");
+					expect(active()?.state?.afterCommitId).toBe(second.commitId);
+				},
+				{ timeout: ASYNC_UI_TIMEOUT },
+			);
+			expect(main()?.views.length).toBe(tabsBefore + 1);
+
+			await act(async () => runtime!.diff.exit());
+			await waitFor(() =>
+				expect(active()?.kind).toBe(ATELIER_BUILTIN_EXTENSION_IDS.history),
+			);
+			expect(main()?.views.length).toBe(tabsBefore);
 		} finally {
 			await act(async () => utils?.unmount());
 			await lix.close();
