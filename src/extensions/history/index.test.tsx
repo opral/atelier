@@ -1220,8 +1220,10 @@ describe("checkpoint conversation flows", () => {
 			</LixProvider>,
 		);
 		try {
-			const thread = await screen.findByRole("list", { name: "Comments" });
-			expect(await within(thread).findByText("Ready?")).toBeInTheDocument();
+			await waitFor(() => {
+				const thread = screen.getByRole("list", { name: "Comments" });
+				expect(within(thread).getByText("Ready?")).toBeInTheDocument();
+			});
 			expect(
 				screen.queryByRole("button", { name: "Resolve conversation" }),
 			).toBeNull();

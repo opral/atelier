@@ -596,6 +596,7 @@ const BlockConversationsController = memo(
 		// opening another file puts a draft away, it does not drop it.
 		const [drafts, draftsVersion] = useBlockCommentDrafts(lix);
 		const [active, setActive] = useState<ActiveConversation | null>(null);
+		const leavingNodeId = useRef<string | null>(null);
 		const [hovered, setHoveredState] = useState<Hover | null>(null);
 		// The same hover again is no change (every pointer event reports it).
 		const setHovered = useCallback((next: Hover | null) => {
@@ -604,7 +605,11 @@ const BlockConversationsController = memo(
 
 		// A conversation whose block went away closes with it.
 		useEffect(() => {
-			if (active && !placed.some((entry) => entry.key === active.nodeId))
+			if (
+				active &&
+				leavingNodeId.current !== active.nodeId &&
+				!placed.some((entry) => entry.key === active.nodeId)
+			)
 				setActive(null);
 		}, [active, placed]);
 
@@ -743,27 +748,30 @@ const BlockConversationsController = memo(
 		// Esc from a conversation: the editor takes focus back, with the caret
 		// in the commented block unless it already is (a click into the block
 		// opened it). From a card or a count the focus was never there.
-		const returnToEditor = useCallback(() => {
-			const nodeId = activeRef.current?.nodeId;
-			setActive(null);
-			if (!nodeId || !hasView(editor) || editor.view.hasFocus()) return;
-			const entry = latest.current.placed.find(
-				(candidate) => candidate.key === nodeId,
-			);
-			const offset = entry ? topLevelOffset(editor, entry.index) : null;
-			editor
-				.chain()
-				.focus(null, { scrollIntoView: false })
-				.command(({ tr }) => {
-					if (offset === null) return true;
-					const block = tr.doc.child(entry!.index);
-					const { from } = tr.selection;
-					if (from > offset && from < offset + block.nodeSize) return true;
-					tr.setSelection(TextSelection.near(tr.doc.resolve(offset + 1)));
-					return true;
-				})
-				.run();
-		}, [editor]);
+		const returnToEditor = useCallback(
+			(previousEntry?: PlacedThread) => {
+				const nodeId = activeRef.current?.nodeId;
+				setActive(null);
+				if (!nodeId || !hasView(editor) || editor.view.hasFocus()) return;
+				const entry =
+					latest.current.placed.find((candidate) => candidate.key === nodeId) ??
+					previousEntry;
+				const offset = entry ? topLevelOffset(editor, entry.index) : null;
+				editor
+					.chain()
+					.focus(null, { scrollIntoView: false })
+					.command(({ tr }) => {
+						if (offset === null) return true;
+						const block = tr.doc.child(entry!.index);
+						const { from } = tr.selection;
+						if (from > offset && from < offset + block.nodeSize) return true;
+						tr.setSelection(TextSelection.near(tr.doc.resolve(offset + 1)));
+						return true;
+					})
+					.run();
+			},
+			[editor],
+		);
 
 		const startComment = useCallback(() => {
 			if (editor.isDestroyed || !latest.current.available) return;
@@ -929,7 +937,8 @@ const BlockConversationsController = memo(
 					(conversation) => conversation.conversationId !== conversationId,
 				);
 				if (other) requestConversation(other.conversationId, entry!.index);
-				else if (activeRef.current?.nodeId === entry?.key) returnToEditor();
+				else if (activeRef.current?.nodeId === entry?.key)
+					returnToEditor(entry);
 			},
 			[requestConversation, returnToEditor],
 		);
@@ -941,31 +950,43 @@ const BlockConversationsController = memo(
 		// thread still on the block, that one's reply field takes the caret.
 		const deleteBlockComment = useCallback(
 			async (comment: ThreadComment) => {
-				const { conversationId, conversationDeleted } = await deleteComment(
-					lix,
-					comment.id,
+				// Observers may publish the removed thread before the write resolves.
+				const entry = latest.current.placed.find((candidate) =>
+					candidate.conversations.some((conversation) =>
+						conversation.comments.some(
+							(threadComment) => threadComment.id === comment.id,
+						),
+					),
 				);
-				if (!conversationDeleted) return { focusHandled: false };
-				const entry = placedWith(conversationId);
-				const reply = drafts.reply(conversationId);
-				if (reply && hasCommentText(reply)) {
-					drafts.setReply(conversationId, EMPTY_DRAFT);
-					if (entry && entry.index < editor.state.doc.childCount) {
-						const blockId = blockNodeId(editor.state.doc.child(entry.index));
-						drafts.setComment(
-							fileId,
-							pendingDraftKeys(
-								{ blockId, index: entry.index },
-								latest.current.rowOfBlock[entry.index] ?? null,
-							),
-							reply,
-						);
+				leavingNodeId.current = entry?.key ?? null;
+				try {
+					const { conversationId, conversationDeleted } = await deleteComment(
+						lix,
+						comment.id,
+					);
+					if (!conversationDeleted) return { focusHandled: false };
+					const reply = drafts.reply(conversationId);
+					if (reply && hasCommentText(reply)) {
+						drafts.setReply(conversationId, EMPTY_DRAFT);
+						if (entry && entry.index < editor.state.doc.childCount) {
+							const blockId = blockNodeId(editor.state.doc.child(entry.index));
+							drafts.setComment(
+								fileId,
+								pendingDraftKeys(
+									{ blockId, index: entry.index },
+									latest.current.rowOfBlock[entry.index] ?? null,
+								),
+								reply,
+							);
+						}
 					}
+					leaveConversation(conversationId, entry);
+					return { focusHandled: true };
+				} finally {
+					leavingNodeId.current = null;
 				}
-				leaveConversation(conversationId, entry);
-				return { focusHandled: true };
 			},
-			[drafts, editor, fileId, leaveConversation, lix, placedWith],
+			[drafts, editor, fileId, leaveConversation, lix],
 		);
 
 		// Resolve: what the reply field holds is posted with it, and the
@@ -973,14 +994,19 @@ const BlockConversationsController = memo(
 		const resolveConversation = useCallback(
 			async (conversationId: string) => {
 				const entry = placedWith(conversationId);
-				await setConversationResolved(
-					lix,
-					conversationId,
-					true,
-					drafts.reply(conversationId),
-				);
-				drafts.setReply(conversationId, EMPTY_DRAFT);
-				leaveConversation(conversationId, entry);
+				leavingNodeId.current = entry?.key ?? null;
+				try {
+					await setConversationResolved(
+						lix,
+						conversationId,
+						true,
+						drafts.reply(conversationId),
+					);
+					drafts.setReply(conversationId, EMPTY_DRAFT);
+					leaveConversation(conversationId, entry);
+				} finally {
+					leavingNodeId.current = null;
+				}
 			},
 			[drafts, leaveConversation, lix, placedWith],
 		);
