@@ -663,6 +663,45 @@ describe("HistoryView", () => {
 		await lix.close();
 	});
 
+	test("in the main area a checkpoint opens with its first file; the Comment chip does not", async () => {
+		const lix = await openLix();
+		await createCheckpoint(lix);
+		const checkpoint = await createCheckpoint(lix);
+		const open = vi.fn(async () => {});
+		let view: ReturnType<typeof render> | undefined;
+		await act(async () => {
+			view = render(
+				<LixProvider lix={lix}>
+					<Suspense fallback={null}>
+						<HistoryView atelier={atelierStub({ open })} area="main" />
+					</Suspense>
+				</LixProvider>,
+			);
+		});
+		const checkpointList = await screen.findByRole("list", {
+			name: "Checkpoints",
+		});
+		const [latest] = await within(checkpointList).findAllByRole("listitem");
+		fireEvent.click(
+			within(latest!).getByRole("button", { name: /Latest checkpoint/ }),
+		);
+		expect(open).toHaveBeenLastCalledWith({
+			base: { commitId: expect.any(String) },
+			target: { commitId: checkpoint.commitId },
+			reveal: true,
+		});
+		fireEvent.click(
+			within(latest!).getByRole("button", { name: "Comment on checkpoint" }),
+		);
+		expect(open).toHaveBeenLastCalledWith({
+			base: { commitId: expect.any(String) },
+			target: { commitId: checkpoint.commitId },
+		});
+
+		await act(async () => view?.unmount());
+		await lix.close();
+	});
+
 	test("opens a checkpoint file without collapsing the checkpoint", async () => {
 		const lix = await openLix();
 		await createCheckpoint(lix);

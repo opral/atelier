@@ -2958,6 +2958,9 @@ function LayoutShellLoadedContentResolved({
 					area: "main",
 					fileId: file.id,
 					filePath: historicalPath,
+					// Opened from the History tab, the checkpoint's files open
+					// beside it, so leaving the checkpoint returns to the list.
+					preserveActiveView: true,
 					state: historicalRevisionStateForPath(
 						historicalPath,
 						historicalRange.afterCommitId,
@@ -4624,6 +4627,11 @@ function LayoutShellLoadedContentResolved({
 				previousCommitId: base?.commitId ?? null,
 				...(createdAt ? { createdAt } : {}),
 			});
+			const session = diffReviewRef.current;
+			const first = session?.kind === "historical" ? session.files[0] : null;
+			if (options.reveal && first) {
+				openHistoricalCheckpointFileRef.current?.(first.path);
+			}
 		},
 		[handleOpenWorkingChangesReview, handleViewCheckpoint, lix],
 	);

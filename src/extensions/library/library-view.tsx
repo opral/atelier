@@ -1333,7 +1333,9 @@ const NewButton = forwardRef<
 			data-attr="file-new-wide"
 			data-testid="library-new"
 			title="Create something new"
-			className="atw:h-8 atw:px-3 atw:py-0 atw:text-[13px]"
+			// A header control beside Search: the accent says primary, without
+			// the glow the empty-state actions carry.
+			className="atw:h-8 atw:rounded-[8px] atw:px-3 atw:py-0 atw:text-[13px] atw:font-semibold atw:shadow-sm"
 			{...props}
 		>
 			<Plus aria-hidden="true" className="atw:size-3.5" strokeWidth={2.4} />

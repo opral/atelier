@@ -64,7 +64,7 @@ import { DeleteDialog, ToastLine, type LibraryToast } from "./dialogs";
 import { NEW_FILE, isTypingTarget } from "./new-file";
 
 /** With a host Home, Home takes All's place at the top. */
-const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
+const SIDEBAR_KINDS: readonly (LibraryKind | "database" | "history")[] = [
 	"all",
 	"pages",
 	"tables",
@@ -72,8 +72,21 @@ const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
 	"media",
 	"files",
 	"database",
+	"history",
 	"other",
 ];
+
+/** Sidebar rows that open a repository view rather than a Library section. */
+const SIDEBAR_VIEWS = {
+	database: {
+		label: "Database",
+		extensionId: ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer,
+	},
+	history: {
+		label: "History",
+		extensionId: ATELIER_BUILTIN_EXTENSION_IDS.history,
+	},
+} as const;
 
 export function isNewTabClick(event: MouseEvent): boolean {
 	return event.metaKey || event.ctrlKey || event.button === 1;
@@ -170,12 +183,14 @@ export function LibrarySidebar({
 			? "added"
 			: "modified";
 	const active = atelier.views.activeMain;
-	const activeKind: LibraryKind | "database" | null =
+	const activeKind: LibraryKind | "database" | "history" | null =
 		active?.extensionId === LIBRARY_EXTENSION_ID
 			? libraryLocationFromState(active.state, { hasHome }).kind
 			: active?.extensionId === ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer
 				? "database"
-				: null;
+				: active?.extensionId === ATELIER_BUILTIN_EXTENSION_IDS.history
+					? "history"
+					: null;
 	const recent = data
 		? visibleRecentFiles(
 				data,
@@ -266,14 +281,18 @@ export function LibrarySidebar({
 			<ul className="atw:flex atw:flex-col atw:gap-px">
 				{sections.map((kind) => {
 					const isActive = activeKind === kind;
-					const label =
-						kind === "database" ? "Database" : LIBRARY_KIND_COPY[kind].label;
+					// Database and History are views of the repository, not kinds
+					// of file: they open their own tab and carry no change mark.
+					const isView = kind === "database" || kind === "history";
+					const label = isView
+						? SIDEBAR_VIEWS[kind].label
+						: LIBRARY_KIND_COPY[kind].label;
 					// Files holds everything, so it rolls up every change; Home and
 					// All sum the workspace up and carry no mark of their own.
 					const rollup =
 						kind === "files"
 							? filesRollup
-							: kind !== "database" && kind !== "all" && kind !== "home"
+							: !isView && kind !== "all" && kind !== "home"
 								? marks.kinds.get(kind)
 								: undefined;
 					return (
@@ -283,7 +302,7 @@ export function LibrarySidebar({
 								dimmed={
 									marks.active &&
 									rollup === undefined &&
-									kind !== "database" &&
+									!isView &&
 									kind !== "all" &&
 									kind !== "home"
 								}
@@ -292,16 +311,17 @@ export function LibrarySidebar({
 								testId={`library-kind-${kind}`}
 								trailing={rollup ? <DiffGlyph kind={rollup} size={11} /> : null}
 								onClick={(event) => {
-									if (kind === "database") {
+									if (isView) {
+										const sidebarView = SIDEBAR_VIEWS[kind];
 										void atelier.views
-											.open(ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer, {
+											.open(sidebarView.extensionId, {
 												// Activated if open; otherwise beside what is in
 												// front, never in its place.
 												newTab: true,
 											})
 											.catch((error: unknown) => {
 												console.error(
-													"library: unable to open the SQL Explorer",
+													`library: unable to open ${sidebarView.label}`,
 													error,
 												);
 											});
