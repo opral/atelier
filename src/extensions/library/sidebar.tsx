@@ -14,6 +14,13 @@ import {
 	Trash2,
 } from "lucide-react";
 import { DiffGlyph } from "@/components/diff-glyph";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useLix } from "@/lib/lix-react";
 import {
 	ContextMenu,
@@ -87,6 +94,17 @@ const SIDEBAR_VIEWS = {
 		extensionId: ATELIER_BUILTIN_EXTENSION_IDS.history,
 	},
 } as const;
+
+/**
+ * Main views the sidebar lists itself (the file explorer is its Files row);
+ * Other offers the rest.
+ */
+const LISTED_VIEW_IDS: ReadonlySet<string> = new Set([
+	LIBRARY_EXTENSION_ID,
+	ATELIER_BUILTIN_EXTENSION_IDS.files,
+	ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer,
+	ATELIER_BUILTIN_EXTENSION_IDS.history,
+]);
 
 export function isNewTabClick(event: MouseEvent): boolean {
 	return event.metaKey || event.ctrlKey || event.button === 1;
@@ -183,6 +201,11 @@ export function LibrarySidebar({
 			? "added"
 			: "modified";
 	const active = atelier.views.activeMain;
+	// Every other main view — those not in the list above — sits behind
+	// Other, beside the files no kind claims, so the tab strip needs no "+".
+	const otherViews = (atelier.views.mainViews ?? []).filter(
+		(view) => !LISTED_VIEW_IDS.has(view.extensionId),
+	);
 	const activeKind: LibraryKind | "database" | "history" | null =
 		active?.extensionId === LIBRARY_EXTENSION_ID
 			? libraryLocationFromState(active.state, { hasHome }).kind
@@ -190,7 +213,18 @@ export function LibrarySidebar({
 				? "database"
 				: active?.extensionId === ATELIER_BUILTIN_EXTENSION_IDS.history
 					? "history"
-					: null;
+					: otherViews.some((view) => view.extensionId === active?.extensionId)
+						? "other"
+						: null;
+	const openView = (extensionId: string, label: string) => {
+		void atelier.views
+			// Activated if open; otherwise beside what is in front, never in
+			// its place.
+			.open(extensionId, { newTab: true })
+			.catch((error: unknown) => {
+				console.error(`library: unable to open ${label}`, error);
+			});
+	};
 	const recent = data
 		? visibleRecentFiles(
 				data,
@@ -299,6 +333,53 @@ export function LibrarySidebar({
 							: !isView && kind !== "all" && kind !== "home"
 								? marks.kinds.get(kind)
 								: undefined;
+					if (kind === "other" && otherViews.length > 0) {
+						return (
+							<li key={kind}>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<SidebarRow
+											active={isActive}
+											dimmed={marks.active && rollup === undefined}
+											icon={<KindIcon kind={kind} />}
+											label={label}
+											testId="library-kind-other"
+											trailing={
+												rollup ? <DiffGlyph kind={rollup} size={11} /> : null
+											}
+											onClick={() => {}}
+										/>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										side="right"
+										align="start"
+										className="atw:min-w-48 atw:text-[13px]"
+										data-testid="library-other-menu"
+									>
+										<DropdownMenuItem
+											onSelect={() => openLibraryLocation(atelier, "other")}
+										>
+											<KindIcon kind="file" />
+											{LIBRARY_KIND_COPY.other.label} files
+										</DropdownMenuItem>
+										<DropdownMenuSeparator />
+										{otherViews.map((view) => {
+											const Icon = view.icon;
+											return (
+												<DropdownMenuItem
+													key={view.extensionId}
+													onSelect={() => openView(view.extensionId, view.name)}
+												>
+													{Icon ? <Icon className="atw:size-3.5" /> : null}
+													{view.name}
+												</DropdownMenuItem>
+											);
+										})}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</li>
+						);
+					}
 					return (
 						<li key={kind}>
 							<SidebarRow
@@ -317,18 +398,7 @@ export function LibrarySidebar({
 								onClick={(event) => {
 									if (isView) {
 										const sidebarView = SIDEBAR_VIEWS[kind];
-										void atelier.views
-											.open(sidebarView.extensionId, {
-												// Activated if open; otherwise beside what is in
-												// front, never in its place.
-												newTab: true,
-											})
-											.catch((error: unknown) => {
-												console.error(
-													`library: unable to open ${sidebarView.label}`,
-													error,
-												);
-											});
+										openView(sidebarView.extensionId, sidebarView.label);
 										return;
 									}
 									openLibraryLocation(atelier, kind, {

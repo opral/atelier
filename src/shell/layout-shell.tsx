@@ -102,6 +102,7 @@ import {
 	FILE_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
+	LIBRARY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 	isDocumentView,
 } from "../extension-runtime/extension-instance-helpers";
@@ -1353,6 +1354,17 @@ function LayoutShellLoadedContentResolved({
 	const preserveUnknownExtensionKinds =
 		installedExtensionLoad.status !== "ready";
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
+	const mainViews = useMemo(
+		() =>
+			visibleExtensions
+				.filter((view) => view.placement?.includes("main"))
+				.map((view) => ({
+					extensionId: view.kind,
+					name: view.label,
+					icon: view.icon,
+				})),
+		[visibleExtensions],
+	);
 	const mainAreaOptions = configuration.mainArea;
 	const mainBehavior = useMemo<CentralSlotBehavior>(() => {
 		const mainKinds = new Set<ExtensionKind>();
@@ -1466,6 +1478,15 @@ function LayoutShellLoadedContentResolved({
 	const rightPanel = effectiveWorkspace.areas.right;
 	const focusedArea = effectiveWorkspace.focusedArea;
 	const isLeftCollapsed = panelSizes.left <= MIN_VISIBLE_PANEL_SIZE;
+	// The Library in the left area offers every main view (its Other menu),
+	// so the tab strip drops its "+" while the Library is showing there.
+	const libraryOffersViews =
+		!isLeftCollapsed &&
+		leftPanel.views.some(
+			(view) =>
+				view.kind === LIBRARY_EXTENSION_KIND &&
+				view.instance === leftPanel.activeInstance,
+		);
 	const isRightCollapsed = panelSizes.right <= MIN_VISIBLE_PANEL_SIZE;
 	const [sidePanelRevealIntent, setSidePanelRevealIntent] = useState({
 		left: false,
@@ -4516,7 +4537,7 @@ function LayoutShellLoadedContentResolved({
 				isFocused={focusedArea === "main"}
 				onSelectView={handleSelectCentralView}
 				onRemoveView={(instance) => handleRemoveView("main", instance)}
-				onAddView={addViewOnCentral}
+				{...(libraryOffersViews ? {} : { onAddView: addViewOnCentral })}
 				onRenameTab={isHostReadOnly ? undefined : handleRenameTab}
 				onKeepView={(instance) =>
 					setAreaState("main", (area) => activatePanelExtension(area, instance))
@@ -4526,6 +4547,7 @@ function LayoutShellLoadedContentResolved({
 		);
 	}, [
 		addViewOnCentral,
+		libraryOffersViews,
 		handleRenameTab,
 		isHostReadOnly,
 		mainArea,
@@ -4890,6 +4912,7 @@ function LayoutShellLoadedContentResolved({
 								state: activeMainState ?? {},
 							}
 						: null,
+				mainViews,
 			},
 			preferences: {
 				get: (extensionId: string, key: string) =>
@@ -4928,6 +4951,7 @@ function LayoutShellLoadedContentResolved({
 			activeMainKind,
 			activeMainInstance,
 			activeMainState,
+			mainViews,
 			activeCentralFileId,
 			openFileIds,
 			activeDocumentPath,

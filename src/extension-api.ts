@@ -463,6 +463,15 @@ export type AtelierExtensionRuntime = {
 			readonly instanceId: string;
 			readonly state: AtelierExtensionState;
 		} | null;
+		/**
+		 * The views a person can open in the main area — what an add-view menu
+		 * lists — so a navigation surface can offer them itself.
+		 */
+		readonly mainViews?: readonly {
+			readonly extensionId: string;
+			readonly name: string;
+			readonly icon?: ComponentType<{ className?: string }>;
+		}[];
 	};
 	/** Host contributions to the bundled Library view. */
 	readonly library?: AtelierLibraryOptions;
