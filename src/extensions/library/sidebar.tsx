@@ -95,6 +95,9 @@ const SIDEBAR_VIEWS = {
 	},
 } as const;
 
+/** Other's menu reads like the sidebar's other menus (Recent's, the tab's). */
+const OTHER_MENU_ITEM = "atw:py-1 atw:text-[13px]";
+
 /**
  * Main views the sidebar lists itself (the file explorer is its Files row);
  * Other offers the rest.
@@ -216,6 +219,7 @@ export function LibrarySidebar({
 					: otherViews.some((view) => view.extensionId === active?.extensionId)
 						? "other"
 						: null;
+	const otherMenuPointer = useRef(false);
 	const openView = (extensionId: string, label: string) => {
 		void atelier.views
 			// Activated if open; otherwise beside what is in front, never in
@@ -340,7 +344,8 @@ export function LibrarySidebar({
 									<DropdownMenuTrigger asChild>
 										<SidebarRow
 											active={isActive}
-											dimmed={marks.active && rollup === undefined}
+											// Its views are never part of a review: it stays lit.
+											dimmed={false}
 											icon={<KindIcon kind={kind} />}
 											label={label}
 											testId="library-kind-other"
@@ -353,10 +358,20 @@ export function LibrarySidebar({
 									<DropdownMenuContent
 										side="right"
 										align="start"
-										className="atw:min-w-48 atw:text-[13px]"
+										className="atw:min-w-48"
 										data-testid="library-other-menu"
+										// A pick with the mouse leaves no focus ring on the row;
+										// Esc and the keyboard still return to it.
+										onCloseAutoFocus={(event) => {
+											if (otherMenuPointer.current) event.preventDefault();
+											otherMenuPointer.current = false;
+										}}
+										onPointerDown={() => {
+											otherMenuPointer.current = true;
+										}}
 									>
 										<DropdownMenuItem
+											className={OTHER_MENU_ITEM}
 											onSelect={() => openLibraryLocation(atelier, "other")}
 										>
 											<KindIcon kind="file" />
@@ -368,6 +383,7 @@ export function LibrarySidebar({
 											return (
 												<DropdownMenuItem
 													key={view.extensionId}
+													className={OTHER_MENU_ITEM}
 													onSelect={() => openView(view.extensionId, view.name)}
 												>
 													{Icon ? <Icon className="atw:size-3.5" /> : null}
