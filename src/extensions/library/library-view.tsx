@@ -2163,7 +2163,7 @@ function RowList({
 								</span>
 							) : null}
 							<span
-								className={`atw:shrink-0 atw:text-right atw:text-[12px] atw:text-fg-faint ${variant === "list" ? LIST_TIME_COLUMN : ""}`}
+								className={`atw:shrink-0 atw:text-fg-faint ${variant === "list" ? `atw:text-left atw:text-[13px] ${LIST_TIME_COLUMN}` : "atw:text-right atw:text-[12px]"}`}
 							>
 								{meta}
 							</span>
@@ -2206,18 +2206,18 @@ function RowList({
 	return (
 		<div className="atw:-mx-3 atw:flex atw:flex-col">
 			{variant === "list" ? (
-				// Column heads, set like the rows so each sits over its column.
+				// Column heads, set like the rows so each starts where its column
+				// starts: Name at the icon, under the page title's edge.
 				<div
 					aria-hidden="true"
 					data-testid="library-list-head"
 					className="atw:mb-1 atw:flex atw:h-8 atw:items-center atw:gap-3 atw:border-b atw:border-border-subtle atw:pr-11 atw:pl-3 atw:text-[12px] atw:font-medium atw:text-fg-subtle"
 				>
-					<span className="atw:w-[18px] atw:shrink-0" />
 					<span className="atw:min-w-0 atw:flex-1">Name</span>
 					<span className={`${LIST_FOLDER_COLUMN} atw:text-[12px]`}>
 						Folder
 					</span>
-					<span className={`atw:shrink-0 atw:text-right ${LIST_TIME_COLUMN}`}>
+					<span className={`atw:shrink-0 ${LIST_TIME_COLUMN}`}>
 						Last edited
 					</span>
 					<span className="atw:w-3.5 atw:shrink-0" />
