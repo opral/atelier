@@ -16,7 +16,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { zipSync } from "fflate";
-import { artifactMode, installBrowserArtifact } from "./lix-ci-artifacts.mjs";
+import {
+	artifactMode,
+	installBrowserArtifact,
+	waitDurationSeconds,
+} from "./lix-ci-artifacts.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const revision = "a".repeat(40);
@@ -55,23 +59,24 @@ async function fixture(t, options = {}) {
 				return;
 			}
 			json(response, {
-				artifacts: options.missing
-					? []
-					: [
-							{
-								id: 7,
-								name: `lix-browser-sdk-${sha}`,
-								expired: options.expired ?? false,
-								digest:
-									options.digest ??
-									`sha256:${createHash("sha256").update(archive).digest("hex")}`,
-								archive_download_url: `${url}/archive.zip`,
-								workflow_run: {
-									id: 42,
-									head_sha: options.artifactRevision ?? sha,
+				artifacts:
+					options.missing || lookups <= (options.pendingLookups ?? 0)
+						? []
+						: [
+								{
+									id: 7,
+									name: `lix-browser-sdk-${sha}`,
+									expired: options.expired ?? false,
+									digest:
+										options.digest ??
+										`sha256:${createHash("sha256").update(archive).digest("hex")}`,
+									archive_download_url: `${url}/archive.zip`,
+									workflow_run: {
+										id: 42,
+										head_sha: options.artifactRevision ?? sha,
+									},
 								},
-							},
-						],
+							],
 			});
 		} else if (request.url === "/repos/opral/lix/actions/runs/42") {
 			json(response, {
@@ -79,6 +84,17 @@ async function fixture(t, options = {}) {
 				path: options.workflow ?? ".github/workflows/ci.yml",
 				status: options.status ?? "completed",
 				conclusion: options.conclusion ?? "success",
+			});
+		} else if (request.url?.startsWith("/repos/opral/lix/actions/runs?")) {
+			json(response, {
+				workflow_runs: [
+					{
+						id: 42,
+						head_sha: sha,
+						path: ".github/workflows/ci.yml",
+						status: "in_progress",
+					},
+				],
 			});
 		} else if (request.url === "/archive.zip") {
 			downloads++;
@@ -95,7 +111,7 @@ async function fixture(t, options = {}) {
 	const environment = {
 		LIX_CI_ARTIFACT_API_ROOT: url,
 		LIX_CI_ARTIFACT_GITHUB_TOKEN: "fixture-token",
-		LIX_CI_ARTIFACT_WAIT_SECONDS: "0",
+		LIX_CI_ARTIFACT_WAIT_SECONDS: options.waitSeconds ?? "0",
 		ATELIER_LIX_ARTIFACTS: "only",
 	};
 	const previous = Object.fromEntries(
@@ -143,6 +159,34 @@ test("Workers Builds requires artifacts; local development can fall back", () =>
 		/auto, only, or off/,
 	);
 });
+test("Workers waits for pending artifacts by default; local and explicit waits stay bounded", () => {
+	assert.equal(waitDurationSeconds({ WORKERS_CI: "1" }), 900);
+	assert.equal(waitDurationSeconds({}), 0);
+	assert.equal(
+		waitDurationSeconds({ WORKERS_CI: "1", LIX_CI_ARTIFACT_WAIT_SECONDS: "0" }),
+		0,
+	);
+	assert.equal(waitDurationSeconds({ LIX_CI_ARTIFACT_WAIT_SECONDS: "1" }), 1);
+	assert.throws(
+		() => waitDurationSeconds({ LIX_CI_ARTIFACT_WAIT_SECONDS: "-1" }),
+		/non-negative integer/,
+	);
+});
+
+test("retries a pending exact-revision run until its browser artifact is available", async (t) => {
+	const f = await fixture(t, { pendingLookups: 1, waitSeconds: "1" });
+	assert.equal((await f.install()).runId, 42);
+	assert.equal(f.lookups(), 2);
+	assert.equal(f.downloads(), 1);
+});
+
+test("pending artifact waits stop at the configured deadline", async (t) => {
+	const f = await fixture(t, { missing: true, waitSeconds: "1" });
+	await assert.rejects(f.install(), /Required Lix CI artifact.*unavailable/);
+	assert.equal(f.lookups(), 2);
+	assert.equal(f.downloads(), 0);
+});
+
 for (const status of ["completed", "in_progress"]) {
 	test(`installs a verified browser artifact from ${status} CI`, async (t) => {
 		const f = await fixture(t, { status });
