@@ -434,8 +434,10 @@ export function PanelV2({
 	const contentHandlers =
 		onActiveViewInteraction && activeInstance
 			? {
+					// Working in a view keeps it: a click or a key. Focus alone does
+					// not — a preview's editor focuses itself as it opens.
 					onPointerDownCapture: handleInteraction,
-					onFocusCapture: handleInteraction,
+					onKeyDownCapture: handleInteraction,
 				}
 			: undefined;
 
@@ -594,6 +596,12 @@ export function PanelV2({
 									isPending={entry.isPending}
 									isPinned={entry.isPinned}
 									onClick={() => onSelectView(entry.instance)}
+									{...(entry.isPending && onActiveViewInteraction
+										? {
+												onDoubleClick: () =>
+													onActiveViewInteraction(entry.instance),
+											}
+										: {})}
 									onClose={
 										entry.isPinned
 											? undefined
@@ -989,11 +997,14 @@ export function PanelTabStrip({
 	tabLabel,
 	tabTooltip,
 	onRenameTab,
+	onKeepView,
 	preferencesFor,
 }: {
 	readonly side: Area;
 	readonly area: AreaState;
 	readonly visibleExtensions: readonly ExtensionDefinition[];
+	/** Keeps a preview tab (double-click), as IDEs do. */
+	readonly onKeepView?: (instance: string) => void;
 	readonly extensionMap: ReadonlyMap<ExtensionKind, ExtensionDefinition>;
 	readonly isFocused: boolean;
 	readonly onSelectView: (instance: string) => void;
@@ -1118,6 +1129,9 @@ export function PanelTabStrip({
 							isPending={entry.isPending}
 							isPinned={entry.isPinned}
 							onClick={() => onSelectView(entry.instance)}
+							{...(entry.isPending && onKeepView
+								? { onDoubleClick: () => onKeepView(entry.instance) }
+								: {})}
 							onClose={
 								entry.isPinned
 									? undefined
@@ -1742,6 +1756,8 @@ function ViewRenderer({
 }
 
 interface SortableTabProps extends PanelTabPreviewProps {
+	/** Keeps a preview tab. */
+	readonly onDoubleClick?: () => void;
 	readonly instance: string;
 	readonly area: Area;
 	readonly kind: ExtensionKind;
@@ -1878,6 +1894,7 @@ function SortableTab({
 	onCloseRight,
 	extensionMenuItems,
 	onRename,
+	onDoubleClick,
 }: SortableTabProps) {
 	const [renaming, setRenaming] = useState(false);
 	// The field replaces the chip, so ending the rename takes the focused
@@ -1965,6 +1982,7 @@ function SortableTab({
 				dataViewInstance={instance}
 				dataViewKind={kind}
 				style={style}
+				{...(onDoubleClick ? { onDoubleClick } : {})}
 				// Pinned tabs are not draggable, but their navigation stays enabled.
 				buttonProps={
 					isPinned

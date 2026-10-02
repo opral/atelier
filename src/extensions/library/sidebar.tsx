@@ -262,11 +262,15 @@ export function LibrarySidebar({
 			window.removeEventListener("keydown", onKeyDown, { capture: true });
 	}, [atelier.documents, data, defaultFolders, lix, libraryInFront, readOnly]);
 
-	const openFile = (file: LibraryFile) => {
-		// A file opens in a tab of its own (activated if already open), never
-		// in the place of what is in front.
+	const openFile = (file: LibraryFile, newTab = false) => {
+		// A file opens in the preview tab (activated if already open), never in
+		// the place of what is in front: stepping through Recent replaces the
+		// preview until the person works in it. ⌘-click keeps a tab of its own.
 		void atelier.documents
-			.open(file.path, { fileId: file.id, newTab: true })
+			.open(file.path, {
+				fileId: file.id,
+				...(newTab ? { newTab: true } : { preview: true }),
+			})
 			.catch((error: unknown) => {
 				console.error("library: unable to open", error);
 			});
@@ -400,7 +404,9 @@ export function LibrarySidebar({
 												trailing={
 													glyph ? <DiffGlyph kind={glyph} size={10} /> : null
 												}
-												onClick={() => openFile(file)}
+												onClick={(event) =>
+													openFile(file, isNewTabClick(event))
+												}
 												{...(readOnly
 													? {}
 													: { onDoubleClick: () => setRenamingId(file.id) })}
@@ -410,7 +416,7 @@ export function LibrarySidebar({
 											className="atw:min-w-44 atw:text-[13px]"
 											data-testid="library-recent-menu"
 										>
-											<ContextMenuItem onSelect={() => openFile(file)}>
+											<ContextMenuItem onSelect={() => openFile(file, true)}>
 												<SquareArrowOutUpRight aria-hidden="true" />
 												Open in new tab
 											</ContextMenuItem>

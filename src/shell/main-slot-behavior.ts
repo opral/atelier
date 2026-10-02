@@ -11,6 +11,8 @@ export const CENTRAL_HOME_INSTANCE = "main-home";
 
 type CentralPlaceIntent = {
 	readonly newTab?: boolean;
+	/** Into the preview tab: it replaces the one preview there is. */
+	readonly preview?: boolean;
 	readonly documentOrigin?: "existing" | "new";
 };
 
@@ -124,6 +126,10 @@ const insertCentralTabView = (
 			...view,
 			...(mergedState ? { state: mergedState } : {}),
 			...(existing.isPinned ? { isPinned: true } : {}),
+			// Opening a tab again neither keeps nor demotes it: a preview stays
+			// a preview until it is worked in, a kept tab stays kept. Asking
+			// for a tab of its own (⌘-click) keeps the preview.
+			isPending: intent.newTab ? undefined : existing.isPending,
 		};
 		const views = area.views.map((entry, index) =>
 			index === existingIndex ? merged : entry,
@@ -134,6 +140,19 @@ const insertCentralTabView = (
 		(entry) => entry.instance === area.activeInstance,
 	);
 	const activeEntry = activeIndex !== -1 ? area.views[activeIndex] : null;
+	if (intent.preview && !intent.newTab) {
+		const preview = { ...view, isPending: true };
+		const previewIndex = area.views.findIndex(
+			(entry) => entry.isPending && !entry.isPinned,
+		);
+		const views =
+			previewIndex === -1
+				? [...area.views, preview]
+				: area.views.map((entry, index) =>
+						index === previewIndex ? preview : entry,
+					);
+		return { views, activeInstance: preview.instance };
+	}
 	const appendTab = intent.newTab ?? intent.documentOrigin === "new";
 	if (appendTab || !activeEntry || activeEntry.isPinned) {
 		// New tabs always join at the end of the strip, browser-style,

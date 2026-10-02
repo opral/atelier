@@ -2363,6 +2363,7 @@ function LayoutShellLoadedContentResolved({
 						(preserveActiveView && active && !isDocumentView(active)
 							? true
 							: undefined),
+					preview: pending,
 					documentOrigin,
 				});
 				return {
@@ -2696,6 +2697,7 @@ function LayoutShellLoadedContentResolved({
 				(options.navigationCause === "route" && activeView && !alreadyOpen
 					? true
 					: undefined);
+			const preview = options.preview === true && !newTab;
 			if (
 				!options.newTab &&
 				!hasHistoricalEditorRevisionState(state) &&
@@ -2730,6 +2732,7 @@ function LayoutShellLoadedContentResolved({
 					filePath: historicalFile.path,
 					state,
 					focus: options.focus ?? true,
+					pending: preview,
 					documentOrigin: options.documentOrigin ?? "existing",
 					navigationCause: options.navigationCause,
 					newTab,
@@ -2743,6 +2746,7 @@ function LayoutShellLoadedContentResolved({
 				signal: options.signal,
 				state,
 				focus: options.focus ?? true,
+				pending: preview,
 				documentOrigin: options.documentOrigin ?? "existing",
 				navigationCause: options.navigationCause,
 				newTab,
@@ -4376,9 +4380,15 @@ function LayoutShellLoadedContentResolved({
 				filePath: documentPathFromView(entry) ?? null,
 				...(entry.state ? { state: entry.state } : {}),
 			});
-			setAreaState("main", (area) => activatePanelExtension(area, key), {
-				focus: true,
-			});
+			// Selecting a preview tab shows it; only working in it keeps it.
+			setAreaState(
+				"main",
+				(area) =>
+					area.views.some((view) => view.instance === key)
+						? { ...area, activeInstance: key }
+						: area,
+				{ focus: true },
+			);
 		},
 		[emitEvent, setAreaState],
 	);
@@ -4508,6 +4518,9 @@ function LayoutShellLoadedContentResolved({
 				onRemoveView={(instance) => handleRemoveView("main", instance)}
 				onAddView={addViewOnCentral}
 				onRenameTab={isHostReadOnly ? undefined : handleRenameTab}
+				onKeepView={(instance) =>
+					setAreaState("main", (area) => activatePanelExtension(area, instance))
+				}
 				preferencesFor={preferencesFor}
 			/>
 		);
@@ -4523,6 +4536,7 @@ function LayoutShellLoadedContentResolved({
 		handleSelectCentralView,
 		renderHostTabStrip,
 		preferencesFor,
+		setAreaState,
 		visibleExtensions,
 		currentFilePathsById,
 	]);

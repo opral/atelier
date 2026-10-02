@@ -1670,7 +1670,9 @@ export const extension = createReactExtensionDefinition({
 		<FilesView
 			context={{
 				openFile: ({ area: _panel, fileId: _fileId, filePath, focus }) =>
+					// Picked from the tree: the preview tab, as in an IDE.
 					atelier.documents.open(filePath, {
+						preview: true,
 						...(focus !== undefined ? { focus } : {}),
 					}),
 				closeFileViews: ({ filePath }) => {

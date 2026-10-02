@@ -362,9 +362,14 @@ export function LibraryView({
 				atelier.diff.openFile(file.path);
 				return;
 			}
-			// A file opens beside the Library, so the Library stays a tab away.
+			// A file opens beside the Library, so the Library stays a tab away:
+			// in the preview tab, which the next file replaces until the person
+			// works in it, or in a tab of its own on ⌘-click.
 			void atelier.documents
-				.open(file.path, { fileId: file.id, newTab: true })
+				.open(file.path, {
+					fileId: file.id,
+					...(newTab ? { newTab: true } : { preview: true }),
+				})
 				.catch((caught: unknown) => {
 					console.error("library: unable to open", caught);
 				});
