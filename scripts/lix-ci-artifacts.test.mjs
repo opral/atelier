@@ -332,7 +332,7 @@ test("build entry installs artifact runtime dependencies and reuses exact artifa
 		await rm(join(lix, "packages", name, "node_modules"), { recursive: true });
 	}
 	assert.match(
-		await command(process.execPath, args, root, env),
+		await command(process.execPath, args.slice(0, 1), root, env),
 		/REUSE browser SDK/,
 	);
 	for (const name of ["js-sdk", "storage-opfs"]) {
@@ -359,6 +359,127 @@ test("build entry installs artifact runtime dependencies and reuses exact artifa
 		command(process.execPath, args, root, env),
 		/Vendored Lix has source changes/,
 	);
+});
+test("source builds use one WASM SDK for default and browser-only modes", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "atelier-wasm-source-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const lix = join(root, "vendor/lix");
+	const scripts = join(root, "scripts");
+	const tools = join(root, "fixture-tools");
+	await mkdir(scripts, { recursive: true });
+	await mkdir(tools);
+	await mkdir(join(root, "node_modules"));
+	await symlink(
+		join(repositoryRoot, "node_modules/fflate"),
+		join(root, "node_modules/fflate"),
+		"dir",
+	);
+	for (const name of ["build-vendored-lix.mjs", "lix-ci-artifacts.mjs"])
+		await cp(join(repositoryRoot, "scripts", name), join(scripts, name));
+	for (const name of ["js-sdk", "storage-opfs"]) {
+		const packageRoot = join(lix, "packages", name);
+		await mkdir(packageRoot, { recursive: true });
+		const packageManifest = {
+			name,
+			version: "1.0.0",
+			scripts:
+				name === "js-sdk"
+					? Object.fromEntries(
+							["clean", "build:wasm", "build:ts"].map((step) => [
+								step,
+								`node build-fixture.cjs ${step}`,
+							]),
+						)
+					: { build: "node build-fixture.cjs opfs" },
+		};
+		await writeFile(
+			join(packageRoot, "package.json"),
+			JSON.stringify(packageManifest),
+		);
+		await writeFile(
+			join(packageRoot, "package-lock.json"),
+			JSON.stringify({
+				name,
+				version: "1.0.0",
+				lockfileVersion: 3,
+				packages: { "": packageManifest },
+			}),
+		);
+		await writeFile(
+			join(packageRoot, "build-fixture.cjs"),
+			`
+const fs = require("node:fs");
+fs.appendFileSync(process.env.FIXTURE_BUILD_LOG, process.argv[2] + "\\n");
+fs.mkdirSync("dist/wasm", { recursive: true });
+for (const file of ["index.js", "index.d.ts", "wasm/lix_js_sdk.js", "wasm/lix_js_sdk_bg.wasm"])
+  fs.writeFileSync("dist/" + file, "fixture");
+`,
+		);
+	}
+	await writeFile(
+		join(lix, "rust-toolchain.toml"),
+		'channel = "fixture-nightly"',
+	);
+	await writeFile(
+		join(lix, "Cargo.lock"),
+		'[[package]]\nname = "wasm-bindgen"\nversion = "1.2.3"\n',
+	);
+	await command("git", ["init", "--quiet"], lix);
+	await command("git", ["add", "."], lix);
+	await command(
+		"git",
+		[
+			"-c",
+			"user.name=Test",
+			"-c",
+			"user.email=test@example.test",
+			"commit",
+			"--quiet",
+			"-m",
+			"fixture",
+		],
+		lix,
+	);
+	await writeFile(
+		join(tools, "rustup"),
+		'#!/usr/bin/env node\nconsole.log("wasm32-unknown-unknown\\nwasm32-wasip2");\n',
+		{ mode: 0o755 },
+	);
+	await writeFile(
+		join(tools, "wasm-bindgen"),
+		'#!/usr/bin/env node\nconsole.log("wasm-bindgen 1.2.3");\n',
+		{ mode: 0o755 },
+	);
+	const log = join(root, "build.log");
+	const env = {
+		...process.env,
+		ATELIER_LIX_ARTIFACTS: "off",
+		FIXTURE_BUILD_LOG: log,
+		PATH: `${tools}:${process.env.PATH}`,
+	};
+	for (const args of [[], ["--browser-only"]]) {
+		await writeFile(log, "");
+		await command(
+			process.execPath,
+			[join(scripts, "build-vendored-lix.mjs"), ...args],
+			root,
+			env,
+		);
+		assert.deepEqual((await readFile(log, "utf8")).trim().split("\n"), [
+			"clean",
+			"build:wasm",
+			"build:ts",
+			"opfs",
+		]);
+		const sdkRoot = join(lix, "packages/js-sdk");
+		const marker = JSON.parse(
+			await readFile(join(sdkRoot, "dist/.atelier-browser-build.json"), "utf8"),
+		);
+		assert.equal(marker.source, "source-build");
+		await assert.rejects(readFile(join(sdkRoot, "lix_js_sdk.node")), {
+			code: "ENOENT",
+		});
+	}
 });
 function command(binary, args, cwd, env = process.env) {
 	return new Promise((resolve, reject) => {
