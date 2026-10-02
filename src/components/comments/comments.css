@@ -1,7 +1,7 @@
 @import "../../shell/layers.css";
-@import "@opral/zettel-html/style.css" layer(atelier);
+@import "@opral/zettel-html/style.css" layer(components.atelier.components);
 
-@layer atelier {
+@layer components.atelier.components {
 	/*
 	 * A thread's secondary colour, its reply field and its body size are set
 	 * by the surface it sits on. The defaults are the History checkpoint's

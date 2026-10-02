@@ -9,7 +9,6 @@ import {
 import { AtelierDeveloperTools } from "@opral/atelier/dev-tools";
 import { useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import "@opral/atelier/style.css";
 import {
 	HostBrandMark,
 	HostRepositoryPicker,
@@ -20,6 +19,7 @@ import { seedCommentsDemo } from "./seed-comments-demo";
 import { seedConversationDemo } from "./seed-conversation-demo";
 import { seedCsvDemo } from "./seed-csv-demo";
 import { seedWorkspace } from "./seed-workspace";
+import "@opral/atelier/style.css";
 import "./style.css";
 
 const element = document.querySelector<HTMLElement>("#atelier");

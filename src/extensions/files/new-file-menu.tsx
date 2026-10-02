@@ -37,11 +37,9 @@ export type NewFileMenuProps = {
 	/** Absent in the Library, which creates things of a kind, not files. */
 	readonly onNewFile?: () => void;
 	/**
-	 * Name the rows by what they make — New Page, New Table, New Drawing —
-	 * rather than by format. The Library's word for them.
+	 * The row ⌘ . makes here, marked with the shortcut. Without New file
+	 * only: where there is one, ⌘ . is New file's.
 	 */
-	readonly kindNames?: boolean;
-	/** With kindNames: the row ⌘ . makes here (defaults to New Page). */
 	readonly shortcutType?: "markdown" | "csv" | "excalidraw";
 	/** Absent where folders are not shown, e.g. the Library's Grid. */
 	readonly onNewFolder?: () => void;
@@ -75,8 +73,7 @@ export function NewFileMenu({
 	onNewCsv,
 	onNewExcalidraw,
 	onNewFile,
-	kindNames = false,
-	shortcutType = "markdown",
+	shortcutType,
 	onNewFolder,
 	onNewMarkdown,
 	onUpload,
@@ -108,7 +105,7 @@ export function NewFileMenu({
 	// A row that created something opens it, focused: the menu must not hand
 	// focus back to its button as it closes and take it from the new file.
 	const shortcutFor = (type: "markdown" | "csv" | "excalidraw") =>
-		kindNames && !onNewFile && type === shortcutType
+		!onNewFile && type === shortcutType
 			? { shortcut: shortcutHint("⌘ .") }
 			: {};
 	const choseRef = useRef(false);
@@ -127,7 +124,7 @@ export function NewFileMenu({
 				}}
 				align={align}
 				aria-label="Create"
-				className="w-72 p-1.5 text-xs"
+				className="atw:w-72 atw:p-1.5 atw:text-xs"
 				sideOffset={3}
 			>
 				{onNewFile ? (
@@ -152,12 +149,12 @@ export function NewFileMenu({
 					/>
 				) : null}
 				{onNewFile || onNewFolder ? (
-					<DropdownMenuSeparator className="my-1.5" />
+					<DropdownMenuSeparator className="atw:my-1.5" />
 				) : null}
 				<NewMenuItem
 					dataAttr="file-new-markdown"
 					iconUrl={fileMdIconUrl}
-					label={kindNames ? "New Page" : "New Markdown"}
+					label="New Markdown"
 					{...shortcutFor("markdown")}
 					onSelect={chose(onNewMarkdown)}
 					trailing={slotFor("markdown", "file-new-markdown")}
@@ -165,7 +162,7 @@ export function NewFileMenu({
 				<NewMenuItem
 					dataAttr="file-new-csv"
 					iconUrl={fileCsvIconUrl}
-					label={kindNames ? "New Table" : "New CSV"}
+					label="New CSV"
 					{...shortcutFor("csv")}
 					onSelect={chose(onNewCsv)}
 					trailing={slotFor("csv", "file-new-csv")}
@@ -180,18 +177,20 @@ export function NewFileMenu({
 				/>
 				{onUpload ? (
 					<>
-						<DropdownMenuSeparator className="my-1.5" />
+						<DropdownMenuSeparator className="atw:my-1.5" />
 						<DropdownMenuItem
-							className="gap-2 py-1.75 text-xs"
+							className="atw:gap-2 atw:py-1.75 atw:text-xs"
 							data-attr="file-new-upload"
 							onSelect={chose(onUpload)}
 						>
 							<Upload
 								aria-hidden="true"
-								className="size-3.5 shrink-0 text-fg-subtle"
+								className="atw:size-3.5 atw:shrink-0 atw:text-fg-subtle"
 								strokeWidth={2}
 							/>
-							<span className="min-w-0 flex-1 truncate">Upload…</span>
+							<span className="atw:min-w-0 atw:flex-1 atw:truncate">
+								Upload…
+							</span>
 						</DropdownMenuItem>
 					</>
 				) : null}
@@ -222,15 +221,15 @@ function NewMenuItem({
 		// the control's panel is open, too: the pointer leaves the row to reach
 		// the panel, and the row must not change under it on the way.
 		<div
-			className={`group/row relative rounded-sm${
+			className={`atw:group/row atw:relative atw:rounded-sm${
 				trailing
-					? " hover:bg-bg-hover focus-within:bg-bg-hover has-data-[state=open]:bg-bg-hover"
+					? " atw:hover:bg-bg-hover atw:focus-within:bg-bg-hover atw:has-data-[state=open]:bg-bg-hover"
 					: ""
 			}`}
 			data-attr={`${dataAttr}-row`}
 		>
 			<DropdownMenuItem
-				className="gap-2 py-1.75 text-xs"
+				className="atw:gap-2 atw:py-1.75 atw:text-xs"
 				data-attr={dataAttr}
 				onSelect={onSelect}
 				{...(trailing ? { onKeyDown: focusRowTrailingControl } : {})}
@@ -239,18 +238,18 @@ function NewMenuItem({
 					src={iconUrl}
 					alt=""
 					aria-hidden="true"
-					className="size-3.5 shrink-0"
+					className="atw:size-3.5 atw:shrink-0"
 				/>
-				<span className="min-w-0 flex-1 truncate">{label}</span>
+				<span className="atw:min-w-0 atw:flex-1 atw:truncate">{label}</span>
 				{shortcut ? (
 					// The trailing slot is one slot. On a row that has a disclosure
 					// the shortcut hint is what sits in it at rest, and it fades as
 					// the disclosure fades in — neither is in flow beside the other,
 					// so the row's text never shifts.
 					<kbd
-						className={`ml-3 text-[10px] font-semibold text-fg-subtle${
+						className={`atw:ml-3 atw:text-[10px] atw:font-semibold atw:text-fg-subtle${
 							trailing
-								? " transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0 group-has-data-[state=open]/row:opacity-0"
+								? " atw:transition-opacity atw:group-hover/row:opacity-0 atw:group-focus-within/row:opacity-0 atw:group-has-data-[state=open]/row:opacity-0"
 								: ""
 						}`}
 					>
@@ -272,7 +271,7 @@ function NewMenuItem({
 				// same reason the wrapper stays visible and clickable while the
 				// panel is open, not only while the row is hovered.
 				<div
-					className="pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-r-sm pr-1.5 pl-4 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 group-has-data-[state=open]/row:pointer-events-auto group-has-data-[state=open]/row:opacity-100"
+					className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:right-0 atw:flex atw:items-center atw:rounded-r-sm atw:pr-1.5 atw:pl-4 atw:opacity-0 atw:transition-opacity atw:group-hover/row:pointer-events-auto atw:group-hover/row:opacity-100 atw:group-focus-within/row:pointer-events-auto atw:group-focus-within/row:opacity-100 atw:group-has-data-[state=open]/row:pointer-events-auto atw:group-has-data-[state=open]/row:opacity-100"
 					// The label's tail passes under the control rather than being
 					// squeezed by it: the row must not reflow when the control
 					// appears, so the control fades the row's own fill over it.

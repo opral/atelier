@@ -59,7 +59,7 @@ type FormatState = {
 };
 
 const ToolbarSeparator = () => (
-	<Toolbar.Separator className="mx-1.5 h-3.5 w-px bg-border-subtle" />
+	<Toolbar.Separator className="atw:mx-1.5 atw:h-3.5 atw:w-px atw:bg-border-subtle" />
 );
 
 const initialFormatState: FormatState = {
@@ -78,7 +78,7 @@ const initialFormatState: FormatState = {
  * Floating toolbar rendering Markdown formatting controls for the TipTap editor.
  *
  * @example
- * <FormattingToolbar className="sticky top-0 z-10" />
+ * <FormattingToolbar className="atw:sticky atw:top-0 atw:z-10" />
  */
 export function FormattingToolbar({
 	className,
@@ -345,7 +345,7 @@ export function FormattingToolbar({
 		<Tooltip.Provider delay={TOOLBAR_TOOLTIP_DELAY}>
 			<Toolbar.Root
 				className={clsx(
-					"flex h-[var(--atelier-panel-header-height)] w-full min-w-0 shrink-0 items-center gap-0.5 overflow-hidden border-b border-border-subtle px-2.5 text-fg",
+					"atw:flex atw:h-[var(--atelier-panel-header-height)] atw:w-full atw:min-w-0 atw:shrink-0 atw:items-center atw:gap-0.5 atw:overflow-hidden atw:border-b atw:border-border-subtle atw:px-2.5 atw:text-fg",
 					className,
 				)}
 				aria-label="Formatting toolbar"
@@ -353,13 +353,13 @@ export function FormattingToolbar({
 				data-attr="markdown-format-toolbar"
 				data-disabled={controlsDisabled ? "true" : "false"}
 			>
-				<div className="relative min-w-0 flex-1 self-stretch">
-					<fieldset disabled={controlsDisabled} className="contents">
+				<div className="atw:relative atw:min-w-0 atw:flex-1 atw:self-stretch">
+					<fieldset disabled={controlsDisabled} className="atw:contents">
 						<Toolbar.Group
 							ref={formattingControlsRef}
 							className={clsx(
-								"markdown-format-toolbar-scroll flex h-full min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain transition-opacity duration-100",
-								controlsDisabled && "opacity-40",
+								"markdown-format-toolbar-scroll atw:flex atw:h-full atw:min-w-0 atw:items-center atw:gap-0.5 atw:overflow-x-auto atw:overscroll-x-contain atw:transition-opacity atw:duration-100",
+								controlsDisabled && "atw:opacity-40",
 							)}
 							aria-label="Text formatting controls"
 							aria-disabled={controlsDisabled}
@@ -383,58 +383,61 @@ export function FormattingToolbar({
 									render={<Select.Trigger />}
 									data-attr="markdown-block-selector"
 									className={clsx(
-										"inline-flex h-7 shrink-0 select-none items-center gap-1 rounded-[7px] pr-1.5 pl-2.25 text-[12.5px] font-semibold text-fg-muted transition-[background-color,color,box-shadow] duration-100 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+										"atw:inline-flex atw:h-7 atw:shrink-0 atw:select-none atw:items-center atw:gap-1 atw:rounded-[7px] atw:pr-1.5 atw:pl-2.25 atw:text-[12.5px] atw:font-semibold atw:text-fg-muted atw:transition-[background-color,color,box-shadow] atw:duration-100 atw:ease-out atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring",
 										// While the menu is open the trigger stays completely
 										// unfilled — the cursor is usually still on it, so even
 										// the hover tint reads as a stuck pill.
 										blockMenuOpen
-											? "text-fg"
-											: "hover:bg-bg-hover hover:text-fg",
+											? "atw:text-fg"
+											: "atw:hover:bg-bg-hover atw:hover:text-fg",
 									)}
 									onMouseDown={suppressMouseDown}
 								>
-									<Select.Value className="block w-[5.25rem] truncate">
+									<Select.Value className="atw:block atw:w-[5.25rem] atw:truncate">
 										{activeBlockLabel}
 									</Select.Value>
-									<Select.Icon className="text-fg-subtle transition-transform duration-100 data-[popup-open]:rotate-180">
+									<Select.Icon className="atw:text-fg-subtle atw:transition-transform atw:duration-100 atw:data-[popup-open]:rotate-180">
 										<ChevronDown
-											className="size-[13px] stroke-[2]"
+											className="atw:size-[13px] atw:stroke-[2]"
 											aria-hidden
 										/>
 									</Select.Icon>
 								</Toolbar.Button>
 								<Select.Portal container={portalContainer}>
 									<Select.Positioner
-										className="z-50 outline-none"
+										className="atw:z-50 atw:outline-none"
 										side="bottom"
 										align="start"
 										sideOffset={6}
 										alignItemWithTrigger={false}
 									>
-										<Select.Popup className="min-w-[10.75rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1 shadow-lg transition-[transform,opacity] duration-150 data-[side=bottom]:mt-2 data-[side=top]:mb-2 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-100 data-[ending-style]:opacity-100">
-											<div className="px-2 pb-0.75 pt-1 text-[11px] font-medium leading-4 text-fg-subtle">
+										<Select.Popup className="atw:min-w-[10.75rem] atw:origin-[var(--transform-origin)] atw:rounded-[8px] atw:border atw:border-border atw:bg-panel atw:p-1 atw:shadow-lg atw:transition-[transform,opacity] atw:duration-150 atw:data-[side=bottom]:mt-2 atw:data-[side=top]:mb-2 atw:data-[starting-style]:scale-95 atw:data-[starting-style]:opacity-0 atw:data-[ending-style]:scale-100 atw:data-[ending-style]:opacity-100">
+											<div className="atw:px-2 atw:pb-0.75 atw:pt-1 atw:text-[11px] atw:font-medium atw:leading-4 atw:text-fg-subtle">
 												Turn into
 											</div>
 											{TOOLBAR_BLOCK_OPTIONS.map((option) => (
 												<Select.Item
 													key={option.value}
 													value={option.value}
-													className="group flex min-h-9 cursor-default items-center gap-2 rounded-[7px] px-2 py-1 text-[12.5px] outline-none focus-visible:ring-0 data-[highlighted]:bg-bg-hover data-[highlighted]:text-fg"
+													className="atw:group atw:flex atw:min-h-9 atw:cursor-default atw:items-center atw:gap-2 atw:rounded-[7px] atw:px-2 atw:py-1 atw:text-[12.5px] atw:outline-none atw:focus-visible:ring-0 atw:data-[highlighted]:bg-bg-hover atw:data-[highlighted]:text-fg"
 												>
-													<span className="flex size-4.5 items-center justify-center text-[12px] text-fg-subtle group-data-[highlighted]:text-fg-muted [&_svg]:stroke-[1.8]">
-														<option.icon className="h-3.5 w-3.5" aria-hidden />
+													<span className="atw:flex atw:size-4.5 atw:items-center atw:justify-center atw:text-[12px] atw:text-fg-subtle atw:group-data-[highlighted]:text-fg-muted atw:[&_svg]:stroke-[1.8]">
+														<option.icon
+															className="atw:h-3.5 atw:w-3.5"
+															aria-hidden
+														/>
 													</span>
-													<div className="flex flex-1 flex-col">
-														<span className="text-[12.5px] font-semibold leading-4 text-fg">
+													<div className="atw:flex atw:flex-1 atw:flex-col">
+														<span className="atw:text-[12.5px] atw:font-semibold atw:leading-4 atw:text-fg">
 															{option.label}
 														</span>
-														<span className="text-[11.5px] font-normal leading-4 text-fg-subtle">
+														<span className="atw:text-[11.5px] atw:font-normal atw:leading-4 atw:text-fg-subtle">
 															{option.description}
 														</span>
 													</div>
-													<Select.ItemIndicator className="text-link-hover">
+													<Select.ItemIndicator className="atw:text-link-hover">
 														<Check
-															className="h-3.5 w-3.5 stroke-[2]"
+															className="atw:h-3.5 atw:w-3.5 atw:stroke-[2]"
 															aria-hidden
 														/>
 													</Select.ItemIndicator>
@@ -455,7 +458,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-bold"
 							>
-								<Bold className="size-3.5" aria-hidden />
+								<Bold className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<ToolbarIconButton
@@ -466,7 +469,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-italic"
 							>
-								<Italic className="size-3.5" aria-hidden />
+								<Italic className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<ToolbarIconButton
@@ -477,7 +480,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-strike"
 							>
-								<Strikethrough className="size-3.5" aria-hidden />
+								<Strikethrough className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<ToolbarIconButton
@@ -488,7 +491,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-code"
 							>
-								<Code2 className="size-3.5" aria-hidden />
+								<Code2 className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<LinkPopover
@@ -508,7 +511,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-footnote"
 							>
-								<Superscript className="size-3.5" aria-hidden />
+								<Superscript className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<ToolbarSeparator />
@@ -521,7 +524,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-ordered-list"
 							>
-								<ListOrdered className="size-3.5" aria-hidden />
+								<ListOrdered className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<ToolbarIconButton
@@ -532,7 +535,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-bullet-list"
 							>
-								<List className="size-3.5" aria-hidden />
+								<List className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 
 							<ToolbarIconButton
@@ -544,7 +547,7 @@ export function FormattingToolbar({
 								portalContainer={portalContainer}
 								data-attr="markdown-format-task-list"
 							>
-								<ListChecks className="size-3.5" aria-hidden />
+								<ListChecks className="atw:size-3.5" aria-hidden />
 							</ToolbarIconButton>
 						</Toolbar.Group>
 					</fieldset>
@@ -560,7 +563,7 @@ export function FormattingToolbar({
 					/>
 				</div>
 
-				<div className="flex shrink-0 items-center bg-panel pl-0.5">
+				<div className="atw:flex atw:shrink-0 atw:items-center atw:bg-panel atw:pl-0.5">
 					<ToolbarSeparator />
 					<ToolbarIconButton
 						label={
@@ -570,27 +573,30 @@ export function FormattingToolbar({
 							copyStatus === "success" ? "Copied Markdown" : "Copy Markdown"
 						}
 						pressable={false}
-						className={clsx("ml-auto", copyStatus === "error" && "text-danger")}
+						className={clsx(
+							"atw:ml-auto",
+							copyStatus === "error" && "atw:text-danger",
+						)}
 						onClick={handleCopyMarkdown}
 						portalContainer={portalContainer}
 						data-attr="markdown-copy-markdown"
 					>
-						<span className="relative inline-flex size-3.5 items-center justify-center">
+						<span className="atw:relative atw:inline-flex atw:size-3.5 atw:items-center atw:justify-center">
 							<Copy
 								className={clsx(
-									"size-3.5 transition-all duration-150",
+									"atw:size-3.5 atw:transition-all atw:duration-150",
 									copyStatus === "success"
-										? "scale-75 opacity-0"
-										: "scale-100 opacity-100",
+										? "atw:scale-75 atw:opacity-0"
+										: "atw:scale-100 atw:opacity-100",
 								)}
 								aria-hidden
 							/>
 							<Check
 								className={clsx(
-									"absolute size-3.5 text-success transition-all duration-150",
+									"atw:absolute atw:size-3.5 atw:text-success atw:transition-all atw:duration-150",
 									copyStatus === "success"
-										? "scale-100 opacity-100"
-										: "scale-75 opacity-0",
+										? "atw:scale-100 atw:opacity-100"
+										: "atw:scale-75 atw:opacity-0",
 								)}
 								aria-hidden
 							/>

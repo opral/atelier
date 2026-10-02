@@ -105,7 +105,7 @@ export function ExtensionHostRegistryProvider({
 			if (!record) {
 				const container = document.createElement("div");
 				container.className =
-					"flex min-h-0 flex-1 flex-col overflow-hidden w-full h-full";
+					"atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden atw:w-full atw:h-full";
 				const lifecycle = mountExtension({
 					view,
 					atelier,

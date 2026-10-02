@@ -86,7 +86,7 @@ export function DiffGlyph({
 		<span
 			title={GLYPH_TITLE[kind]}
 			aria-label={GLYPH_TITLE[kind]}
-			className={`inline-flex ${className ?? ""}`}
+			className={`atw:inline-flex ${className ?? ""}`}
 		>
 			<svg
 				width={size}
@@ -137,7 +137,7 @@ export function WorkingDot({
 	return (
 		<span
 			aria-hidden="true"
-			className={`inline-block size-[7px] shrink-0 rounded-full bg-link ${className}`}
+			className={`atw:inline-block atw:size-[7px] atw:shrink-0 atw:rounded-full atw:bg-link ${className}`}
 		/>
 	);
 }

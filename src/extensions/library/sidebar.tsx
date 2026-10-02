@@ -22,7 +22,6 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { fileIconUrl } from "../files/file-icons";
 import { KindIcon } from "./kind-icon";
 import type {
 	ExtensionRuntime,
@@ -261,10 +260,10 @@ export function LibrarySidebar({
 	return (
 		<nav
 			aria-label="Library"
-			className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-1 pr-1.5 pb-2 pl-0.5"
+			className="atw:relative atw:flex atw:min-h-0 atw:min-w-0 atw:flex-1 atw:flex-col atw:overflow-x-hidden atw:overflow-y-auto atw:pt-1 atw:pr-1.5 atw:pb-2 atw:pl-0.5"
 			data-testid="library-sidebar"
 		>
-			<ul className="flex flex-col gap-px">
+			<ul className="atw:flex atw:flex-col atw:gap-px">
 				{sections.map((kind) => {
 					const isActive = activeKind === kind;
 					const label =
@@ -319,19 +318,17 @@ export function LibrarySidebar({
 			</ul>
 			{recent.length > 0 && data ? (
 				<>
-					<p className="mt-4 mb-1 px-1 text-[11px] font-semibold tracking-[0.06em] text-fg-subtle uppercase select-none">
+					<p className="atw:mt-4 atw:mb-1 atw:px-1 atw:text-[11px] atw:font-semibold atw:tracking-[0.06em] atw:text-fg-subtle atw:uppercase atw:select-none">
 						Recent
 					</p>
-					<ul className="flex flex-col gap-px" data-testid="library-recent">
+					<ul
+						className="atw:flex atw:flex-col atw:gap-px"
+						data-testid="library-recent"
+					>
 						{recent.map((file) => {
 							const glyph = marks.files.get(file.path);
 							const icon = (
-								<img
-									src={fileIconUrl(file.path)}
-									alt=""
-									aria-hidden="true"
-									className="size-3.5 shrink-0"
-								/>
+								<KindIcon kind={file.kind === "other" ? "file" : file.kind} />
 							);
 							if (renamingId === file.id) {
 								return (
@@ -390,7 +387,7 @@ export function LibrarySidebar({
 											/>
 										</ContextMenuTrigger>
 										<ContextMenuContent
-											className="min-w-44 text-[13px]"
+											className="atw:min-w-44 atw:text-[13px]"
 											data-testid="library-recent-menu"
 										>
 											<ContextMenuItem onSelect={() => openFile(file)}>
@@ -432,7 +429,7 @@ export function LibrarySidebar({
 											</ContextMenuItem>
 											{readOnly ? null : (
 												<ContextMenuItem
-													className="text-danger focus:text-danger [&_svg:not([class*='text-'])]:text-danger"
+													className="atw:text-danger atw:focus:text-danger atw:[&_svg:not([class*='text-'])]:text-danger"
 													onSelect={() => {
 														setDeleteError(null);
 														setDeleting(entry);
@@ -551,8 +548,8 @@ function RecentRename({
 		}
 	};
 	return (
-		<div className="flex flex-col">
-			<div className="flex h-7 items-center gap-2 rounded-control bg-panel px-1 ring-2 ring-ring">
+		<div className="atw:flex atw:flex-col">
+			<div className="atw:flex atw:h-7 atw:items-center atw:gap-2 atw:rounded-control atw:bg-panel atw:px-1 atw:ring-2 atw:ring-ring">
 				{icon}
 				<input
 					ref={inputRef}
@@ -581,11 +578,14 @@ function RecentRename({
 						if (error) onCancel();
 						else void submit();
 					}}
-					className="min-w-0 flex-1 bg-transparent text-[13px] text-fg outline-none"
+					className="atw:min-w-0 atw:flex-1 atw:bg-transparent atw:text-[13px] atw:text-fg atw:outline-none"
 				/>
 			</div>
 			{error ? (
-				<p role="alert" className="px-1 pt-1 text-[11.5px] text-danger">
+				<p
+					role="alert"
+					className="atw:px-1 atw:pt-1 atw:text-[11.5px] atw:text-danger"
+				>
 					{error}
 				</p>
 			) : null}
@@ -623,11 +623,11 @@ function SidebarRow({
 			title={title}
 			aria-current={active ? "page" : undefined}
 			data-testid={testId}
-			className={`flex h-7 w-full select-none items-center gap-2 rounded-control px-1 text-left text-[13px] transition-[background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-bg-hover-strong ${
+			className={`atw:flex atw:h-7 atw:w-full atw:select-none atw:items-center atw:gap-2 atw:rounded-control atw:px-1 atw:text-left atw:text-[13px] atw:transition-[background-color,opacity] atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:data-[state=open]:bg-bg-hover-strong ${
 				active
-					? "bg-bg-active font-medium text-fg"
-					: "text-fg-muted hover:bg-bg-hover-strong"
-			}${dimmed ? " opacity-[0.45] hover:opacity-100" : ""}`}
+					? "atw:bg-bg-active atw:font-medium atw:text-fg"
+					: "atw:text-fg-muted atw:hover:bg-bg-hover-strong"
+			}${dimmed ? " atw:opacity-[0.45] atw:hover:opacity-100" : ""}`}
 			onMouseDown={(event) => {
 				// Middle-click opens in a new tab; keep focus where it is.
 				if (event.button === 1) event.preventDefault();
@@ -646,7 +646,7 @@ function SidebarRow({
 				: {})}
 		>
 			{icon}
-			<span className="min-w-0 flex-1 truncate">{label}</span>
+			<span className="atw:min-w-0 atw:flex-1 atw:truncate">{label}</span>
 			{trailing}
 		</button>
 	);

@@ -101,7 +101,7 @@ export function PreparedMediaSurface({
 	if (native) {
 		return (
 			<div
-				className="flex min-h-0 flex-1 flex-col overflow-auto"
+				className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-auto"
 				data-atelier-native-media=""
 			>
 				{initial}
@@ -179,7 +179,7 @@ export function MediaContent({
 				: undefined;
 	if (!src)
 		return (
-			<div className="p-6">
+			<div className="atw:p-6">
 				<h2>{label}</h2>
 				<p>
 					{Math.ceil(Number(file.size) / 1024)} KB · Preview loads when
@@ -190,7 +190,7 @@ export function MediaContent({
 	if (kind === "image")
 		return (
 			<img
-				className="mx-auto max-h-full max-w-full object-contain"
+				className="atw:mx-auto atw:max-h-full atw:max-w-full atw:object-contain"
 				src={src}
 				alt={label}
 			/>
@@ -200,7 +200,7 @@ export function MediaContent({
 			// Raw repository videos have no associated caption track metadata.
 			// oxlint-disable-next-line jsx-a11y/media-has-caption
 			<video
-				className="max-h-full w-full"
+				className="atw:max-h-full atw:w-full"
 				controls
 				preload="metadata"
 				src={src}

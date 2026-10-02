@@ -1186,7 +1186,7 @@ describe("MarkdownView", () => {
 		const secondSlot = shownProseMirror(host)!.closest(
 			"[data-markdown-document]",
 		);
-		expect(secondSlot?.className).toContain("absolute inset-0");
+		expect(secondSlot?.className).toContain("atw:absolute atw:inset-0");
 
 		// Stepping back must promote the previous document into the same kind
 		// of fixed viewport slot. This catches direction-dependent collapse:
@@ -1203,7 +1203,7 @@ describe("MarkdownView", () => {
 		const returnedFirstSlot = shownProseMirror(host)!.closest(
 			"[data-markdown-document]",
 		);
-		expect(returnedFirstSlot?.className).toContain("absolute inset-0");
+		expect(returnedFirstSlot?.className).toContain("atw:absolute atw:inset-0");
 		observer.disconnect();
 		expect(screen.getByRole("toolbar", { name: "Formatting toolbar" })).toBe(
 			toolbar,
@@ -1293,7 +1293,7 @@ describe("MarkdownView", () => {
 		});
 		expect(
 			shownProseMirror(host)!.closest("[data-markdown-document]")?.className,
-		).toContain("absolute inset-0");
+		).toContain("atw:absolute atw:inset-0");
 
 		await act(async () => utils!.unmount());
 		host.remove();

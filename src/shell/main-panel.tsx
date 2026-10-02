@@ -123,15 +123,15 @@ function EmptyStateContent({
 	const Glyph = canCreate ? FilePlus : FileText;
 	return (
 		<div
-			className="flex h-full flex-col items-center justify-center p-10 text-center"
+			className="atw:flex atw:h-full atw:flex-col atw:items-center atw:justify-center atw:p-10 atw:text-center"
 			data-testid="main-panel-empty-state"
 			data-can-create={canCreate ? "true" : "false"}
 		>
-			<Glyph className="size-8 text-fg-subtle" strokeWidth={1.5} />
-			<h1 className="mt-4 text-2xl font-bold tracking-[-0.02em] text-fg">
+			<Glyph className="atw:size-8 atw:text-fg-subtle" strokeWidth={1.5} />
+			<h1 className="atw:mt-4 atw:text-2xl atw:font-bold atw:tracking-[-0.02em] atw:text-fg">
 				{canCreate ? "Start writing" : "Nothing open"}
 			</h1>
-			<p className="mt-1.5 max-w-90 text-sm leading-relaxed text-fg-muted text-pretty">
+			<p className="atw:mt-1.5 atw:max-w-90 atw:text-sm atw:leading-relaxed atw:text-fg-muted atw:text-pretty">
 				{canCreate
 					? "Open a file from the left, or create a new document."
 					: "Open a file from the left to read it."}
@@ -141,10 +141,10 @@ function EmptyStateContent({
 					type="button"
 					onClick={() => void onCreateNewFile()}
 					data-attr="main-empty-new-document"
-					className="mt-6 flex items-center gap-2 rounded-[10px] bg-accent px-6 py-2.75 text-sm font-bold text-accent-on shadow-accent hover:bg-accent-hover"
+					className="atw:mt-6 atw:flex atw:items-center atw:gap-2 atw:rounded-[10px] atw:bg-accent atw:px-6 atw:py-2.75 atw:text-sm atw:font-bold atw:text-accent-on atw:shadow-accent atw:hover:bg-accent-hover"
 				>
 					New document
-					<span className="text-[11.5px] font-semibold opacity-75">
+					<span className="atw:text-[11.5px] atw:font-semibold atw:opacity-75">
 						{shortcutHint("⌘.")}
 					</span>
 				</button>

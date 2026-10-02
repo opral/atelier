@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { privateTailwind } from "../../scripts/private-tailwind.mjs";
 import { defineConfig } from "vite";
 
 const previewDir = path.dirname(fileURLToPath(import.meta.url));
@@ -10,10 +11,11 @@ const repositoryRoot = path.resolve(previewDir, "../..");
 export default defineConfig({
 	root: previewDir,
 	build: {
+		cssTarget: ["chrome123", "firefox120", "safari17.5"],
 		outDir: path.resolve(repositoryRoot, ".preview/web"),
 		emptyOutDir: true,
 	},
-	plugins: [react(), tailwindcss()],
+	plugins: [react(), tailwindcss(), privateTailwind()],
 	// The SDK module worker loads the component transpiler using top-level await.
 	worker: { format: "es" },
 	resolve: {

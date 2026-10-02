@@ -54,7 +54,7 @@ type VideoFileRow = {
  */
 export function VideoView(props: VideoViewProps) {
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
+		<div className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col">
 			<Suspense fallback={<VideoLoadingState />}>
 				<VideoViewContent {...props} />
 			</Suspense>
@@ -158,7 +158,7 @@ function VideoViewContent({
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
+			<div className="atw:flex atw:h-full atw:items-center atw:justify-center atw:text-sm atw:text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -175,7 +175,7 @@ function VideoViewContent({
 function VideoReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:text-center atw:text-sm atw:text-fg-subtle"
 			role="alert"
 		>
 			The working video changed while it was being reviewed. Reopen the review.
@@ -215,9 +215,9 @@ export function VideoPreview({
 	return (
 		<div className="atelier-video-view" data-testid="video-viewer">
 			{/* React never renders children here — the imperative player owns it. */}
-			<div className="h-full min-h-0" ref={containerRef} />
+			<div className="atw:h-full atw:min-h-0" ref={containerRef} />
 			{!objectUrl ? (
-				<div className="absolute inset-0">
+				<div className="atw:absolute atw:inset-0">
 					<VideoLoadingState />
 				</div>
 			) : null}
@@ -264,16 +264,16 @@ function useVideoObjectUrl(
 
 function VideoErrorState({ filePath }: { readonly filePath: string }) {
 	return (
-		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
+		<div className="atw:flex atw:h-full atw:min-h-48 atw:flex-col atw:items-center atw:justify-center atw:px-6 atw:py-8 atw:text-center">
 			<VideoOff
 				aria-hidden="true"
-				className="size-7 text-fg-subtle"
+				className="atw:size-7 atw:text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-fg">
+			<p className="atw:mt-3 atw:text-sm atw:font-medium atw:text-fg">
 				This video could not be played.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
+			<p className="atw:mt-1 atw:max-w-sm atw:text-xs atw:leading-relaxed atw:text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} may be damaged or use an
 				unsupported video format.
 			</p>
@@ -283,9 +283,9 @@ function VideoErrorState({ filePath }: { readonly filePath: string }) {
 
 function VideoLoadingState() {
 	return (
-		<div className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle">
-			<div className="flex items-center gap-2 text-sm">
-				<AnimatedZap size={13} tone="muted" className="shrink-0" />
+		<div className="atw:flex atw:h-full atw:min-h-48 atw:items-center atw:justify-center atw:px-3 atw:py-2 atw:text-fg-subtle">
+			<div className="atw:flex atw:items-center atw:gap-2 atw:text-sm">
+				<AnimatedZap size={13} tone="muted" className="atw:shrink-0" />
 				<span>Loading video…</span>
 			</div>
 		</div>

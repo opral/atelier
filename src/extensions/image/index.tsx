@@ -202,7 +202,7 @@ function ImageViewContent({
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
+			<div className="atw:flex atw:h-full atw:items-center atw:justify-center atw:text-sm atw:text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -219,7 +219,7 @@ function ImageViewContent({
 function ImageReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:text-center atw:text-sm atw:text-fg-subtle"
 			role="alert"
 		>
 			The working image changed while it was being reviewed. Reopen the review.
@@ -369,7 +369,7 @@ function ImagePreviewSource({
 					</ImageToolbarButton>
 					<output
 						aria-label="Zoom level"
-						className="min-w-13 px-1 text-center text-[11.5px] font-semibold text-fg-subtle tabular-nums"
+						className="atw:min-w-13 atw:px-1 atw:text-center atw:text-[11.5px] atw:font-semibold atw:text-fg-subtle atw:tabular-nums"
 					>
 						{Math.round(displayedZoom * 100)}%
 					</output>
@@ -427,7 +427,7 @@ function ImageToolbarButton({
 				<Button
 					aria-label={ariaLabel}
 					aria-pressed={isPressed}
-					className="h-7 min-w-7 gap-1.5 rounded-control px-2 text-[11.5px] font-semibold text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-35 [&_svg]:size-3.75"
+					className="atw:h-7 atw:min-w-7 atw:gap-1.5 atw:rounded-control atw:px-2 atw:text-[11.5px] atw:font-semibold atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg atw:disabled:opacity-35 atw:[&_svg]:size-3.75"
 					disabled={disabled}
 					onClick={onClick}
 					size="sm"
@@ -444,16 +444,16 @@ function ImageToolbarButton({
 
 function ImageErrorState({ filePath }: { readonly filePath: string }) {
 	return (
-		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
+		<div className="atw:flex atw:h-full atw:min-h-48 atw:flex-col atw:items-center atw:justify-center atw:px-6 atw:py-8 atw:text-center">
 			<ImageOff
 				aria-hidden="true"
-				className="size-7 text-fg-subtle"
+				className="atw:size-7 atw:text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-fg">
+			<p className="atw:mt-3 atw:text-sm atw:font-medium atw:text-fg">
 				This image could not be displayed.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
+			<p className="atw:mt-1 atw:max-w-sm atw:text-xs atw:leading-relaxed atw:text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} may be damaged or use an
 				unsupported image format.
 			</p>
@@ -463,9 +463,9 @@ function ImageErrorState({ filePath }: { readonly filePath: string }) {
 
 function ImageLoadingState() {
 	return (
-		<div className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle">
-			<div className="flex items-center gap-2 text-sm">
-				<AnimatedZap size={13} tone="muted" className="shrink-0" />
+		<div className="atw:flex atw:h-full atw:min-h-48 atw:items-center atw:justify-center atw:px-3 atw:py-2 atw:text-fg-subtle">
+			<div className="atw:flex atw:items-center atw:gap-2 atw:text-sm">
+				<AnimatedZap size={13} tone="muted" className="atw:shrink-0" />
 				<span>Loading image…</span>
 			</div>
 		</div>

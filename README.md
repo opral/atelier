@@ -37,6 +37,31 @@ import "@opral/atelier/style.css";
 The host opens the Lix handle and closes it after unmount. Atelier owns its
 UI, subscriptions, extension loading, and editor lifecycle.
 
+### CSS ownership
+
+Import `@opral/atelier/style.css` once, whether your host uses Tailwind or plain
+CSS. It includes the shell, every bundled extension, static render styles,
+design tokens and all of Atelier's compiled utilities. No host source scanning,
+Tailwind adapter or additional stylesheet is required.
+
+Atelier uses Tailwind internally. Its classes have a private `atw:` prefix;
+Tailwind implementation properties and animation names are private too.
+Resets apply only to `.atelier-root` and `.atelier-portal`, and Atelier does not
+ship global Preflight. The public design tokens keep their `--atelier-*` names.
+Bundled editor dependencies retain their font-face and keyframe registrations.
+
+Host `className` props pass through unchanged. Supply your own generated host
+utilities or custom classes there; the private classes are implementation details.
+Host Tailwind utilities and unlayered custom CSS can override Atelier's layers
+in either stylesheet order. Override `--atelier-*` tokens on an ancestor to
+retheme a workspace or portal. Mounted roots choose light; a `.dark` root or
+ancestor switches them to dark without changing the host's color scheme.
+
+Atelier tokens use native `light-dark()` (Chrome 123+, Firefox 120+, Safari
+17.5+). Keep it native in the host's CSS build too: for Vite, set
+`build.cssTarget: ["chrome123", "firefox120", "safari17.5"]`. Lowering the function
+inside inherited custom properties can freeze or invalidate their scheme values.
+
 ## Static
 
 ```ts
@@ -70,22 +95,21 @@ throw.
 ### Styling a static view
 
 Put the HTML inside an element with class `atelier-render` and load
-`@opral/atelier/render.css`. Or pass `document: true` to get a complete HTML
+`@opral/atelier/style.css`. Or pass `document: true` to get a complete HTML
 file with the styles inlined.
 
-Colours are `--atelier-*` custom properties from `@opral/atelier/theme.css`, the same file the app uses; a host that redeclares one on any ancestor retints the render.
+Colours are `--atelier-*` custom properties included in the stylesheet, from the same canonical token file the app uses; a host that redeclares one on any ancestor retints the render.
 
 ## Entries
 
-| entry                           | what it is                       | guarantees                                                                          |
-| ------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
-| `@opral/atelier`                | the shell, and the extension API | React                                                                               |
-| `@opral/atelier/render`         | views, without a shell           | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
-| `@opral/atelier/render.css`     | styles for static views          | generated tokens, no colour literals in rules                                       |
-| `@opral/atelier/style.css`      | styles for the shell             |                                                                                     |
-| `@opral/atelier/file-icons`     | path → icon                      | no React, no DOM                                                                    |
-| `@opral/atelier/state-adapters` | the shell's persistence ports    |                                                                                     |
-| `@opral/atelier/dev-tools`      | tools for working on Atelier     | not for shipping                                                                    |
+| entry                           | what it is                         | guarantees                                                                          |
+| ------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `@opral/atelier`                | the shell, and the extension API   | React                                                                               |
+| `@opral/atelier/render`         | views, without a shell             | no React, no DOM, closure under 700 kB — checked by `scripts/render-entry.test.mjs` |
+| `@opral/atelier/style.css`      | complete mounted and static styles |                                                                                     |
+| `@opral/atelier/file-icons`     | path → icon                        | no React, no DOM                                                                    |
+| `@opral/atelier/state-adapters` | the shell's persistence ports      |                                                                                     |
+| `@opral/atelier/dev-tools`      | tools for working on Atelier       | not for shipping                                                                    |
 
 ## Static rendering
 

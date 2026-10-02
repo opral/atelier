@@ -4,19 +4,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-	"inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring focus-visible:ring-[3px] aria-invalid:ring-danger/20 dark:aria-invalid:ring-danger/40 aria-invalid:border-danger",
+	"atw:inline-flex atw:cursor-pointer atw:items-center atw:justify-center atw:gap-2 atw:whitespace-nowrap atw:rounded-md atw:text-sm atw:font-medium atw:transition-all atw:disabled:pointer-events-none atw:disabled:opacity-50 atw:[&_svg]:pointer-events-none atw:[&_svg:not([class*='size-'])]:size-4 atw:shrink-0 atw:[&_svg]:shrink-0 atw:outline-none atw:focus-visible:border-ring atw:focus-visible:ring-ring atw:focus-visible:ring-[3px] atw:aria-invalid:ring-danger/20 atw:dark:aria-invalid:ring-danger/40 atw:aria-invalid:border-danger",
 	{
 		variants: {
 			variant: {
-				default: "bg-accent text-accent-on shadow-xs hover:bg-accent/90",
+				default:
+					"atw:bg-accent atw:text-accent-on atw:shadow-xs atw:hover:bg-accent/90",
 				destructive:
-					"bg-danger text-accent-on shadow-xs hover:bg-danger/90 focus-visible:ring-danger/20 dark:focus-visible:ring-danger/40 dark:bg-danger/60",
-				ghost: "hover:bg-bg-hover hover:text-fg dark:hover:bg-bg-hover/50",
+					"atw:bg-danger atw:text-accent-on atw:shadow-xs atw:hover:bg-danger/90 atw:focus-visible:ring-danger/20 atw:dark:focus-visible:ring-danger/40 atw:dark:bg-danger/60",
+				ghost:
+					"atw:hover:bg-bg-hover atw:hover:text-fg atw:dark:hover:bg-bg-hover/50",
 			},
 			size: {
-				default: "h-9 px-4 py-2 has-[>svg]:px-3",
-				sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-				icon: "size-9",
+				default: "atw:h-9 atw:px-4 atw:py-2 atw:has-[>svg]:px-3",
+				sm: "atw:h-8 atw:rounded-md atw:gap-1.5 atw:px-3 atw:has-[>svg]:px-2.5",
+				icon: "atw:size-9",
 			},
 		},
 		defaultVariants: {

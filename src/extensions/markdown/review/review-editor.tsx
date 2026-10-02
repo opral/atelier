@@ -402,10 +402,10 @@ export function MarkdownReviewEditor({
 	return (
 		<>
 			{externalEditor ? null : (
-				<div className="ph-mask tiptap-container h-full w-full overflow-y-auto bg-panel">
+				<div className="ph-mask tiptap-container atw:h-full atw:w-full atw:overflow-y-auto atw:bg-panel">
 					<EditorContent
 						editor={editor}
-						className="tiptap mx-auto w-full"
+						className="tiptap atw:mx-auto atw:w-full"
 						data-testid="markdown-review-editor"
 						data-review-change-count={reviewDocument.changes.length}
 						data-review-resolved-count={decisions.size}

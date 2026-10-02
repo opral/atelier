@@ -196,7 +196,7 @@ export function LibraryPreview({ file }: { readonly file: LibraryFile }) {
 	return (
 		<div
 			ref={ref}
-			className="relative h-full w-full overflow-hidden"
+			className="atw:relative atw:h-full atw:w-full atw:overflow-hidden"
 			data-library-preview={file.kind}
 		>
 			{body ?? (settled ? <IconPreview path={file.path} /> : null)}
@@ -206,12 +206,12 @@ export function LibraryPreview({ file }: { readonly file: LibraryFile }) {
 
 function IconPreview({ path }: { readonly path: string }) {
 	return (
-		<div className="grid h-full w-full place-items-center">
+		<div className="atw:grid atw:h-full atw:w-full atw:place-items-center">
 			<img
 				src={fileIconUrl(path)}
 				alt=""
 				aria-hidden="true"
-				className="size-9 opacity-80"
+				className="atw:size-9 atw:opacity-80"
 			/>
 		</div>
 	);
@@ -243,7 +243,7 @@ function ImagePreview({
 			src={url}
 			alt=""
 			draggable={false}
-			className="h-full w-full object-cover"
+			className="atw:h-full atw:w-full atw:object-cover"
 		/>
 	);
 }
@@ -263,7 +263,7 @@ function VideoPreview({
 			muted
 			playsInline
 			preload="metadata"
-			className="h-full w-full object-cover"
+			className="atw:h-full atw:w-full atw:object-cover"
 		/>
 	);
 }
@@ -272,7 +272,7 @@ function VideoPreview({
 function TextPreview({ text }: { readonly text: string }) {
 	const excerpt = text.split("\n").slice(0, 18).join("\n");
 	return (
-		<pre className="m-0 h-full overflow-hidden px-3 py-2.5 font-mono text-[9.5px] leading-[1.5] whitespace-pre-wrap break-words text-fg-muted">
+		<pre className="atw:m-0 atw:h-full atw:overflow-hidden atw:px-3 atw:py-2.5 atw:font-mono atw:text-[9.5px] atw:leading-[1.5] atw:whitespace-pre-wrap atw:break-words atw:text-fg-muted">
 			{excerpt}
 		</pre>
 	);
@@ -287,7 +287,7 @@ function HtmlPreview({ html }: { readonly html: string }) {
 			srcDoc={html}
 			tabIndex={-1}
 			aria-hidden="true"
-			className="pointer-events-none absolute top-0 left-0 h-[200%] w-[200%] origin-top-left scale-50 border-0 bg-panel"
+			className="atw:pointer-events-none atw:absolute atw:top-0 atw:left-0 atw:h-[200%] atw:w-[200%] atw:origin-top-left atw:scale-50 atw:border-0 atw:bg-panel"
 		/>
 	);
 }
@@ -303,13 +303,13 @@ function CsvPreview({ text }: { readonly text: string }) {
 	if (rows.length === 0) return <EmptyPreviewLine label="Empty table" />;
 	const [header, ...body] = rows;
 	return (
-		<table className="w-full table-fixed border-collapse text-[9.5px] leading-[1.35] text-fg-muted">
+		<table className="atw:w-full atw:table-fixed atw:border-collapse atw:text-[9.5px] atw:leading-[1.35] atw:text-fg-muted">
 			<thead>
 				<tr>
 					{header!.map((cell, index) => (
 						<th
 							key={index}
-							className="truncate border-b border-border px-2 py-1.5 text-left font-semibold text-fg"
+							className="atw:truncate atw:border-b atw:border-border atw:px-2 atw:py-1.5 atw:text-left atw:font-semibold atw:text-fg"
 						>
 							{cell}
 						</th>
@@ -322,7 +322,7 @@ function CsvPreview({ text }: { readonly text: string }) {
 						{header!.map((_, index) => (
 							<td
 								key={index}
-								className="truncate border-b border-border-subtle px-2 py-1.5"
+								className="atw:truncate atw:border-b atw:border-border-subtle atw:px-2 atw:py-1.5"
 							>
 								{row[index] ?? ""}
 							</td>
@@ -336,7 +336,7 @@ function CsvPreview({ text }: { readonly text: string }) {
 
 function EmptyPreviewLine({ label }: { readonly label: string }) {
 	return (
-		<div className="grid h-full place-items-center text-[11px] text-fg-faint">
+		<div className="atw:grid atw:h-full atw:place-items-center atw:text-[11px] atw:text-fg-faint">
 			{label}
 		</div>
 	);
@@ -370,10 +370,10 @@ function MarkdownPreview({ text }: { readonly text: string }) {
 		}
 	}, [text]);
 	if (blocks === null) return <TextPreview text={text} />;
-	if (blocks.length === 0) return <EmptyPreviewLine label="Empty page" />;
+	if (blocks.length === 0) return <EmptyPreviewLine label="Empty document" />;
 	return (
 		<div
-			className="atelier-document pointer-events-none px-3.5 py-3 select-none"
+			className="atelier-document atw:pointer-events-none atw:px-3.5 atw:py-3 atw:select-none"
 			style={{ ["--atelier-doc-font-size" as string]: "9.5px" }}
 		>
 			{blocks.map((block, index) => (
@@ -425,7 +425,7 @@ function MarkdownBlock({ node }: { readonly node: MdNode }): ReactNode {
 								checked={Boolean(item.checked)}
 								readOnly
 								tabIndex={-1}
-								className="mr-1 align-[-1px]"
+								className="atw:mr-1 atw:align-[-1px]"
 							/>
 						) : null}
 						{inlineText(item)}
@@ -517,7 +517,7 @@ function ExcalidrawPreview({ text }: { readonly text: string }) {
 		<svg
 			viewBox={viewBox}
 			preserveAspectRatio="xMidYMid meet"
-			className="h-full w-full p-3 text-fg-muted"
+			className="atw:h-full atw:w-full atw:p-3 atw:text-fg-muted"
 			aria-hidden="true"
 		>
 			{elements.map((element, index) => {

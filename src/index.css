@@ -1,18 +1,23 @@
+/* Atelier compiles its private utilities; a host only imports the result. */
 @import "./shell/layers.css";
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
+@import "tailwindcss/theme.css" layer(components.atelier.theme) prefix(atw);
+@import "tailwindcss/utilities.css" layer(components.atelier.utilities)
+	prefix(atw) source(none);
 @import "tw-animate-css";
-@import "./shell/theme.css" layer(atelier);
-@import "./shell/document.css" layer(atelier);
+@import "./shell/theme.css" layer(components.atelier.components);
+@import "./shell/document.css" layer(components.atelier.components);
+@import "./render/chrome.css" layer(components.atelier.components);
 @import "./shell/tailwind.css";
-
 @source "./";
-
+@source not "./**/*.test.{ts,tsx}";
 @custom-variant dark (&:is(.dark *));
 
 /* Every token carries its dark value in light-dark(); the scheme is the switch. */
-@layer atelier {
-	.dark {
+@layer components.atelier.components {
+	.atelier-root.dark,
+	.atelier-portal.dark,
+	.dark .atelier-root,
+	.dark .atelier-portal {
 		color-scheme: dark;
 	}
 
@@ -435,7 +440,7 @@
 	}
 }
 
-@layer base {
+@layer components.atelier.components {
 	.atelier-root,
 	.atelier-portal,
 	.atelier-root *,
@@ -444,12 +449,17 @@
 	.atelier-portal *::before,
 	.atelier-root *::after,
 	.atelier-portal *::after {
-		@apply border-border outline-ring/50;
+		@apply atw:border-border atw:outline-ring/50;
 		box-sizing: border-box;
-		border: 0 solid;
+		border-width: 0;
+		border-style: solid;
+	}
+	.atelier-root,
+	.atelier-portal {
+		color-scheme: light;
 	}
 	.atelier-root {
-		@apply bg-panel text-fg;
+		@apply atw:bg-panel atw:text-fg;
 		height: 100%;
 		min-height: 0;
 		width: 100%;
@@ -496,7 +506,7 @@
 	}
 }
 
-@layer atelier {
+@layer components.atelier.components {
 	/* Utility to temporarily hide scrollbars (e.g., during programmatic scroll) */
 	.atelier-root .scrollbar-hidden {
 		scrollbar-width: none; /* Firefox */
@@ -528,7 +538,7 @@
 	/* TipTap / ProseMirror base styles */
 }
 
-@layer components {
+@layer components.atelier.components {
 	.atelier-root
 		.tiptap-container[data-editor-focused="true"]
 		.ProseMirror

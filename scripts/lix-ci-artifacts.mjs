@@ -249,12 +249,18 @@ async function findPendingRun({ apiRoot, repository, revision }) {
 		`${apiRoot}/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(revision)}&per_page=100`,
 	);
 	return (response.workflow_runs ?? []).find(
-		(run) => run.status !== "completed",
+		(run) =>
+			run.head_sha === revision &&
+			run.path === ".github/workflows/ci.yml" &&
+			run.status !== "completed",
 	);
 }
 
-function waitDurationSeconds() {
-	const value = process.env.LIX_CI_ARTIFACT_WAIT_SECONDS ?? "0";
+export function waitDurationSeconds(env = process.env) {
+	// Workers may start immediately after a vendored Lix merge, before its
+	// browser artifact is uploaded. Wait only while that exact CI run is pending.
+	const value =
+		env.LIX_CI_ARTIFACT_WAIT_SECONDS ?? (env.WORKERS_CI === "1" ? "900" : "0");
 	if (!/^\d+$/.test(value)) {
 		throw new Error(
 			`LIX_CI_ARTIFACT_WAIT_SECONDS must be a non-negative integer.`,

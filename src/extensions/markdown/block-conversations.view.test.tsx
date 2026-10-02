@@ -4,6 +4,7 @@ import {
 	configure,
 	fireEvent,
 	render,
+	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
@@ -20,6 +21,7 @@ import { lixPluginArchives } from "@/test-utils/lix-plugin-archives";
 import type { Editor } from "@tiptap/core";
 import type { Document } from "@opral/zettel-ast";
 import { LixProvider } from "@/lib/lix-react";
+import { AtelierErrorBoundary } from "@/atelier-error-boundary";
 import { isMacPlatform } from "@/lib/platform";
 import { openLix, type Lix } from "@/test-utils/node-lix-sdk";
 import { MarkdownView } from "./index";
@@ -196,6 +198,124 @@ function startOf(editor: Editor, text: string): number {
 }
 
 describe("block conversations follow their block through edits", () => {
+	test("waits for the Markdown plugin before observing markdown_node", async () => {
+		const lix = await openLix();
+		const inserted = await lix.execute(
+			"INSERT INTO lix_file (path, content) VALUES ($1, $2) RETURNING id",
+			["/doc.md", new TextEncoder().encode("# No plugin yet")],
+		);
+		const fileId = inserted.rows[0]!.id as string;
+		const observe = vi.spyOn(lix, "observe");
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<Suspense fallback={null}>
+							<MarkdownView fileId={fileId} filePath="/doc.md" />
+						</Suspense>
+					</LixProvider>,
+				);
+			});
+			await waitFor(() =>
+				expect(document.querySelector(".ProseMirror")).toBeTruthy(),
+			);
+			await waitFor(() =>
+				expect(
+					observe.mock.calls.some(
+						([statement, parameters]) =>
+							/\blix_file\b/i.test(String(statement)) &&
+							parameters?.includes("/.lix/plugins/plugin_markdown.lixplugin"),
+					),
+				).toBe(true),
+			);
+			const markdownQueries = () =>
+				observe.mock.calls.filter(([statement]) =>
+					/\bmarkdown_node\b/i.test(String(statement)),
+				);
+			expect(markdownQueries()).toHaveLength(0);
+
+			const plugin = (await lixPluginArchives()).find(
+				(archive) => archive.key === "plugin_markdown",
+			);
+			if (!plugin) throw new Error("expected the Markdown plugin archive");
+			await act(async () => {
+				await lix.execute(
+					"INSERT INTO lix_file (path, content) VALUES ($1, $2)",
+					["/.lix/plugins/plugin_markdown.lixplugin", plugin.archiveBytes],
+				);
+			});
+			await waitFor(() =>
+				expect(markdownQueries().length).toBeGreaterThanOrEqual(2),
+			);
+			await waitFor(async () => {
+				const rows = await lix.execute("SELECT id FROM markdown_node LIMIT 1");
+				expect(rows.rows).toBeDefined();
+			});
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
+	test("surfaces markdown observer TABLE_NOT_FOUND errors", async () => {
+		const lix = await openLix();
+		const inserted = await lix.execute(
+			"INSERT INTO lix_file (path, content) VALUES ($1, $2) RETURNING id",
+			["/doc.md", new TextEncoder().encode("# Missing table")],
+		);
+		const fileId = inserted.rows[0]!.id as string;
+		const plugin = (await lixPluginArchives()).find(
+			(archive) => archive.key === "plugin_markdown",
+		);
+		if (!plugin) throw new Error("expected the Markdown plugin archive");
+		await lix.execute("INSERT INTO lix_file (path, content) VALUES ($1, $2)", [
+			"/.lix/plugins/plugin_markdown.lixplugin",
+			plugin.archiveBytes,
+		]);
+		// Route the two real markdown observers through a missing table in the
+		// live Lix engine. This exercises the actual observer error path while
+		// leaving the archive capability query and editor queries untouched.
+		const observe = lix.observe.bind(lix);
+		vi.spyOn(lix, "observe").mockImplementation((...args) => {
+			if (/\bmarkdown_node\b/i.test(String(args[0])))
+				return observe("SELECT id FROM atelier_missing_test_table", []);
+			return observe(...args);
+		});
+		const observedErrors: unknown[] = [];
+		let utils: ReturnType<typeof render> | undefined;
+		try {
+			await act(async () => {
+				utils = render(
+					<LixProvider lix={lix}>
+						<AtelierErrorBoundary
+							onError={(error) => observedErrors.push(error)}
+							errorFallback={<div data-testid="markdown-query-error" />}
+						>
+							<Suspense fallback={null}>
+								<MarkdownView fileId={fileId} filePath="/doc.md" />
+							</Suspense>
+						</AtelierErrorBoundary>
+					</LixProvider>,
+				);
+			});
+			await waitFor(() =>
+				expect(screen.getByTestId("markdown-query-error")).toBeInTheDocument(),
+			);
+			expect(
+				observedErrors.some(
+					(error) =>
+						error instanceof Error &&
+						(error.message.includes("atelier_missing_test_table") ||
+							error.message.includes("TABLE_NOT_FOUND")),
+				),
+			).toBe(true);
+		} finally {
+			await act(async () => utils?.unmount());
+			await lix.close();
+		}
+	});
+
 	test("a merge hands the conversation to the block merged into; undo gives it back", async () => {
 		const view = await setup(
 			"# Title\n\nFirst para.\n\nSecond para.\n\nTail.\n",

@@ -1,6 +1,6 @@
 @import "./layers.css";
 
-@layer atelier {
+@layer components.atelier.components {
 	.tabBar {
 		position: relative;
 		height: var(--atelier-panel-header-height);

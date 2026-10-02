@@ -183,7 +183,7 @@ describe("PanelV2", () => {
 		let contentElement: HTMLElement | null = placeholder.parentElement;
 		while (
 			contentElement &&
-			!contentElement.className.includes("overflow-hidden")
+			!contentElement.className.includes("atw:overflow-hidden")
 		) {
 			contentElement = contentElement.parentElement;
 		}
@@ -194,17 +194,21 @@ describe("PanelV2", () => {
 			.filter(Boolean);
 
 		const expectedClasses = [
-			"relative",
-			"flex",
-			"min-h-0",
-			"flex-1",
-			"flex-col",
-			"overflow-hidden",
+			"atw:relative",
+			"atw:flex",
+			"atw:min-h-0",
+			"atw:flex-1",
+			"atw:flex-col",
+			"atw:overflow-hidden",
 		];
 		expect(classList.sort()).toEqual([...expectedClasses].sort());
 		// Keep the host padding-free so we don't assume what individual views render.
-		expect(classList.some((token) => /^p[trblxy]?-/u.test(token))).toBe(false);
-		expect(classList.some((token) => /^m[trblxy]?-/u.test(token))).toBe(false);
+		expect(classList.some((token) => /^atw:p[trblxy]?-/u.test(token))).toBe(
+			false,
+		);
+		expect(classList.some((token) => /^atw:m[trblxy]?-/u.test(token))).toBe(
+			false,
+		);
 	});
 
 	test("a review stepping to another file of the same extension keeps the mounted view", async () => {

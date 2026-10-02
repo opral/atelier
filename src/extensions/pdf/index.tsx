@@ -49,7 +49,7 @@ type PdfPreviewState = "loading" | "ready" | "error";
 /** Read-only renderer for a PDF stored in the Lix workspace. */
 export function PdfView(props: PdfViewProps) {
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
+		<div className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col">
 			<Suspense fallback={<PdfLoadingState />}>
 				<PdfViewContent {...props} />
 			</Suspense>
@@ -159,7 +159,7 @@ function PdfViewContent({
 
 	if (!fileRow) {
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
+			<div className="atw:flex atw:h-full atw:items-center atw:justify-center atw:text-sm atw:text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -177,7 +177,7 @@ function PdfViewContent({
 function PdfReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:text-center atw:text-sm atw:text-fg-subtle"
 			role="alert"
 		>
 			The working PDF changed while it was being reviewed. Reopen the review.
@@ -279,8 +279,8 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 function PdfLoadingState() {
 	return (
 		<div className="atelier-pdf-state" role="status">
-			<div className="flex items-center gap-2 text-sm">
-				<AnimatedZap size={13} tone="muted" className="shrink-0" />
+			<div className="atw:flex atw:items-center atw:gap-2 atw:text-sm">
+				<AnimatedZap size={13} tone="muted" className="atw:shrink-0" />
 				<span>Loading PDF…</span>
 			</div>
 		</div>
@@ -292,13 +292,13 @@ function PdfErrorState({ filePath }: { readonly filePath: string }) {
 		<div className="atelier-pdf-state" role="alert">
 			<FileWarning
 				aria-hidden="true"
-				className="size-7 text-fg-subtle"
+				className="atw:size-7 atw:text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-fg">
+			<p className="atw:mt-3 atw:text-sm atw:font-medium atw:text-fg">
 				This PDF could not be displayed.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
+			<p className="atw:mt-1 atw:max-w-sm atw:text-xs atw:leading-relaxed atw:text-fg-subtle">
 				{fileNameFromPath(filePath) ?? filePath} may be damaged or not contain a
 				valid PDF document.
 			</p>

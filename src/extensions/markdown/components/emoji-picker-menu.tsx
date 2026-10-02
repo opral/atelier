@@ -280,7 +280,7 @@ export function EmojiPickerMenu() {
 				) : null}
 				<span>Esc Close</span>
 			</div>
-			<div className="sr-only" role="status" aria-live="polite">
+			<div className="atw:sr-only" role="status" aria-live="polite">
 				{selectedEmoji
 					? `${selectedEmoji.name}, :${selectedEmoji.slug}:`
 					: `No emoji found for ${emojiState.query}`}

@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier {
+@layer components.atelier.components {
 	/* The context line's links: quiet until pointed at (design "1a"). */
 	.conversation-context-link:hover,
 	.conversation-context-link:focus-visible {

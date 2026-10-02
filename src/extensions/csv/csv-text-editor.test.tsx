@@ -85,15 +85,15 @@ test("every text cell opens the editor that sets its own insets", () => {
 
 /**
  * Glide's sheet is unlayered by default, and an unlayered rule beats every
- * rule in `@layer atelier` — which is how the editor's fit to the cell
+ * rule in `@layer components.atelier.components` — which is how the editor's fit to the cell
  * stopped applying and clicking into a cell moved its text. It is imported
- * into a sublayer of `atelier` instead, and nowhere unlayered.
+ * into a sublayer of `components.atelier.components` instead, and nowhere unlayered.
  */
 test("Glide's stylesheet sits under Atelier's rules, never unlayered", () => {
 	const read = (file: string) =>
 		readFileSync(join(import.meta.dirname, file), "utf8");
 	expect(read("style.css")).toMatch(
-		/@import "@glideapps\/glide-data-grid\/dist\/index\.css" layer\(atelier\.glide\);/,
+		/@import "@glideapps\/glide-data-grid\/dist\/index\.css" layer\(components\.atelier\.components\.glide\);/,
 	);
 	for (const file of ["index.tsx", "csv-properties.tsx", "csv-review-grid.tsx"])
 		expect(read(file)).not.toContain("glide-data-grid/dist/index.css");

@@ -49,13 +49,13 @@ export function PreparedPdf({
 	}, [src, enhance]);
 	return (
 		<div
-			className="relative flex min-h-96 min-w-0 flex-1 flex-col"
+			className="atw:relative atw:flex atw:min-h-96 atw:min-w-0 atw:flex-1 atw:flex-col"
 			data-atelier-url-pdf=""
 			data-pdf-state={state}
 		>
 			{state === "native" ? (
 				<object
-					className="h-full min-h-96 w-full"
+					className="atw:h-full atw:min-h-96 atw:w-full"
 					type="application/pdf"
 					data={src}
 					aria-label={label}
@@ -65,7 +65,7 @@ export function PreparedPdf({
 			) : null}
 			<div
 				ref={container}
-				className="atelier-pdf-document relative min-h-96 flex-1"
+				className="atelier-pdf-document atw:relative atw:min-h-96 atw:flex-1"
 				style={{
 					display: state === "native" || state === "error" ? "none" : undefined,
 				}}

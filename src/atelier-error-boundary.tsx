@@ -50,10 +50,10 @@ function AtelierRenderError({ error }: { readonly error: unknown }) {
 			? error.message
 			: "An unexpected error occurred while rendering Atelier.";
 	return (
-		<div className="grid h-full w-full place-content-center bg-bg p-6 text-center text-fg">
-			<div className="grid max-w-[640px] gap-2" role="alert">
+		<div className="atw:grid atw:h-full atw:w-full atw:place-content-center atw:bg-bg atw:p-6 atw:text-center atw:text-fg">
+			<div className="atw:grid atw:max-w-[640px] atw:gap-2" role="alert">
 				<strong>Unable to render Atelier</strong>
-				<span className="text-fg-muted">{message}</span>
+				<span className="atw:text-fg-muted">{message}</span>
 			</div>
 		</div>
 	);

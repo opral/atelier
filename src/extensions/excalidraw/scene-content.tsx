@@ -356,7 +356,7 @@ export function SceneContent({ content }: { readonly content: string }) {
 			role="img"
 			aria-label="Drawing preview"
 			viewBox={`${left} ${top} ${right - left} ${bottom - top}`}
-			className="h-full min-h-64 w-full"
+			className="atw:h-full atw:min-h-64 atw:w-full"
 			data-atelier-scene-content=""
 			style={{
 				background: color(

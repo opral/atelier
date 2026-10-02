@@ -3,9 +3,9 @@ import { parseCsv } from "./csv-data";
 export function CsvContent({ content }: { readonly content: string }) {
 	const table = parseCsv(content);
 	return (
-		<div className="overflow-auto p-4">
+		<div className="atw:overflow-auto atw:p-4">
 			<table
-				className="w-full border-collapse text-left text-sm"
+				className="atw:w-full atw:border-collapse atw:text-left atw:text-sm"
 				data-atelier-csv-content=""
 			>
 				<thead>
@@ -14,7 +14,7 @@ export function CsvContent({ content }: { readonly content: string }) {
 							<th
 								key={index}
 								scope="col"
-								className="border border-border px-3 py-2 font-medium"
+								className="atw:border atw:border-border atw:px-3 atw:py-2 atw:font-medium"
 							>
 								{column}
 							</th>
@@ -25,7 +25,10 @@ export function CsvContent({ content }: { readonly content: string }) {
 					{table.rows.map((row) => (
 						<tr key={row.rowNumber}>
 							{row.cells.map((cell, index) => (
-								<td key={index} className="border border-border px-3 py-2">
+								<td
+									key={index}
+									className="atw:border atw:border-border atw:px-3 atw:py-2"
+								>
 									{cell}
 								</td>
 							))}

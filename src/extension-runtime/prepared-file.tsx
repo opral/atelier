@@ -171,12 +171,12 @@ export function PreparedFileSurface({
 	}, [documentKey, readySelector]);
 	return (
 		<div
-			className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+			className="atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden"
 			data-atelier-document-surface=""
 		>
 			{!interactive ? (
 				<div
-					className={`min-h-0 flex-1 overflow-auto${initialRevealed ? "" : " invisible"}`}
+					className={`atw:min-h-0 atw:flex-1 atw:overflow-auto${initialRevealed ? "" : " atw:invisible"}`}
 					data-atelier-initial-content=""
 					data-atelier-awaiting-diff={diff || undefined}
 				>
@@ -189,8 +189,8 @@ export function PreparedFileSurface({
 					aria-hidden={!interactive || undefined}
 					className={
 						interactive
-							? "flex min-h-0 flex-1 flex-col"
-							: "absolute inset-0 flex min-h-0 flex-col opacity-0 pointer-events-none"
+							? "atw:flex atw:min-h-0 atw:flex-1 atw:flex-col"
+							: "atw:absolute atw:inset-0 atw:flex atw:min-h-0 atw:flex-col atw:opacity-0 atw:pointer-events-none"
 					}
 				>
 					{children}

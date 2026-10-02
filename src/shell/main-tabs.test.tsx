@@ -486,7 +486,7 @@ describe("main tabs with a pinned home", () => {
 			expect(inactiveClose).toBeInTheDocument();
 			expect(inactiveClose?.parentElement?.className).toContain("opacity-0");
 			expect(inactiveClose?.parentElement?.className).toContain(
-				"group-hover:opacity-100",
+				"atw:group-hover:opacity-100",
 			);
 			expect(inactiveClose?.parentElement?.className).toContain(
 				"bg-bg-hover-strong",

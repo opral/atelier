@@ -138,7 +138,7 @@ export function hydrateMarkdownEditorAuthoritativeMarkdown(
  * @example
  * <TipTapEditor
  *   fileId="file-123"
- *   className="grow"
+ *   className="atw:grow"
  *   onReady={(editor) => editor.commands.focus()}
  *   focusOnLoad
  * />
@@ -877,8 +877,8 @@ function TipTapEditorLoadedContent({
 	if (!activeFileId) {
 		return (
 			<div className={className ?? undefined}>
-				<div className="flex h-full min-h-[200px] items-center justify-center bg-panel px-3 py-12">
-					<p className="text-sm text-fg-subtle">
+				<div className="atw:flex atw:h-full atw:min-h-[200px] atw:items-center atw:justify-center atw:bg-panel atw:px-3 atw:py-12">
+					<p className="atw:text-sm atw:text-fg-subtle">
 						Select a file to start writing.
 					</p>
 				</div>
@@ -891,12 +891,12 @@ function TipTapEditorLoadedContent({
 	}
 
 	return (
-		<div className={`relative min-h-0 ${className ?? ""}`}>
+		<div className={`atw:relative atw:min-h-0 ${className ?? ""}`}>
 			{persistenceError ? <p role="alert">{persistenceError.message}</p> : null}
 			<div
 				ref={scrollContainerRef}
 				role="presentation"
-				className="ph-mask tiptap-container relative w-full h-full bg-panel cursor-text overflow-y-auto"
+				className="ph-mask tiptap-container atw:relative atw:w-full atw:h-full atw:bg-panel atw:cursor-text atw:overflow-y-auto"
 				data-editor-focused={isEditorFocused ? "true" : "false"}
 				onMouseDown={handleSurfacePointerDown}
 				onDragOver={handleSurfaceDragOver}
@@ -904,7 +904,7 @@ function TipTapEditorLoadedContent({
 			>
 				<EditorContent
 					editor={editor}
-					className="tiptap w-full mx-auto"
+					className="tiptap atw:w-full atw:mx-auto"
 					data-testid="tiptap-editor"
 					key={`${activeBranchId}:${activeFileId ?? "no-file"}`}
 				/>
@@ -942,7 +942,7 @@ function MarkdownImagePasteHint({
 		>
 			<span className="markdown-image-paste-hint-icon" aria-hidden="true">
 				{status.state === "saving" ? (
-					<Loader2 className="animate-spin" />
+					<Loader2 className="atw:animate-spin" />
 				) : status.state === "saved" ? (
 					<Check />
 				) : status.state === "error" ? (
@@ -993,7 +993,7 @@ function TipTapEditorLoadingState({
 	// spinner or a skeleton flashing in between.
 	return (
 		<div className={className ?? undefined}>
-			<div className="h-full w-full bg-panel" />
+			<div className="atw:h-full atw:w-full atw:bg-panel" />
 		</div>
 	);
 }

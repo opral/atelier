@@ -50,8 +50,6 @@ const dirty =
 	) !== "";
 const sdkDist = join(sdkRoot, "dist");
 const browserMarker = join(sdkDist, ".atelier-browser-build.json");
-const nativeTarget = `${process.platform}-${process.arch}`;
-const nativeMarker = join(sdkDist, `.atelier-native-${nativeTarget}.json`);
 const browserFiles = [
 	join(sdkDist, "index.js"),
 	join(sdkDist, "index.d.ts"),
@@ -64,10 +62,6 @@ let browserReady =
 	mode !== "off" &&
 	!dirty &&
 	(await preparedMatches(browserMarker, browserFiles));
-const nativeReady =
-	mode !== "off" &&
-	!dirty &&
-	(await preparedMatches(nativeMarker, [join(sdkRoot, "lix_js_sdk.node")]));
 if (dirty && mode === "only") {
 	throw new Error(
 		"Vendored Lix has source changes; an exact-revision artifact cannot represent them. Commit the changes and build them in Lix CI, or use ATELIER_LIX_ARTIFACTS=off locally.",
@@ -114,12 +108,9 @@ if (browserReady) {
 		);
 	}
 }
-if (!browserReady || (!browserOnly && !nativeReady)) {
-	await buildFromSource();
-}
-// Replacing dist can remove this marker while leaving the native binary intact.
-if (!browserOnly && nativeReady)
-	await writeMarker(nativeMarker, { target: nativeTarget });
+// The SDK uses the same WASM engine in Node and browsers. Atelier does not
+// use filesystem storage, so no native backend is needed for tests or preview.
+if (!browserReady) await buildFromSource();
 
 async function preparedMatches(markerPath, files) {
 	try {
@@ -185,9 +176,7 @@ async function buildFromSource() {
 			await provisionRustup(channel, env);
 		}
 	}
-	for (const target of browserReady
-		? []
-		: ["wasm32-unknown-unknown", "wasm32-wasip2"]) {
+	for (const target of ["wasm32-unknown-unknown", "wasm32-wasip2"]) {
 		if (!rustTargetInstalled(target, channel, env)) {
 			run("rustup", ["target", "add", target, "--toolchain", channel], env);
 		}
@@ -195,7 +184,6 @@ async function buildFromSource() {
 
 	const expectedWasmBindgen = `wasm-bindgen ${wasmBindgenVersion}`;
 	if (
-		!browserReady &&
 		commandOutput("wasm-bindgen", ["--version"], env) !== expectedWasmBindgen
 	) {
 		await mkdir(toolsRoot, { recursive: true });
@@ -215,24 +203,12 @@ async function buildFromSource() {
 	}
 
 	run("npm", ["ci"], env, sdkRoot);
-	if (!browserReady) {
-		// Prepare only browser outputs here. The native build below does not clean dist.
-		for (const script of [
-			"clean",
-			"build:wasm",
-			"build:migration:wasm",
-			"build:ts",
-		]) {
-			run("npm", ["run", script], env, sdkRoot);
-		}
-		run("npm", ["ci"], env, opfsRoot);
-		run("npm", ["run", "build"], env, opfsRoot);
-		await writeMarker(browserMarker, { source: "source-build" });
+	for (const script of ["clean", "build:wasm", "build:ts"]) {
+		run("npm", ["run", script], env, sdkRoot);
 	}
-	if (!browserOnly && !nativeReady) {
-		run("npm", ["run", "build:native"], env, sdkRoot);
-		await writeMarker(nativeMarker, { target: nativeTarget });
-	}
+	run("npm", ["ci"], env, opfsRoot);
+	run("npm", ["run", "build"], env, opfsRoot);
+	await writeMarker(browserMarker, { source: "source-build" });
 }
 
 async function provisionRustup(rustChannel, rustEnv) {

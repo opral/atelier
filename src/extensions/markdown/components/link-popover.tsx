@@ -216,11 +216,11 @@ export function LinkPopover({
 				portalContainer={portalContainer}
 				data-attr={triggerDataAttr}
 			>
-				<LinkIcon className="size-3.5" aria-hidden />
+				<LinkIcon className="atw:size-3.5" aria-hidden />
 			</ToolbarIconButton>
 			<Popover.Portal container={portalContainer}>
 				<Popover.Positioner
-					className="z-50 outline-none"
+					className="atw:z-50 atw:outline-none"
 					anchor={anchor ?? undefined}
 					side="bottom"
 					align="start"
@@ -228,12 +228,12 @@ export function LinkPopover({
 				>
 					<Popover.Popup
 						initialFocus={inputRef}
-						className="w-[19rem] origin-[var(--transform-origin)] rounded-[8px] border border-border bg-panel p-1.5 shadow-lg transition-[transform,opacity] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+						className="atw:w-[19rem] atw:origin-[var(--transform-origin)] atw:rounded-[8px] atw:border atw:border-border atw:bg-panel atw:p-1.5 atw:shadow-lg atw:transition-[transform,opacity] atw:duration-150 atw:data-[starting-style]:scale-95 atw:data-[starting-style]:opacity-0"
 						data-attr="markdown-link-popover"
 					>
-						<div className="flex h-8 items-center gap-1.5 rounded-[7px] border border-border-subtle bg-bg-subtle px-2 text-fg shadow-md transition-[background-color,border-color,box-shadow] duration-100 focus-within:border-accent-border focus-within:bg-panel focus-within:shadow-md">
+						<div className="atw:flex atw:h-8 atw:items-center atw:gap-1.5 atw:rounded-[7px] atw:border atw:border-border-subtle atw:bg-bg-subtle atw:px-2 atw:text-fg atw:shadow-md atw:transition-[background-color,border-color,box-shadow] atw:duration-100 atw:focus-within:border-accent-border atw:focus-within:bg-panel atw:focus-within:shadow-md">
 							<LinkIcon
-								className="size-3.5 shrink-0 text-fg-subtle"
+								className="atw:size-3.5 atw:shrink-0 atw:text-fg-subtle"
 								aria-hidden
 							/>
 							<input
@@ -243,33 +243,33 @@ export function LinkPopover({
 								onKeyDown={handleKeyDown}
 								aria-label="Link URL"
 								placeholder="https://… or ./document.md"
-								className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[12.5px] font-medium text-fg outline-none placeholder:font-normal placeholder:text-fg-subtle"
+								className="atw:h-full atw:min-w-0 atw:flex-1 atw:border-0 atw:bg-transparent atw:p-0 atw:text-[12.5px] atw:font-medium atw:text-fg atw:outline-none atw:placeholder:font-normal atw:placeholder:text-fg-subtle"
 								data-attr="markdown-link-input"
 							/>
 						</div>
-						<div className="mt-1.5 flex items-center gap-1">
+						<div className="atw:mt-1.5 atw:flex atw:items-center atw:gap-1">
 							{editing && (
 								<button
 									type="button"
 									onClick={handleRemove}
-									className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] font-medium text-fg-subtle transition-colors hover:bg-bg-hover hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									className="atw:inline-flex atw:h-7 atw:items-center atw:gap-1 atw:rounded-[7px] atw:px-2 atw:text-[12.5px] atw:font-medium atw:text-fg-subtle atw:transition-colors atw:hover:bg-bg-hover atw:hover:text-danger atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 									data-attr="markdown-link-remove"
 								>
-									<Unlink className="size-3.5" aria-hidden />
+									<Unlink className="atw:size-3.5" aria-hidden />
 									Remove
 								</button>
 							)}
-							<Popover.Close className="ml-auto inline-flex h-7 items-center gap-1 rounded-[7px] px-2.5 text-[12.5px] font-medium text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-								<X className="size-3.5" aria-hidden />
+							<Popover.Close className="atw:ml-auto atw:inline-flex atw:h-7 atw:items-center atw:gap-1 atw:rounded-[7px] atw:px-2.5 atw:text-[12.5px] atw:font-medium atw:text-fg-muted atw:transition-colors atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring">
+								<X className="atw:size-3.5" aria-hidden />
 								Cancel
 							</Popover.Close>
 							<button
 								type="button"
 								onClick={handleApply}
-								className="inline-flex h-7 items-center gap-1 rounded-[7px] bg-accent px-3 text-[12.5px] font-semibold text-accent-on shadow-accent transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
+								className="atw:inline-flex atw:h-7 atw:items-center atw:gap-1 atw:rounded-[7px] atw:bg-accent atw:px-3 atw:text-[12.5px] atw:font-semibold atw:text-accent-on atw:shadow-accent atw:transition-colors atw:hover:bg-accent-hover atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-panel"
 								data-attr="markdown-link-apply"
 							>
-								<Check className="size-3.5" aria-hidden />
+								<Check className="atw:size-3.5" aria-hidden />
 								{editing ? "Update" : "Add link"}
 							</button>
 						</div>

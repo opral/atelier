@@ -195,10 +195,10 @@ export function Composer({
 	// Design 4a: the pill's 12px line sits in the middle of its 30px (a
 	// 15px line, 7.5px either side); writing is 12.5px on 18px.
 	const textSize = inDocument
-		? "text-[13px] leading-[19px]"
+		? "atw:text-[13px] atw:leading-[19px]"
 		: expanded
-			? "text-[12.5px] leading-[18px]"
-			: "text-[12px] leading-[15px]";
+			? "atw:text-[12.5px] atw:leading-[18px]"
+			: "atw:text-[12px] atw:leading-[15px]";
 
 	function readDocument(): Document {
 		try {
@@ -425,17 +425,17 @@ export function Composer({
 				data-attr="comment-composer"
 				data-tone={tone}
 				data-size={size}
-				className={`comment-surface flex flex-col outline-none gap-1.5 ${className}`}
+				className={`comment-surface atw:flex atw:flex-col atw:outline-none atw:gap-1.5 ${className}`}
 				onKeyDownCapture={onKeyDown}
 			>
 				<div
 					role="presentation"
 					data-state={writing ? "writing" : hasText ? "draft" : "resting"}
 					// The design's 1px border plus its padding; the edge here is a shadow.
-					className={`comment-field flex cursor-text flex-col rounded-panel ${
+					className={`comment-field atw:flex atw:cursor-text atw:flex-col atw:rounded-panel ${
 						open
-							? "gap-2 pt-[11px] pr-[11px] pb-[9px] pl-[13px]"
-							: "px-[13px] py-[9px]"
+							? "atw:gap-2 atw:pt-[11px] atw:pr-[11px] atw:pb-[9px] atw:pl-[13px]"
+							: "atw:px-[13px] atw:py-[9px]"
 					}`}
 					onMouseDown={(event) => {
 						if (event.target === event.currentTarget) {
@@ -444,11 +444,13 @@ export function Composer({
 						}
 					}}
 				>
-					<div className={`relative min-w-0 ${open ? "min-h-[38px]" : ""}`}>
+					<div
+						className={`atw:relative atw:min-w-0 ${open ? "atw:min-h-[38px]" : ""}`}
+					>
 						{blank ? (
 							<span
 								aria-hidden="true"
-								className="comment-field-placeholder pointer-events-none absolute inset-x-0 top-0 truncate text-[14px] leading-[21px]"
+								className="comment-field-placeholder atw:pointer-events-none atw:absolute atw:inset-x-0 atw:top-0 atw:truncate atw:text-[14px] atw:leading-[21px]"
 							>
 								{placeholder}
 							</span>
@@ -469,25 +471,25 @@ export function Composer({
 							onBlur={() => setFocused(false)}
 							onKeyDown={onKeyDownBubble}
 							onPaste={onPaste}
-							className="zettel comment-editor max-h-[40vh] min-w-0 overflow-y-auto text-[14px] leading-[21px]"
+							className="zettel comment-editor atw:max-h-[40vh] atw:min-w-0 atw:overflow-y-auto atw:text-[14px] atw:leading-[21px]"
 						/>
 					</div>
 					{open ? (
-						<div className="flex items-center gap-2">
+						<div className="atw:flex atw:items-center atw:gap-2">
 							<span
 								aria-hidden="true"
-								className="comment-secondary text-[11.5px] leading-4"
+								className="comment-secondary atw:text-[11.5px] atw:leading-4"
 							>
 								{`${modifier}↵ to ${submitHint}${writing ? " · Esc to cancel" : ""}`}
 							</span>
-							<span className="flex-1" />
+							<span className="atw:flex-1" />
 							<button
 								type="button"
 								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => void send()}
 								disabled={!hasText || sending}
 								title={`${submitLabel} (${modifier}↵)`}
-								className="flex h-7 shrink-0 cursor-pointer items-center rounded-control bg-accent px-3 py-0 text-[12.5px] font-semibold text-accent-on hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-default disabled:hover:bg-accent"
+								className="atw:flex atw:h-7 atw:shrink-0 atw:cursor-pointer atw:items-center atw:rounded-control atw:bg-accent atw:px-3 atw:py-0 atw:text-[12.5px] atw:font-semibold atw:text-accent-on atw:hover:bg-accent-hover atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:disabled:cursor-default atw:disabled:hover:bg-accent"
 							>
 								{submitLabel}
 							</button>
@@ -495,7 +497,10 @@ export function Composer({
 					) : null}
 				</div>
 				{error ? (
-					<p role="alert" className="text-[11.5px] leading-4 text-danger">
+					<p
+						role="alert"
+						className="atw:text-[11.5px] atw:leading-4 atw:text-danger"
+					>
 						{error}
 					</p>
 				) : null}
@@ -510,23 +515,23 @@ export function Composer({
 			data-attr="comment-composer"
 			data-tone={tone}
 			data-size={size}
-			className={`comment-surface flex flex-col outline-none ${
-				inDocument ? "gap-3" : "gap-[5px]"
+			className={`comment-surface atw:flex atw:flex-col atw:outline-none ${
+				inDocument ? "atw:gap-3" : "atw:gap-[5px]"
 			} ${className}`}
 			onKeyDownCapture={onKeyDown}
 		>
 			<div
 				role="presentation"
 				data-state={writing ? "writing" : hasText ? "draft" : "resting"}
-				className={`comment-field flex cursor-text items-end rounded-control ${
+				className={`comment-field atw:flex atw:cursor-text atw:items-end atw:rounded-control ${
 					!expanded
-						? "min-h-[30px] gap-2 px-[9px] py-[7.5px]"
+						? "atw:min-h-[30px] atw:gap-2 atw:px-[9px] atw:py-[7.5px]"
 						: inDocument
 							? // Handoff N2/N4: a 1px border and 9px of padding put the text
 								// 10px in; 6px to the send button.
-								"min-h-8 gap-1.5 py-1 pr-1 pl-[10px]"
+								"atw:min-h-8 atw:gap-1.5 atw:py-1 atw:pr-1 atw:pl-[10px]"
 							: // The design's 1px border plus 4px padding; the edge here is a shadow.
-								"min-h-[34px] gap-2 py-[5px] pr-[5px] pl-[10px]"
+								"atw:min-h-[34px] atw:gap-2 atw:py-[5px] atw:pr-[5px] atw:pl-[10px]"
 				}`}
 				onMouseDown={(event) => {
 					// A press on the field's padding still lands in the text.
@@ -537,13 +542,13 @@ export function Composer({
 				}}
 			>
 				<div
-					className={`relative min-w-0 flex-1 ${expanded ? "py-[3px]" : ""}`}
+					className={`atw:relative atw:min-w-0 atw:flex-1 ${expanded ? "atw:py-[3px]" : ""}`}
 				>
 					{blank ? (
 						<span
 							aria-hidden="true"
-							className={`comment-field-placeholder pointer-events-none absolute inset-x-0 truncate ${
-								expanded ? "top-[3px]" : "top-0"
+							className={`comment-field-placeholder atw:pointer-events-none atw:absolute atw:inset-x-0 atw:truncate ${
+								expanded ? "atw:top-[3px]" : "atw:top-0"
 							} ${textSize}`}
 						>
 							{placeholder}
@@ -566,7 +571,7 @@ export function Composer({
 						onKeyDown={onKeyDownBubble}
 						onPaste={onPaste}
 						// The plugin adds "zettel" to its root; React owns className, so say it here too.
-						className={`zettel comment-editor max-h-[40vh] min-w-0 overflow-y-auto ${textSize}`}
+						className={`zettel comment-editor atw:max-h-[40vh] atw:min-w-0 atw:overflow-y-auto ${textSize}`}
 					/>
 				</div>
 				{expanded ? (
@@ -577,16 +582,16 @@ export function Composer({
 						disabled={!hasText || sending}
 						aria-label={sending ? "Sending…" : sendLabel}
 						title={`Send (${modifier}↵)`}
-						className={`flex shrink-0 cursor-pointer items-center justify-center bg-accent text-accent-on transition-opacity hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-default ${
+						className={`atw:flex atw:shrink-0 atw:cursor-pointer atw:items-center atw:justify-center atw:bg-accent atw:text-accent-on atw:transition-opacity atw:hover:bg-accent-hover atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:disabled:cursor-default ${
 							inDocument
-								? "size-6.5 rounded-control disabled:bg-bg-hover disabled:text-history-flag"
-								: "size-6 rounded-[6px] disabled:opacity-40 disabled:hover:bg-accent"
+								? "atw:size-6.5 atw:rounded-control atw:disabled:bg-bg-hover atw:disabled:text-history-flag"
+								: "atw:size-6 atw:rounded-[6px] atw:disabled:opacity-40 atw:disabled:hover:bg-accent"
 						}`}
 					>
 						<svg
 							aria-hidden="true"
 							viewBox="0 0 24 24"
-							className={inDocument ? "size-[13px]" : "size-[11px]"}
+							className={inDocument ? "atw:size-[13px]" : "atw:size-[11px]"}
 							fill="none"
 							stroke="currentColor"
 							strokeWidth={inDocument ? 2.4 : 2.5}
@@ -599,16 +604,19 @@ export function Composer({
 				) : null}
 			</div>
 			{error ? (
-				<p role="alert" className="pl-0.5 text-[11px] leading-4 text-danger">
+				<p
+					role="alert"
+					className="atw:pl-0.5 atw:text-[11px] atw:leading-4 atw:text-danger"
+				>
 					{error}
 				</p>
 			) : writing ? (
 				<p
 					aria-hidden="true"
-					className={`comment-secondary flex gap-2.5 ${
+					className={`comment-secondary atw:flex atw:gap-2.5 ${
 						inDocument
-							? "text-[11.5px] leading-[normal]"
-							: "pl-0.5 text-[10.5px] leading-3"
+							? "atw:text-[11.5px] atw:leading-[normal]"
+							: "atw:pl-0.5 atw:text-[10.5px] atw:leading-3"
 					}`}
 				>
 					<span>{`${modifier}↵ ${submitHint}`}</span>

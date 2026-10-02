@@ -528,7 +528,7 @@ function EmbedFilePickerContent({
 			</div>
 			<input
 				aria-hidden="true"
-				className="sr-only"
+				className="atw:sr-only"
 				onChange={(event) => {
 					const file = event.target.files?.[0];
 					event.target.value = "";
@@ -543,7 +543,7 @@ function EmbedFilePickerContent({
 				<span>↵ Embed</span>
 				<span>Esc Close</span>
 			</div>
-			<div className="sr-only" role="status" aria-live="polite">
+			<div className="atw:sr-only" role="status" aria-live="polite">
 				{selectedItem
 					? selectedItem.path
 					: clampedIndex === uploadIndex

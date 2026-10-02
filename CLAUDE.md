@@ -72,8 +72,8 @@ test` (vitest) does not cover it. Run `pnpm build` before calling it directly.
 `:root, :host`, each with its dark value in `light-dark()` and a comment saying
 when to use it. It is plain CSS — no build step, no framework — so the shell,
 every extension, the static render, a chat card, and a host page all read the
-same file. `src/shell/tailwind.css` is an optional adapter: `@theme inline`
-points utilities at the same values, so `bg-panel` and `text-fg-muted` exist
+same file. `src/shell/tailwind.css` is an internal adapter: `@theme inline`
+points utilities at the same values, so `atw:bg-panel` and `atw:text-fg-muted` exist
 and `bg-red-500` does not.
 
 The rules, which `pnpm tokens:check` enforces (a failure names the nearest token):
@@ -82,7 +82,7 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
   nowhere else. Canvas code that cannot read `var()` keeps a fallback marked
   `token-literal: <why>` on the same line, equal to the token's light value.
 - In CSS, say `var(--atelier-…)`. In `className`, say the adapter's name
-  (`bg-panel`, `border-border-subtle`, `text-danger`). Never `bg-[var(…)]`,
+  (`atw:bg-panel`, `atw:border-border-subtle`, `atw:text-danger`). Never `bg-[var(…)]`,
   never a stock palette class.
 - Text and icons share the `fg` scale: `fg`, `fg-muted`, `fg-subtle`, `fg-faint`.
   Surfaces: `bg` (canvas), `panel` (islands), `bg-subtle`, `bg-hover`,
@@ -97,15 +97,16 @@ The rules, which `pnpm tokens:check` enforces (a failure names the nearest token
 - A component's own variables (`--markdown-*`, `--csv-*`) are declared on its
   root and reference tokens; they are never a place to hide a colour.
 - Dark mode is `color-scheme: dark` on an ancestor (`.dark`), nothing else —
-  and it is off for now: `theme.css` pins `color-scheme: light` until the
+  and it is off for now: mounted `.atelier-root`/`.atelier-portal` pin `color-scheme: light` until the
   dark palette has been designed. Keep writing dark values in `light-dark()`.
-  A host rebrands by redeclaring tokens on `:root`; it never overrides
+  The token sheet does not set the host colour scheme. A host rebrands by
+  redeclaring tokens on an ancestor; it never overrides
   component classes.
 - Cascade layers are the override contract: `src/index.css` orders
-  `theme, base, components, atelier, utilities`, and every Atelier stylesheet
+  `theme, base, components, utilities`, and every Atelier stylesheet
   (`theme.css`, `document.css`, each extension's `style.css`, the runtime's
-  sheets) lives in `@layer atelier` — imported with `layer(atelier)` or wrapped
-  in one `@layer atelier { … }` block that starts with
+  sheets) lives in `@layer components.atelier.components` — imported with `layer(components.atelier.components)` or wrapped
+  in one `@layer components.atelier.components { … }` block that starts with
   `@import "…/shell/layers.css"`, so the order holds whichever sheet a
   bundler emits first. A host's unlayered CSS and a Tailwind utility on the
   element beat Atelier's rules by design; extension authors do not declare
@@ -146,3 +147,18 @@ export.
 
 The Lix handle, routing, authentication, and the product's chrome belong to the
 host.
+
+## CSS ownership
+
+`@opral/atelier/style.css` is the only public stylesheet. It includes mounted
+and static styles, all prefixed Tailwind utilities and scoped resets. Host builds
+never scan Atelier or import its internal adapter. Library utilities use `atw:`;
+`scripts/private-tailwind.mjs` also namespaces Tailwind properties and animations,
+including in vendored development builds. Keep component CSS in
+`components.atelier.components`, private utilities in `components.atelier.utilities` and host utilities
+after the standard `components` layer. Public `--atelier-*` tokens remain framework
+independent. Host `className` values pass through unchanged.
+
+Static render chrome lives in `src/render/chrome.css`; the CSS generator copies
+it with theme and document rules for the DOM-free renderer. Add styling to the
+canonical CSS, then run `pnpm tokens`.

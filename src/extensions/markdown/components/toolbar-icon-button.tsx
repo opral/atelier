@@ -11,15 +11,15 @@ import { isMacPlatform } from "@/lib/platform";
 
 /** 28px square icon button, matching the panel-header chips in the islands UI. */
 export const iconButtonClass =
-	"inline-flex size-7 shrink-0 select-none items-center justify-center rounded-[7px] text-fg-muted transition-[background-color,color,box-shadow] duration-100 ease-out hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:stroke-[1.9]";
+	"atw:inline-flex atw:size-7 atw:shrink-0 atw:select-none atw:items-center atw:justify-center atw:rounded-[7px] atw:text-fg-muted atw:transition-[background-color,color,box-shadow] atw:duration-100 atw:ease-out atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:disabled:cursor-not-allowed atw:disabled:opacity-40 atw:[&_svg]:stroke-[1.9]";
 
 /** Pressed state for a formatting toggle. */
 export const iconButtonActiveClass =
-	"bg-bg-hover text-fg [&_svg]:text-fg-muted";
+	"atw:bg-bg-hover atw:text-fg atw:[&_svg]:text-fg-muted";
 
 /** Tooltip popup shared by every toolbar button. */
 export const toolbarTooltipPopupClass =
-	"rounded-md border border-border bg-panel px-2 py-1 text-xs text-fg shadow-md transition-opacity duration-150 data-[state=closed]:opacity-0 data-[state=open]:opacity-100";
+	"atw:rounded-md atw:border atw:border-border atw:bg-panel atw:px-2 atw:py-1 atw:text-xs atw:text-fg atw:shadow-md atw:transition-opacity atw:duration-150 atw:data-[state=closed]:opacity-0 atw:data-[state=open]:opacity-100";
 
 /** Delay before a toolbar tooltip opens, shared through `Tooltip.Provider`. */
 export const TOOLBAR_TOOLTIP_DELAY = 400;
@@ -78,7 +78,7 @@ type ToolbarIconButtonProps = {
  *
  * @example
  * <ToolbarIconButton label="Bold" shortcut="bold" active={isBold} onClick={toggleBold}>
- *   <Bold className="size-3.5" aria-hidden />
+ *   <Bold className="atw:size-3.5" aria-hidden />
  * </ToolbarIconButton>
  */
 export function ToolbarIconButton({
@@ -118,15 +118,17 @@ export function ToolbarIconButton({
 			</Tooltip.Trigger>
 			<Tooltip.Portal container={portalContainer}>
 				<Tooltip.Positioner
-					className="z-[60] outline-none"
+					className="atw:z-[60] atw:outline-none"
 					side="top"
 					align="center"
 					sideOffset={6}
 				>
 					<Tooltip.Popup className={toolbarTooltipPopupClass}>
-						<span className="font-medium">{tooltip ?? label}</span>
+						<span className="atw:font-medium">{tooltip ?? label}</span>
 						{shortcutLabel ? (
-							<span className="ml-1.5 text-fg-subtle">{shortcutLabel}</span>
+							<span className="atw:ml-1.5 atw:text-fg-subtle">
+								{shortcutLabel}
+							</span>
 						) : null}
 					</Tooltip.Popup>
 				</Tooltip.Positioner>

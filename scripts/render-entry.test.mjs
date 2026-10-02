@@ -31,7 +31,7 @@ function closure(file, seen = new Set()) {
 
 test("the render entry is built", () => {
 	assert.ok(existsSync(entry), "run pnpm build first");
-	assert.ok(existsSync(join(root, "dist/render.css")));
+	assert.ok(existsSync(join(root, "dist/atelier.css")));
 });
 
 /**

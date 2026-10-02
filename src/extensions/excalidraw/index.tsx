@@ -184,7 +184,7 @@ function LiveExcalidrawViewContent({ fileId, ...props }: ExcalidrawViewProps) {
 			return <ExcalidrawReviewUnavailable />;
 		}
 		return (
-			<div className="flex h-full items-center justify-center text-sm text-fg-subtle">
+			<div className="atw:flex atw:h-full atw:items-center atw:justify-center atw:text-sm atw:text-fg-subtle">
 				File not found in the workspace.
 			</div>
 		);
@@ -269,7 +269,7 @@ function EditableExcalidrawView({
 function ExcalidrawReviewUnavailable() {
 	return (
 		<div
-			className="flex h-full items-center justify-center px-6 text-center text-sm text-fg-subtle"
+			className="atw:flex atw:h-full atw:items-center atw:justify-center atw:px-6 atw:text-center atw:text-sm atw:text-fg-subtle"
 			role="alert"
 		>
 			The working diff changed while it was being reviewed. Reopen the review.
@@ -320,7 +320,7 @@ function HistoricalExcalidrawView({
 	if (loadError) {
 		return (
 			<div
-				className="flex h-full items-center justify-center text-sm text-fg-subtle"
+				className="atw:flex atw:h-full atw:items-center atw:justify-center atw:text-sm atw:text-fg-subtle"
 				role="alert"
 			>
 				Could not load this file revision.
@@ -369,16 +369,16 @@ function InvalidSceneState({
 	readonly message: string;
 }) {
 	return (
-		<div className="flex h-full min-h-48 flex-col items-center justify-center px-6 py-8 text-center">
+		<div className="atw:flex atw:h-full atw:min-h-48 atw:flex-col atw:items-center atw:justify-center atw:px-6 atw:py-8 atw:text-center">
 			<PenTool
 				aria-hidden="true"
-				className="size-7 text-fg-subtle"
+				className="atw:size-7 atw:text-fg-subtle"
 				strokeWidth={1.5}
 			/>
-			<p className="mt-3 text-sm font-medium text-fg">
+			<p className="atw:mt-3 atw:text-sm atw:font-medium atw:text-fg">
 				This file cannot be opened as an Excalidraw scene.
 			</p>
-			<p className="mt-1 max-w-sm text-xs leading-relaxed text-fg-subtle">
+			<p className="atw:mt-1 atw:max-w-sm atw:text-xs atw:leading-relaxed atw:text-fg-subtle">
 				<span className="ph-mask">
 					{fileNameFromPath(filePath) ?? filePath}
 				</span>
@@ -392,11 +392,11 @@ function ExcalidrawLoadingState() {
 	return (
 		<div
 			aria-live="polite"
-			className="flex h-full min-h-48 items-center justify-center px-3 py-2 text-fg-subtle"
+			className="atw:flex atw:h-full atw:min-h-48 atw:items-center atw:justify-center atw:px-3 atw:py-2 atw:text-fg-subtle"
 			role="status"
 		>
-			<div className="flex items-center gap-2 text-sm">
-				<AnimatedZap size={13} tone="muted" className="shrink-0" />
+			<div className="atw:flex atw:items-center atw:gap-2 atw:text-sm">
+				<AnimatedZap size={13} tone="muted" className="atw:shrink-0" />
 				<span>Loading drawing…</span>
 			</div>
 		</div>

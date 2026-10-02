@@ -192,15 +192,17 @@ export function DefaultFolderSlot({
 				className={
 					// A broken default gets the room to say so; the folder's name is
 					// the half of that sentence the user needs.
-					(state.kind === "missing" ? "max-w-[176px] " : "max-w-[128px] ") +
-					"flex h-5 cursor-default items-center gap-1 rounded-control border border-transparent px-1.5 text-[11px] outline-hidden select-none " +
+					(state.kind === "missing"
+						? "atw:max-w-[176px] "
+						: "atw:max-w-[128px] ") +
+					"atw:flex atw:h-5 atw:cursor-default atw:items-center atw:gap-1 atw:rounded-control atw:border atw:border-transparent atw:px-1.5 atw:text-[11px] atw:outline-hidden atw:select-none " +
 					// At rest it is a caption on the row: it says where the row
 					// creates. It draws its boundary once the pointer or the arrow
 					// keys reach it, which is the same moment it can be pressed —
 					// so a thing that looks pressable always is.
-					"data-[highlighted]:border-border-subtle data-[highlighted]:bg-border-strong " +
-					"data-[state=open]:border-border-strong data-[state=open]:bg-border-strong " +
-					(state.kind === "missing" ? "text-warning" : "text-fg-subtle")
+					"atw:data-[highlighted]:border-border-subtle atw:data-[highlighted]:bg-border-strong " +
+					"atw:data-[state=open]:border-border-strong atw:data-[state=open]:bg-border-strong " +
+					(state.kind === "missing" ? "atw:text-warning" : "atw:text-fg-subtle")
 				}
 				onPointerDown={() => {
 					intentRef.current = true;
@@ -240,37 +242,43 @@ export function DefaultFolderSlot({
 			>
 				{/* "in" only where the row really does create in there. */}
 				{state.kind === "set" ? (
-					<span className="shrink-0 opacity-80">in</span>
+					<span className="atw:shrink-0 atw:opacity-80">in</span>
 				) : null}
 				{state.kind === "unset" ? (
 					// Nothing is set, so there is no folder to name and nothing to
 					// disclose: one glyph that says what pressing it would do.
-					<FolderPlus aria-hidden="true" className="size-3.5 shrink-0" />
+					<FolderPlus
+						aria-hidden="true"
+						className="atw:size-3.5 atw:shrink-0"
+					/>
 				) : state.kind === "missing" ? (
-					<Folder aria-hidden="true" className="size-3 shrink-0" />
+					<Folder aria-hidden="true" className="atw:size-3 atw:shrink-0" />
 				) : (
 					<img
 						src={folderBlueIconUrl}
 						alt=""
 						aria-hidden="true"
-						className="size-3.5 shrink-0"
+						className="atw:size-3.5 atw:shrink-0"
 					/>
 				)}
 				{state.kind === "unset" ? null : (
-					<span className="min-w-0 truncate">
+					<span className="atw:min-w-0 atw:truncate">
 						{folderDisplayName(state.folder)}
 					</span>
 				)}
 				{state.kind === "missing" ? (
-					<span className="shrink-0 opacity-90">· missing</span>
+					<span className="atw:shrink-0 atw:opacity-90">· missing</span>
 				) : null}
 				{state.kind === "unset" ? null : (
-					<ChevronDown aria-hidden="true" className="size-2.5 shrink-0" />
+					<ChevronDown
+						aria-hidden="true"
+						className="atw:size-2.5 atw:shrink-0"
+					/>
 				)}
 			</Menu.SubTrigger>
 			<Menu.Portal>
 				<DropdownMenuSubContent
-					className="w-64 p-1.5 text-xs"
+					className="atw:w-64 atw:p-1.5 atw:text-xs"
 					sideOffset={6}
 					alignOffset={-6}
 					collisionPadding={8}
@@ -373,7 +381,7 @@ function SlotTooltip({
 		<div
 			role="tooltip"
 			data-attr="default-folder-tooltip"
-			className="atelier-portal pointer-events-none fixed z-50 max-w-64 -translate-x-1/2 rounded-md bg-overlay px-3 py-1.5 font-sans text-xs text-balance text-overlay-fg shadow-md"
+			className="atelier-portal atw:pointer-events-none atw:fixed atw:z-50 atw:max-w-64 atw:-translate-x-1/2 atw:rounded-md atw:bg-overlay atw:px-3 atw:py-1.5 atw:font-sans atw:text-xs atw:text-balance atw:text-overlay-fg atw:shadow-md"
 			style={{ left: at.left, top: at.top }}
 		>
 			{label}
@@ -392,7 +400,7 @@ function triggerTitle(state: DefaultFolderState, noun: string): string {
 
 function PanelHeading({ children }: { readonly children: ReactNode }) {
 	return (
-		<div className="px-1.5 pt-0.5 pb-1.5 text-[11px] font-semibold text-fg-subtle">
+		<div className="atw:px-1.5 atw:pt-0.5 atw:pb-1.5 atw:text-[11px] atw:font-semibold atw:text-fg-subtle">
 			{children}
 		</div>
 	);
@@ -420,51 +428,62 @@ function LabelMenu({
 			<PanelHeading>Default folder for {noun}</PanelHeading>
 			{state.kind === "missing" ? (
 				<DropdownMenuItem
-					className="gap-2 py-1.5 text-xs"
+					className="atw:gap-2 atw:py-1.5 atw:text-xs"
 					data-attr="default-folder-recreate"
 					onSelect={(event) => {
 						event.preventDefault();
 						onRecreateFolder();
 					}}
 				>
-					<RotateCcw aria-hidden="true" className="size-3.5 shrink-0" />
-					<span className="min-w-0 flex-1 truncate">Recreate {folderName}</span>
+					<RotateCcw aria-hidden="true" className="atw:size-3.5 atw:shrink-0" />
+					<span className="atw:min-w-0 atw:flex-1 atw:truncate">
+						Recreate {folderName}
+					</span>
 				</DropdownMenuItem>
 			) : null}
 			<DropdownMenuItem
-				className="gap-2 py-1.5 text-xs"
+				className="atw:gap-2 atw:py-1.5 atw:text-xs"
 				data-attr="default-folder-change"
 				onSelect={(event) => {
 					event.preventDefault();
 					onChangeFolder();
 				}}
 			>
-				<Folder aria-hidden="true" className="size-3.5 shrink-0" />
-				<span className="min-w-0 flex-1 truncate">Change folder…</span>
+				<Folder aria-hidden="true" className="atw:size-3.5 atw:shrink-0" />
+				<span className="atw:min-w-0 atw:flex-1 atw:truncate">
+					Change folder…
+				</span>
 			</DropdownMenuItem>
 			{state.kind === "missing" ? null : (
 				// The only item here that creates. It closes the whole menu, as
 				// every other creation path does, and leaves the default alone.
 				<DropdownMenuItem
-					className="gap-2 py-1.5 text-xs"
+					className="atw:gap-2 atw:py-1.5 atw:text-xs"
 					data-attr="default-folder-create-here"
 					onSelect={onCreateHereOnce}
 				>
-					<FolderPlus aria-hidden="true" className="size-3.5 shrink-0" />
-					<span className="min-w-0 flex-1 truncate">Create here this time</span>
+					<FolderPlus
+						aria-hidden="true"
+						className="atw:size-3.5 atw:shrink-0"
+					/>
+					<span className="atw:min-w-0 atw:flex-1 atw:truncate">
+						Create here this time
+					</span>
 				</DropdownMenuItem>
 			)}
-			<DropdownMenuSeparator className="my-1" />
+			<DropdownMenuSeparator className="atw:my-1" />
 			<DropdownMenuItem
-				className="gap-2 py-1.5 text-xs text-danger focus:text-danger [&_svg:not([class*='text-'])]:text-danger"
+				className="atw:gap-2 atw:py-1.5 atw:text-xs atw:text-danger atw:focus:text-danger atw:[&_svg:not([class*='text-'])]:text-danger"
 				data-attr="default-folder-remove"
 				onSelect={(event) => {
 					event.preventDefault();
 					onRemove();
 				}}
 			>
-				<Trash2 aria-hidden="true" className="size-3.5 shrink-0" />
-				<span className="min-w-0 flex-1 truncate">Remove default</span>
+				<Trash2 aria-hidden="true" className="atw:size-3.5 atw:shrink-0" />
+				<span className="atw:min-w-0 atw:flex-1 atw:truncate">
+					Remove default
+				</span>
 			</DropdownMenuItem>
 		</>
 	);
@@ -506,10 +525,10 @@ function FolderPicker({
 	return (
 		<>
 			<PanelHeading>Default folder for {noun}</PanelHeading>
-			<div className="relative px-0.5 pb-1.5">
+			<div className="atw:relative atw:px-0.5 atw:pb-1.5">
 				<Search
 					aria-hidden="true"
-					className="pointer-events-none absolute top-3.5 left-2.5 size-3 -translate-y-1/2 text-fg-subtle"
+					className="atw:pointer-events-none atw:absolute atw:top-3.5 atw:left-2.5 atw:size-3 atw:-translate-y-1/2 atw:text-fg-subtle"
 				/>
 				<input
 					ref={searchRef}
@@ -518,7 +537,7 @@ function FolderPicker({
 					placeholder="Search folders"
 					aria-label="Search folders"
 					data-attr="default-folder-search"
-					className="h-7 w-full rounded-control border border-border-subtle bg-border-strong pr-2 pl-7 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
+					className="atw:h-7 atw:w-full atw:rounded-control atw:border atw:border-border-subtle atw:bg-border-strong atw:pr-2 atw:pl-7 atw:text-xs atw:text-fg atw:outline-hidden atw:placeholder:text-fg-faint atw:focus-visible:border-border-strong"
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={(event) => {
 						// Radix runs typeahead on every character typed inside its
@@ -540,18 +559,18 @@ function FolderPicker({
 				/>
 			</div>
 			<div
-				className="max-h-56 overflow-x-hidden overflow-y-auto"
+				className="atw:max-h-56 atw:overflow-x-hidden atw:overflow-y-auto"
 				data-attr="default-folder-list"
 			>
 				{visible.length === 0 ? (
-					<div className="px-2 py-3 text-center text-[11px] text-fg-subtle">
+					<div className="atw:px-2 atw:py-3 atw:text-center atw:text-[11px] atw:text-fg-subtle">
 						No folder matches “{query.trim()}”.
 					</div>
 				) : (
 					visible.map((folder) => (
 						<DropdownMenuItem
 							key={folder.path}
-							className="gap-1.5 py-1 text-xs"
+							className="atw:gap-1.5 atw:py-1 atw:text-xs"
 							data-attr="default-folder-option"
 							data-folder-path={folder.path}
 							title={folder.path}
@@ -585,34 +604,34 @@ function FolderPicker({
 								src={folderBlueIconUrl}
 								alt=""
 								aria-hidden="true"
-								className={`size-3.5 shrink-0${folder.context ? " opacity-40" : ""}`}
+								className={`atw:size-3.5 atw:shrink-0${folder.context ? " atw:opacity-40" : ""}`}
 							/>
 							<span
-								className={`min-w-0 flex-1 truncate${folder.context ? " text-fg-subtle" : ""}`}
+								className={`atw:min-w-0 atw:flex-1 atw:truncate${folder.context ? " atw:text-fg-subtle" : ""}`}
 							>
 								{folder.name}
 							</span>
 							{selected === folder.path ? (
 								<Check
 									aria-hidden="true"
-									className="size-3.5 shrink-0 text-link"
+									className="atw:size-3.5 atw:shrink-0 atw:text-link"
 								/>
 							) : null}
 						</DropdownMenuItem>
 					))
 				)}
 			</div>
-			<DropdownMenuSeparator className="my-1" />
+			<DropdownMenuSeparator className="atw:my-1" />
 			<DropdownMenuItem
-				className="gap-2 py-1.5 text-xs"
+				className="atw:gap-2 atw:py-1.5 atw:text-xs"
 				data-attr="default-folder-new-folder"
 				onSelect={(event) => {
 					event.preventDefault();
 					onNewFolder();
 				}}
 			>
-				<Plus aria-hidden="true" className="size-3.5 shrink-0" />
-				<span className="min-w-0 flex-1 truncate">New folder…</span>
+				<Plus aria-hidden="true" className="atw:size-3.5 atw:shrink-0" />
+				<span className="atw:min-w-0 atw:flex-1 atw:truncate">New folder…</span>
 			</DropdownMenuItem>
 		</>
 	);
@@ -645,7 +664,7 @@ function NewFolderField({
 				New folder in{" "}
 				{parent === "/" ? "the repository root" : folderDisplayName(parent)}
 			</PanelHeading>
-			<div className="px-0.5 pb-1">
+			<div className="atw:px-0.5 atw:pb-1">
 				<input
 					ref={fieldRef}
 					type="text"
@@ -653,7 +672,7 @@ function NewFolderField({
 					placeholder="Folder name"
 					aria-label={`New folder in ${parent}`}
 					data-attr="default-folder-new-folder-name"
-					className="h-7 w-full rounded-control border border-border-subtle bg-border-strong px-2 text-xs text-fg outline-hidden placeholder:text-fg-faint focus-visible:border-border-strong"
+					className="atw:h-7 atw:w-full atw:rounded-control atw:border atw:border-border-subtle atw:bg-border-strong atw:px-2 atw:text-xs atw:text-fg atw:outline-hidden atw:placeholder:text-fg-faint atw:focus-visible:border-border-strong"
 					onChange={(event) => setName(event.target.value)}
 					onKeyDown={(event) => {
 						event.stopPropagation();
@@ -668,7 +687,7 @@ function NewFolderField({
 					}}
 				/>
 			</div>
-			<div className="px-1.5 pb-1 text-[11px] text-fg-subtle">
+			<div className="atw:px-1.5 atw:pb-1 atw:text-[11px] atw:text-fg-subtle">
 				Enter creates it and sets it as the default. Escape goes back.
 			</div>
 		</>

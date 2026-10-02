@@ -1,28 +1,17 @@
 import type { LibraryKind } from "./kinds";
 
-export type LibraryNavKind = LibraryKind | "database";
-
-/** Each section's tint; Files wears the folder blue, Other stays neutral. */
-const KIND_TINT: Record<LibraryNavKind, string> = {
-	home: "text-fg-muted",
-	all: "text-fg-muted",
-	files: "text-folder",
-	pages: "text-kind-pages",
-	tables: "text-kind-tables",
-	drawings: "text-kind-drawings",
-	media: "text-kind-media",
-	database: "text-kind-database",
-	other: "text-fg-subtle",
-};
+/** "file": a file no kind claims, where one is listed (Recent). */
+export type LibraryNavKind = LibraryKind | "database" | "file";
 
 /**
- * The glyph for a kind of thing — not a file icon: a page, a table, a
- * stroke, a picture, a database. Drawn as one outline family so the sidebar
- * reads as a list of kinds rather than a list of files.
+ * The glyph for a kind of thing — not a file icon: a document, a table, a
+ * pen, a picture, a database. One monochrome outline family in the text's
+ * own colour, so the sidebar reads as a calm list of kinds rather than a
+ * list of files.
  */
 export function KindIcon({
 	kind,
-	className = "size-3.5",
+	className = "atw:size-3.5",
 }: {
 	readonly kind: LibraryNavKind;
 	readonly className?: string;
@@ -32,12 +21,12 @@ export function KindIcon({
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
-			strokeWidth={1.9}
+			strokeWidth={1.75}
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			aria-hidden="true"
 			data-kind-icon={kind}
-			className={`shrink-0 ${KIND_TINT[kind]} ${className}`}
+			className={`atw:shrink-0 ${className}`}
 		>
 			{kind === "home" ? (
 				<>
@@ -55,19 +44,23 @@ export function KindIcon({
 				<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.2h7.5A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" />
 			) : kind === "pages" ? (
 				<>
-					<rect x="5" y="3" width="14" height="18" rx="2.5" />
-					<path d="M9 8h6M9 12h6M9 16h3" />
+					<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+					<path d="M14 3v5h5M9 13h6M9 17h6" />
+				</>
+			) : kind === "file" ? (
+				<>
+					<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+					<path d="M14 3v5h5" />
 				</>
 			) : kind === "tables" ? (
 				<>
-					<rect x="3" y="4" width="18" height="16" rx="2.5" />
-					<path d="M3 10h18M3 15h18M10 4v16" />
+					<rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+					<path d="M3.5 9.5h17M9 9.5v10" />
 				</>
 			) : kind === "drawings" ? (
 				<>
-					<path d="M8.3 10a.7.7 0 0 1-.63-1.08L11.4 3a.7.7 0 0 1 1.2-.04L16.3 8.9a.7.7 0 0 1-.57 1.1Z" />
-					<rect x="3" y="14" width="7" height="7" rx="1.5" />
-					<circle cx="17.5" cy="17.5" r="3.5" />
+					<path d="M15.5 4.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" />
+					<path d="m13.5 6.5 3 3" />
 				</>
 			) : kind === "media" ? (
 				<>

@@ -2,7 +2,6 @@
 /** The token sheet, compacted, for a render with no DOM to link it into. */
 export const THEME_CSS = `:root,
 :host {
-color-scheme: light;
 --atelier-bg: light-dark(
 rgb(244 242 239),
 rgb(22 20 18)
@@ -220,26 +219,6 @@ oklch(0.78 0.12 300)
 --atelier-folder: light-dark(
 rgb(96 165 250),
 rgb(125 180 255)
-);
---atelier-kind-pages: light-dark(
-rgb(194 65 12),
-rgb(251 146 60)
-);
---atelier-kind-tables: light-dark(
-rgb(47 125 91),
-rgb(110 200 155)
-);
---atelier-kind-drawings: light-dark(
-rgb(180 83 9),
-rgb(245 170 90)
-);
---atelier-kind-media: light-dark(
-rgb(107 87 166),
-rgb(180 165 230)
-);
---atelier-kind-database: light-dark(
-rgb(29 111 165),
-rgb(120 185 230)
 );
 --atelier-panel-header-height: 40px;
 --atelier-radius-tag: 3px;

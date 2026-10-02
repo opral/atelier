@@ -67,10 +67,10 @@ export function ExtensionDropdownMenuItems({
 					{Icon ? (
 						<Icon
 							aria-hidden={true}
-							className="size-3.25 shrink-0 text-fg-subtle"
+							className="atw:size-3.25 atw:shrink-0 atw:text-fg-subtle"
 						/>
 					) : (
-						<span aria-hidden="true" className="size-3.25 shrink-0" />
+						<span aria-hidden="true" className="atw:size-3.25 atw:shrink-0" />
 					)}
 					<span>{item.label}</span>
 				</DropdownMenuCheckboxItem>
@@ -87,10 +87,10 @@ export function ExtensionDropdownMenuItems({
 				{item.icon ? (
 					<item.icon
 						aria-hidden={true}
-						className="size-3.25 shrink-0 text-fg-subtle"
+						className="atw:size-3.25 atw:shrink-0 atw:text-fg-subtle"
 					/>
 				) : (
-					<span aria-hidden="true" className="size-3.25 shrink-0" />
+					<span aria-hidden="true" className="atw:size-3.25 atw:shrink-0" />
 				)}
 				<span>{item.label}</span>
 			</DropdownMenuItem>
@@ -127,10 +127,10 @@ export function ExtensionContextMenuItems({
 					{Icon ? (
 						<Icon
 							aria-hidden={true}
-							className="size-3.25 shrink-0 text-fg-subtle"
+							className="atw:size-3.25 atw:shrink-0 atw:text-fg-subtle"
 						/>
 					) : (
-						<span aria-hidden="true" className="size-3.25 shrink-0" />
+						<span aria-hidden="true" className="atw:size-3.25 atw:shrink-0" />
 					)}
 					<span>{item.label}</span>
 				</ContextMenuCheckboxItem>
@@ -147,10 +147,10 @@ export function ExtensionContextMenuItems({
 				{item.icon ? (
 					<item.icon
 						aria-hidden={true}
-						className="size-3.25 shrink-0 text-fg-subtle"
+						className="atw:size-3.25 atw:shrink-0 atw:text-fg-subtle"
 					/>
 				) : (
-					<span aria-hidden="true" className="size-3.25 shrink-0" />
+					<span aria-hidden="true" className="atw:size-3.25 atw:shrink-0" />
 				)}
 				<span>{item.label}</span>
 			</ContextMenuItem>

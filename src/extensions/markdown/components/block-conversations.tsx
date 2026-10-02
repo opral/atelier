@@ -438,6 +438,7 @@ type PublishedBlockComments =
 			readonly state: BlockConversationsState;
 	  }
 	| { readonly kind: "plugin-missing" }
+	| { readonly kind: "no-blocks" }
 	| null;
 
 const BlockConversationsController = memo(
@@ -452,17 +453,36 @@ const BlockConversationsController = memo(
 	}) {
 		const lix = useLix();
 		const viewReady = useEditorViewMounted(editor);
-		const blocksResult = useQueryResult<MarkdownBlockRow>((session) =>
-			selectMarkdownBlocks(session, fileId),
+		// markdown_node exists only while the Markdown plugin is installed. Keep
+		// the capability check on the plugin archive itself so the observers
+		// below never issue SQL against a table that is not present.
+		const markdownPluginResult = useQueryResult((session) =>
+			qb(session)
+				.selectFrom("lix_file as plugin")
+				.select("plugin.id as id")
+				.where("plugin.path", "=", "/.lix/plugins/plugin_markdown.lixplugin")
+				.$castTo<{ readonly id: string }>(),
 		);
-		const commentsResult = useQueryResult((session) =>
-			selectBlockComments(session, fileId),
+		const markdownPluginInstalled =
+			markdownPluginResult.status === "success" &&
+			markdownPluginResult.rows.length > 0;
+		const blocksResult = useQueryResult<MarkdownBlockRow>(
+			(session) => selectMarkdownBlocks(session, fileId),
+			{ enabled: markdownPluginInstalled },
+		);
+		const commentsResult = useQueryResult(
+			(session) => selectBlockComments(session, fileId),
+			{ enabled: markdownPluginInstalled },
 		);
 		const accountResult = useQueryResult(selectActiveAccount);
-		const rows = blocksResult.rows.length ? blocksResult.rows : EMPTY_ROWS;
-		const commentRows = commentsResult.rows.length
-			? commentsResult.rows
-			: EMPTY_ROWS;
+		const rows =
+			blocksResult.status === "success" && blocksResult.rows.length
+				? blocksResult.rows
+				: EMPTY_ROWS;
+		const commentRows =
+			commentsResult.status === "success" && commentsResult.rows.length
+				? commentsResult.rows
+				: EMPTY_ROWS;
 		// Authors are read once per set of comments, not observed.
 		const changeIds = useMemo(
 			() =>
@@ -576,6 +596,7 @@ const BlockConversationsController = memo(
 		// opening another file puts a draft away, it does not drop it.
 		const [drafts, draftsVersion] = useBlockCommentDrafts(lix);
 		const [active, setActive] = useState<ActiveConversation | null>(null);
+		const leavingNodeId = useRef<string | null>(null);
 		const [hovered, setHoveredState] = useState<Hover | null>(null);
 		// The same hover again is no change (every pointer event reports it).
 		const setHovered = useCallback((next: Hover | null) => {
@@ -584,7 +605,11 @@ const BlockConversationsController = memo(
 
 		// A conversation whose block went away closes with it.
 		useEffect(() => {
-			if (active && !placed.some((entry) => entry.key === active.nodeId))
+			if (
+				active &&
+				leavingNodeId.current !== active.nodeId &&
+				!placed.some((entry) => entry.key === active.nodeId)
+			)
 				setActive(null);
 		}, [active, placed]);
 
@@ -618,8 +643,11 @@ const BlockConversationsController = memo(
 
 		// A file the plugin does not project (it matches `*.md` by case, so
 		// `NOTES.MD` has no rows) has no block to attach to.
-		const available =
-			blocksResult.status === "success" && blocksResult.rows.length > 0;
+		const markdownDataReady =
+			markdownPluginInstalled &&
+			blocksResult.status === "success" &&
+			commentsResult.status === "success";
+		const available = markdownDataReady && rows.length > 0;
 		// The thread each editor block shows, by its index.
 		const threadAtBlock = useMemo(
 			() => new Map(placed.map((entry) => [entry.index, entry.key])),
@@ -720,27 +748,30 @@ const BlockConversationsController = memo(
 		// Esc from a conversation: the editor takes focus back, with the caret
 		// in the commented block unless it already is (a click into the block
 		// opened it). From a card or a count the focus was never there.
-		const returnToEditor = useCallback(() => {
-			const nodeId = activeRef.current?.nodeId;
-			setActive(null);
-			if (!nodeId || !hasView(editor) || editor.view.hasFocus()) return;
-			const entry = latest.current.placed.find(
-				(candidate) => candidate.key === nodeId,
-			);
-			const offset = entry ? topLevelOffset(editor, entry.index) : null;
-			editor
-				.chain()
-				.focus(null, { scrollIntoView: false })
-				.command(({ tr }) => {
-					if (offset === null) return true;
-					const block = tr.doc.child(entry!.index);
-					const { from } = tr.selection;
-					if (from > offset && from < offset + block.nodeSize) return true;
-					tr.setSelection(TextSelection.near(tr.doc.resolve(offset + 1)));
-					return true;
-				})
-				.run();
-		}, [editor]);
+		const returnToEditor = useCallback(
+			(previousEntry?: PlacedThread) => {
+				const nodeId = activeRef.current?.nodeId;
+				setActive(null);
+				if (!nodeId || !hasView(editor) || editor.view.hasFocus()) return;
+				const entry =
+					latest.current.placed.find((candidate) => candidate.key === nodeId) ??
+					previousEntry;
+				const offset = entry ? topLevelOffset(editor, entry.index) : null;
+				editor
+					.chain()
+					.focus(null, { scrollIntoView: false })
+					.command(({ tr }) => {
+						if (offset === null) return true;
+						const block = tr.doc.child(entry!.index);
+						const { from } = tr.selection;
+						if (from > offset && from < offset + block.nodeSize) return true;
+						tr.setSelection(TextSelection.near(tr.doc.resolve(offset + 1)));
+						return true;
+					})
+					.run();
+			},
+			[editor],
+		);
 
 		const startComment = useCallback(() => {
 			if (editor.isDestroyed || !latest.current.available) return;
@@ -906,7 +937,8 @@ const BlockConversationsController = memo(
 					(conversation) => conversation.conversationId !== conversationId,
 				);
 				if (other) requestConversation(other.conversationId, entry!.index);
-				else if (activeRef.current?.nodeId === entry?.key) returnToEditor();
+				else if (activeRef.current?.nodeId === entry?.key)
+					returnToEditor(entry);
 			},
 			[requestConversation, returnToEditor],
 		);
@@ -918,31 +950,43 @@ const BlockConversationsController = memo(
 		// thread still on the block, that one's reply field takes the caret.
 		const deleteBlockComment = useCallback(
 			async (comment: ThreadComment) => {
-				const { conversationId, conversationDeleted } = await deleteComment(
-					lix,
-					comment.id,
+				// Observers may publish the removed thread before the write resolves.
+				const entry = latest.current.placed.find((candidate) =>
+					candidate.conversations.some((conversation) =>
+						conversation.comments.some(
+							(threadComment) => threadComment.id === comment.id,
+						),
+					),
 				);
-				if (!conversationDeleted) return { focusHandled: false };
-				const entry = placedWith(conversationId);
-				const reply = drafts.reply(conversationId);
-				if (reply && hasCommentText(reply)) {
-					drafts.setReply(conversationId, EMPTY_DRAFT);
-					if (entry && entry.index < editor.state.doc.childCount) {
-						const blockId = blockNodeId(editor.state.doc.child(entry.index));
-						drafts.setComment(
-							fileId,
-							pendingDraftKeys(
-								{ blockId, index: entry.index },
-								latest.current.rowOfBlock[entry.index] ?? null,
-							),
-							reply,
-						);
+				leavingNodeId.current = entry?.key ?? null;
+				try {
+					const { conversationId, conversationDeleted } = await deleteComment(
+						lix,
+						comment.id,
+					);
+					if (!conversationDeleted) return { focusHandled: false };
+					const reply = drafts.reply(conversationId);
+					if (reply && hasCommentText(reply)) {
+						drafts.setReply(conversationId, EMPTY_DRAFT);
+						if (entry && entry.index < editor.state.doc.childCount) {
+							const blockId = blockNodeId(editor.state.doc.child(entry.index));
+							drafts.setComment(
+								fileId,
+								pendingDraftKeys(
+									{ blockId, index: entry.index },
+									latest.current.rowOfBlock[entry.index] ?? null,
+								),
+								reply,
+							);
+						}
 					}
+					leaveConversation(conversationId, entry);
+					return { focusHandled: true };
+				} finally {
+					leavingNodeId.current = null;
 				}
-				leaveConversation(conversationId, entry);
-				return { focusHandled: true };
 			},
-			[drafts, editor, fileId, leaveConversation, lix, placedWith],
+			[drafts, editor, fileId, leaveConversation, lix],
 		);
 
 		// Resolve: what the reply field holds is posted with it, and the
@@ -950,14 +994,19 @@ const BlockConversationsController = memo(
 		const resolveConversation = useCallback(
 			async (conversationId: string) => {
 				const entry = placedWith(conversationId);
-				await setConversationResolved(
-					lix,
-					conversationId,
-					true,
-					drafts.reply(conversationId),
-				);
-				drafts.setReply(conversationId, EMPTY_DRAFT);
-				leaveConversation(conversationId, entry);
+				leavingNodeId.current = entry?.key ?? null;
+				try {
+					await setConversationResolved(
+						lix,
+						conversationId,
+						true,
+						drafts.reply(conversationId),
+					);
+					drafts.setReply(conversationId, EMPTY_DRAFT);
+					leaveConversation(conversationId, entry);
+				} finally {
+					leavingNodeId.current = null;
+				}
 			},
 			[drafts, leaveConversation, lix, placedWith],
 		);
@@ -1672,14 +1721,52 @@ const BlockConversationsController = memo(
 		// A completed read with no projected blocks leaves no target for comments.
 		useLayoutEffect(() => {
 			onPublish(
-				!viewReady || blocksResult.status === "pending"
+				!viewReady ||
+					markdownPluginResult.status === "pending" ||
+					(markdownPluginInstalled && !markdownDataReady)
 					? null
-					: available
-						? { kind: "available", api, state }
-						: { kind: "plugin-missing" },
+					: !markdownPluginInstalled
+						? { kind: "plugin-missing" }
+						: available
+							? { kind: "available", api, state }
+							: { kind: "no-blocks" },
 			);
-		}, [api, available, blocksResult.status, onPublish, state, viewReady]);
+		}, [
+			api,
+			available,
+			markdownDataReady,
+			markdownPluginInstalled,
+			markdownPluginResult.status,
+			onPublish,
+			state,
+			viewReady,
+		]);
 		useLayoutEffect(() => () => onPublish(null), [onPublish]);
+
+		// `useQueryResult` keeps observer failures in its result. Surface those
+		// failures to the nearest render boundary instead of treating an
+		// unavailable table as an empty set of comments. Keep these checks after
+		// the hooks above so every render follows the same hook order.
+		if (markdownPluginResult.status === "error")
+			throw markdownPluginResult.error instanceof Error
+				? markdownPluginResult.error
+				: new Error(String(markdownPluginResult.error));
+		if (blocksResult.status === "error")
+			throw blocksResult.error instanceof Error
+				? blocksResult.error
+				: new Error(String(blocksResult.error));
+		if (commentsResult.status === "error")
+			throw commentsResult.error instanceof Error
+				? commentsResult.error
+				: new Error(String(commentsResult.error));
+		if (accountResult.status === "error")
+			throw accountResult.error instanceof Error
+				? accountResult.error
+				: new Error(String(accountResult.error));
+		if (authorsResult.status === "error")
+			throw authorsResult.error instanceof Error
+				? authorsResult.error
+				: new Error(String(authorsResult.error));
 		return null;
 	},
 );
@@ -2043,7 +2130,7 @@ function PendingComposer({
 			data-side={placement.side}
 			style={{ ...placement.style, left: popoverLeft(box, surfaceWidth) }}
 		>
-			<div className="flex items-start gap-2">
+			<div className="atw:flex atw:items-start atw:gap-2">
 				<CommentAvatar name={state.authorName} size="xl" />
 				<Composer
 					// The field reads its draft when it mounts: another block's
@@ -2059,7 +2146,7 @@ function PendingComposer({
 					focusRequest={pending?.focus ?? 0}
 					tone="neutral"
 					size="document"
-					className="min-w-0 flex-1"
+					className="atw:min-w-0 atw:flex-1"
 				/>
 			</div>
 		</div>
@@ -2381,21 +2468,21 @@ function MarginCards({
 							state.activate(nodeId, true);
 						}}
 					>
-						<div className="flex gap-2">
+						<div className="atw:flex atw:gap-2">
 							<CommentAvatar
 								name={authorName(first)}
 								profileUri={first.author_profile_uri}
 								size="lg"
 							/>
-							<div className="min-w-0 flex-1">
-								<div className="flex items-baseline gap-1.5 leading-[18px]">
-									<span className="truncate text-[12.5px] font-semibold text-fg">
+							<div className="atw:min-w-0 atw:flex-1">
+								<div className="atw:flex atw:items-baseline atw:gap-1.5 atw:leading-[18px]">
+									<span className="atw:truncate atw:text-[12.5px] atw:font-semibold atw:text-fg">
 										{authorName(first)}
 									</span>
 									{first.lixcol_created_at ? (
 										<time
 											dateTime={first.lixcol_created_at}
-											className="shrink-0 text-[11.5px] text-history-secondary"
+											className="atw:shrink-0 atw:text-[11.5px] atw:text-history-secondary"
 										>
 											{formatCommentTime(first.lixcol_created_at)}
 										</time>
@@ -2410,7 +2497,7 @@ function MarginCards({
 							</div>
 						</div>
 						{replies > 0 || otherThreads > 0 ? (
-							<div className="pl-7 text-[12px] leading-[normal] font-semibold text-history-secondary">
+							<div className="atw:pl-7 atw:text-[12px] atw:leading-[normal] atw:font-semibold atw:text-history-secondary">
 								{[
 									replies > 0
 										? `${replies} ${replies === 1 ? "reply" : "replies"}`

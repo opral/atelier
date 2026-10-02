@@ -75,16 +75,16 @@ function LibraryDialog({
 			}}
 		>
 			<Dialog.Portal>
-				<Dialog.Backdrop className="atelier-portal fixed inset-0 z-50 bg-[color-mix(in_srgb,var(--atelier-fg)_38%,transparent)] transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
+				<Dialog.Backdrop className="atelier-portal atw:fixed atw:inset-0 atw:z-50 atw:bg-[color-mix(in_srgb,var(--atelier-fg)_38%,transparent)] atw:transition-opacity atw:duration-150 atw:data-[ending-style]:opacity-0 atw:data-[starting-style]:opacity-0" />
 				<Dialog.Popup
 					{...(initialFocus ? { initialFocus } : {})}
-					className="atelier-portal fixed top-1/2 left-1/2 z-50 flex w-[min(480px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-panel font-sans text-fg shadow-overlay outline-none transition-[opacity,scale] duration-150 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+					className="atelier-portal atw:fixed atw:top-1/2 atw:left-1/2 atw:z-50 atw:flex atw:w-[min(480px,calc(100vw-2rem))] atw:-translate-x-1/2 atw:-translate-y-1/2 atw:flex-col atw:overflow-hidden atw:rounded-xl atw:border atw:border-border atw:bg-panel atw:font-sans atw:text-fg atw:shadow-overlay atw:outline-none atw:transition-[opacity,scale] atw:duration-150 atw:data-[ending-style]:scale-95 atw:data-[ending-style]:opacity-0 atw:data-[starting-style]:scale-95 atw:data-[starting-style]:opacity-0"
 				>
-					<div className="flex flex-col gap-1.5 px-6 pt-6 pb-5">
-						<Dialog.Title className="text-[15px] font-semibold text-fg">
+					<div className="atw:flex atw:flex-col atw:gap-1.5 atw:px-6 atw:pt-6 atw:pb-5">
+						<Dialog.Title className="atw:text-[15px] atw:font-semibold atw:text-fg">
 							{title}
 						</Dialog.Title>
-						<Dialog.Description className="text-[13px] leading-relaxed text-fg-subtle">
+						<Dialog.Description className="atw:text-[13px] atw:leading-relaxed atw:text-fg-subtle">
 							{description}
 						</Dialog.Description>
 					</div>
@@ -92,9 +92,9 @@ function LibraryDialog({
 					{busy ? null : (
 						<Dialog.Close
 							aria-label="Close"
-							className="absolute top-4 right-4 grid size-7 place-items-center rounded-md text-fg-subtle hover:bg-bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+							className="atw:absolute atw:top-4 atw:right-4 atw:grid atw:size-7 atw:place-items-center atw:rounded-md atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:outline-none"
 						>
-							<X className="size-4" aria-hidden="true" />
+							<X className="atw:size-4" aria-hidden="true" />
 						</Dialog.Close>
 					)}
 				</Dialog.Popup>
@@ -105,14 +105,14 @@ function LibraryDialog({
 
 function DialogFooter({ children }: { readonly children: ReactNode }) {
 	return (
-		<div className="flex justify-end gap-2 border-t border-border px-6 py-4">
+		<div className="atw:flex atw:justify-end atw:gap-2 atw:border-t atw:border-border atw:px-6 atw:py-4">
 			{children}
 		</div>
 	);
 }
 
 const SECONDARY_BUTTON =
-	"border border-border-strong bg-panel text-fg-muted hover:bg-bg-hover hover:text-fg";
+	"atw:border atw:border-border-strong atw:bg-panel atw:text-fg-muted atw:hover:bg-bg-hover atw:hover:text-fg";
 
 /** Names a new folder, or renames an item. Enter saves, Escape cancels. */
 export function NameDialog({
@@ -173,7 +173,7 @@ export function NameDialog({
 					if (name && !busy) onSubmit(name);
 				}}
 			>
-				<label className="flex flex-col gap-2 px-6 pb-5 text-[13px] font-medium text-fg-muted">
+				<label className="atw:flex atw:flex-col atw:gap-2 atw:px-6 atw:pb-5 atw:text-[13px] atw:font-medium atw:text-fg-muted">
 					Name
 					<input
 						ref={inputRef}
@@ -187,10 +187,13 @@ export function NameDialog({
 						disabled={busy}
 						maxLength={255}
 						aria-invalid={shownError || emptyError ? true : undefined}
-						className="h-10 w-full rounded-lg border border-border bg-panel px-3 text-[14px] font-normal text-fg outline-none focus:ring-2 focus:ring-ring"
+						className="atw:h-10 atw:w-full atw:rounded-lg atw:border atw:border-border atw:bg-panel atw:px-3 atw:text-[14px] atw:font-normal atw:text-fg atw:outline-none atw:focus:ring-2 atw:focus:ring-ring"
 					/>
 					{shownError || emptyError ? (
-						<span role="alert" className="text-[13px] font-normal text-danger">
+						<span
+							role="alert"
+							className="atw:text-[13px] atw:font-normal atw:text-danger"
+						>
 							{emptyError ? "Enter a name." : shownError}
 						</span>
 					) : null}
@@ -268,7 +271,10 @@ export function DeleteDialog({
 			initialFocus={confirmRef}
 		>
 			{error ? (
-				<p role="alert" className="px-6 pb-4 text-[13px] text-danger">
+				<p
+					role="alert"
+					className="atw:px-6 atw:pb-4 atw:text-[13px] atw:text-danger"
+				>
 					{error}
 				</p>
 			) : null}
@@ -404,7 +410,7 @@ export function MoveDialog({
 			description="Choose where these items should live."
 			onClose={onClose}
 		>
-			<div className="px-6 pb-5">
+			<div className="atw:px-6 atw:pb-5">
 				<nav
 					ref={(nav) => {
 						crumbsRef.current = nav;
@@ -412,14 +418,17 @@ export function MoveDialog({
 						if (nav) nav.scrollLeft = nav.scrollWidth;
 					}}
 					aria-label="Destination location"
-					className="mb-2 flex min-h-9 items-center gap-1 overflow-x-auto px-0.5 text-[13px] [scrollbar-width:none]"
+					className="atw:mb-2 atw:flex atw:min-h-9 atw:items-center atw:gap-1 atw:overflow-x-auto atw:px-0.5 atw:text-[13px] atw:[scrollbar-width:none]"
 				>
 					{crumbs.map((crumb, index) => (
-						<span key={crumb.path} className="flex shrink-0 items-center gap-1">
+						<span
+							key={crumb.path}
+							className="atw:flex atw:shrink-0 atw:items-center atw:gap-1"
+						>
 							{index > 0 ? (
 								<ChevronRight
 									aria-hidden="true"
-									className="size-3.5 text-fg-subtle"
+									className="atw:size-3.5 atw:text-fg-subtle"
 								/>
 							) : null}
 							<button
@@ -430,12 +439,12 @@ export function MoveDialog({
 									crumb.path === destination ? "location" : undefined
 								}
 								onClick={() => choose(crumb.path)}
-								className="flex max-w-56 items-center gap-2 rounded-md px-2 py-1.5 text-fg-muted outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-ring aria-[current=location]:font-medium aria-[current=location]:text-fg disabled:opacity-50"
+								className="atw:flex atw:max-w-56 atw:items-center atw:gap-2 atw:rounded-md atw:px-2 atw:py-1.5 atw:text-fg-muted atw:outline-none atw:hover:bg-bg-hover atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:aria-[current=location]:font-medium atw:aria-[current=location]:text-fg atw:disabled:opacity-50"
 							>
 								{index === 0 ? (
-									<House aria-hidden="true" className="size-3.5" />
+									<House aria-hidden="true" className="atw:size-3.5" />
 								) : null}
-								<span className="truncate">{crumb.name}</span>
+								<span className="atw:truncate">{crumb.name}</span>
 							</button>
 						</span>
 					))}
@@ -444,19 +453,19 @@ export function MoveDialog({
 					ref={listRef}
 					aria-label="Destination folders"
 					// Five and a half rows: the half row says the list scrolls.
-					className="h-[233px] overflow-y-auto rounded-lg border border-border p-1"
+					className="atw:h-[233px] atw:overflow-y-auto atw:rounded-lg atw:border atw:border-border atw:p-1"
 				>
 					{folders.length === 0 ? (
-						<li className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+						<li className="atw:flex atw:h-full atw:flex-col atw:items-center atw:justify-center atw:gap-2 atw:px-6 atw:text-center">
 							<FolderOpen
 								aria-hidden="true"
-								className="mb-1 size-7 text-fg-subtle"
+								className="atw:mb-1 atw:size-7 atw:text-fg-subtle"
 								strokeWidth={1.5}
 							/>
-							<p className="text-[13px] font-medium text-fg-muted">
+							<p className="atw:text-[13px] atw:font-medium atw:text-fg-muted">
 								No folders inside
 							</p>
-							<p className="max-w-72 text-xs leading-relaxed text-fg-subtle">
+							<p className="atw:max-w-72 atw:text-xs atw:leading-relaxed atw:text-fg-subtle">
 								{destination !== currentDirectory
 									? "You can move your items here."
 									: "Use the breadcrumb above to choose another folder."}
@@ -470,30 +479,35 @@ export function MoveDialog({
 									type="button"
 									disabled={busy}
 									onClick={() => choose(folder.path)}
-									className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-50"
+									className="atw:flex atw:min-h-10 atw:w-full atw:cursor-pointer atw:items-center atw:gap-3 atw:rounded-md atw:px-3 atw:py-2 atw:text-left atw:text-[13px] atw:outline-none atw:hover:bg-bg-hover atw:focus-visible:ring-2 atw:focus-visible:ring-inset atw:focus-visible:ring-ring atw:disabled:opacity-50"
 								>
 									<img
 										src={folderBlueIconUrl}
 										alt=""
-										className="size-4 shrink-0"
+										className="atw:size-4 atw:shrink-0"
 									/>
-									<span className="min-w-0 flex-1 truncate">{folder.name}</span>
+									<span className="atw:min-w-0 atw:flex-1 atw:truncate">
+										{folder.name}
+									</span>
 									<ChevronRight
 										aria-hidden="true"
-										className="size-4 shrink-0 text-fg-subtle"
+										className="atw:size-4 atw:shrink-0 atw:text-fg-subtle"
 									/>
 								</button>
 							</li>
 						))
 					)}
 				</ul>
-				<p aria-live="polite" className="mt-3 text-xs text-fg-subtle">
+				<p
+					aria-live="polite"
+					className="atw:mt-3 atw:text-xs atw:text-fg-subtle"
+				>
 					{destination === currentDirectory
 						? "These items are already in this folder."
 						: `Move to ${segments.at(-1) ?? "Home"}`}
 				</p>
 				{error ? (
-					<p role="alert" className="mt-2 text-[13px] text-danger">
+					<p role="alert" className="atw:mt-2 atw:text-[13px] atw:text-danger">
 						{error}
 					</p>
 				) : null}
@@ -555,23 +569,23 @@ export function ToastLine({
 		<div
 			className={
 				placement === "viewport"
-					? `atelier-portal pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 font-sans ${raised ? "bottom-28" : "bottom-12"}`
-					: `pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4 ${raised ? "bottom-20" : "bottom-5"}`
+					? `atelier-portal atw:pointer-events-none atw:fixed atw:inset-x-0 atw:z-50 atw:flex atw:justify-center atw:px-4 atw:font-sans ${raised ? "atw:bottom-28" : "atw:bottom-12"}`
+					: `atw:pointer-events-none atw:absolute atw:inset-x-0 atw:z-30 atw:flex atw:justify-center atw:px-4 ${raised ? "atw:bottom-20" : "atw:bottom-5"}`
 			}
 		>
 			<div
 				role="status"
 				data-testid="library-toast"
-				className={`pointer-events-auto flex max-w-full items-center gap-3 rounded-[10px] bg-overlay py-2 pr-2 pl-3.5 text-[13px] text-overlay-fg shadow-overlay ${
-					toast.tone === "danger" ? "ring-1 ring-danger" : ""
+				className={`atw:pointer-events-auto atw:flex atw:max-w-full atw:items-center atw:gap-3 atw:rounded-[10px] atw:bg-overlay atw:py-2 atw:pr-2 atw:pl-3.5 atw:text-[13px] atw:text-overlay-fg atw:shadow-overlay ${
+					toast.tone === "danger" ? "atw:ring-1 atw:ring-danger" : ""
 				}`}
 			>
-				<span className="min-w-0 text-pretty">{toast.message}</span>
+				<span className="atw:min-w-0 atw:text-pretty">{toast.message}</span>
 				{toast.undo ? (
 					<button
 						type="button"
 						disabled={undoing}
-						className="rounded-md px-2 py-1 font-semibold text-overlay-accent hover:bg-overlay-hover disabled:opacity-60"
+						className="atw:rounded-md atw:px-2 atw:py-1 atw:font-semibold atw:text-overlay-accent atw:hover:bg-overlay-hover atw:disabled:opacity-60"
 						onClick={() => {
 							const undo = toast.undo;
 							if (!undo) return;
@@ -589,10 +603,10 @@ export function ToastLine({
 				<button
 					type="button"
 					aria-label="Dismiss"
-					className="grid size-6 place-items-center rounded-md text-overlay-fg-subtle hover:bg-overlay-hover hover:text-overlay-fg"
+					className="atw:grid atw:size-6 atw:place-items-center atw:rounded-md atw:text-overlay-fg-subtle atw:hover:bg-overlay-hover atw:hover:text-overlay-fg"
 					onClick={onDismiss}
 				>
-					<X className="size-3.5" aria-hidden="true" />
+					<X className="atw:size-3.5" aria-hidden="true" />
 				</button>
 			</div>
 		</div>

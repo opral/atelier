@@ -31,20 +31,16 @@
 			"import": "./dist/render.js",
 			"default": "./dist/render.js"
 		},
-		"./render.css": "./dist/render.css",
 		"./dev-tools": {
 			"types": "./dist/types/dev-tools.d.ts",
 			"import": "./dist/dev-tools.js",
 			"default": "./dist/dev-tools.js"
-		},
-		"./theme.css": "./src/shell/theme.css",
-		"./document.css": "./src/shell/document.css",
-		"./tailwind.css": "./src/shell/tailwind.css"
+		}
 	},
 	"packageManager": "pnpm@10.34.5",
 	"scripts": {
 		"dev": "pnpm --dir preview/web dev",
-		"build": "node scripts/tokens/check-tokens.mjs && node scripts/tokens/emit-css.mjs --check && vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs && node scripts/emit-render-css.mjs",
+		"build": "node scripts/tokens/check-tokens.mjs && node scripts/tokens/emit-css.mjs --check && vite build && tsc -p tsconfig.build.json && node scripts/prune-types.mjs",
 		"build:lix": "node scripts/build-vendored-lix.mjs",
 		"prebuild:preview": "git submodule update --init --recursive && pnpm run build:lix --browser-only",
 		"build:preview": "pnpm --dir preview/web build && node scripts/compress-preview-wasm.mjs",
@@ -56,10 +52,11 @@
 		"lint:fix": "oxlint --tsconfig ./tsconfig.json --ignore-path .gitignore --ignore-pattern \"vendor/**\" --fix .",
 		"test": "vitest run",
 		"test:consumer": "pnpm run build && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
-		"ci": "pnpm run build:lix && pnpm run build && pnpm run test:build-scripts && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
+		"ci": "pnpm run build:lix && pnpm run build && pnpm run test:styles && pnpm run test:build-scripts && pnpm test && pnpm --dir fixtures/consumer build && node --test fixtures/consumer/ssr.test.mjs",
 		"test:build-scripts": "node --test scripts/*.test.mjs",
 		"tokens:check": "node scripts/tokens/check-tokens.mjs",
-		"tokens": "node scripts/tokens/emit-css.mjs"
+		"tokens": "node scripts/tokens/emit-css.mjs",
+		"test:styles": "node --test fixtures/tailwind-host/styles.test.mjs"
 	},
 	"peerDependencies": {
 		"@lix-js/sdk": ">=0.18.1",
@@ -148,6 +145,7 @@
 		"typescript": "^7.0.2",
 		"vite": "^8.1.4",
 		"vitest": "^4.1.10",
-		"wrangler": "^4.110.0"
+		"wrangler": "^4.110.0",
+		"@playwright/test": "1.61.1"
 	}
 }

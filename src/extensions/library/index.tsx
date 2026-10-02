@@ -13,7 +13,7 @@ import { libraryLocationFromState } from "./library-state";
 const KIND_TAB_ICONS = Object.fromEntries(
 	LIBRARY_KINDS.map((kind) => {
 		const Icon = ({ className }: { className?: string }) => (
-			<KindIcon kind={kind} className={className ?? "size-3.5"} />
+			<KindIcon kind={kind} className={className ?? "atw:size-3.5"} />
 		);
 		Icon.displayName = `LibraryKindIcon(${kind})`;
 		return [kind, Icon];
@@ -31,7 +31,8 @@ const definition = createReactExtensionDefinition({
 		"bundled:atelier_library/manifest.json",
 		JSON.stringify(manifestJson),
 	),
-	description: "Browse the workspace by kind: pages, tables, drawings, media.",
+	description:
+		"Browse the workspace by kind: documents, tables, drawings, media.",
 	icon: Library,
 	component: ({ atelier, view }) =>
 		view.area === "main" ? (

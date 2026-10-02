@@ -7,10 +7,14 @@ const markdownRequire = createRequire(
 );
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { privateTailwind } from "./scripts/private-tailwind.mjs";
 
 // https://vitejs.dev/config/
 export default defineConfig({
 	build: {
+		// Tokens use native light-dark(); lowering inherited token values can
+		// resolve the optimizer's scheme switches before a workspace inherits them.
+		cssTarget: ["chrome123", "firefox120", "safari17.5"],
 		lib: {
 			entry: {
 				atelier: path.resolve(__dirname, "src/build-entry.ts"),
@@ -44,6 +48,7 @@ export default defineConfig({
 			},
 		}),
 		tailwindcss(),
+		privateTailwind(),
 	],
 	resolve: {
 		alias: {

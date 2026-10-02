@@ -86,7 +86,7 @@ export function ConversationView({
 	return (
 		<div
 			data-attr="conversation-view"
-			className="conversation-view h-full min-h-0 overflow-y-auto bg-panel"
+			className="conversation-view atw:h-full atw:min-h-0 atw:overflow-y-auto atw:bg-panel"
 		>
 			{conversationId ? (
 				<ConversationReader
@@ -109,14 +109,14 @@ function NotAvailable({ inline = false }: { readonly inline?: boolean }) {
 			role="status"
 			className={
 				inline
-					? "flex flex-col gap-2"
-					: "flex h-full min-h-60 flex-col items-center justify-center gap-2 px-6 text-center"
+					? "atw:flex atw:flex-col atw:gap-2"
+					: "atw:flex atw:h-full atw:min-h-60 atw:flex-col atw:items-center atw:justify-center atw:gap-2 atw:px-6 atw:text-center"
 			}
 		>
-			<p className="text-[16px] font-semibold text-fg">
+			<p className="atw:text-[16px] atw:font-semibold atw:text-fg">
 				This conversation isn’t available
 			</p>
-			<p className="max-w-[360px] text-[13.5px] leading-normal text-history-secondary">
+			<p className="atw:max-w-[360px] atw:text-[13.5px] atw:leading-normal atw:text-history-secondary">
 				It was deleted, or it lives in a repository you can’t open.
 			</p>
 		</div>
@@ -125,7 +125,7 @@ function NotAvailable({ inline = false }: { readonly inline?: boolean }) {
 
 function Column({ children }: { readonly children: ReactNode }) {
 	return (
-		<div className="mx-auto flex w-full max-w-[680px] flex-col gap-[22px] px-6 pt-12 pb-16">
+		<div className="atw:mx-auto atw:flex atw:w-full atw:max-w-[680px] atw:flex-col atw:gap-[22px] atw:px-6 atw:pt-12 atw:pb-16">
 			{children}
 		</div>
 	);
@@ -295,8 +295,8 @@ function LostDraft({
 	readonly onChange: (draft: Document) => void;
 }) {
 	return (
-		<div className="flex flex-col gap-2">
-			<p role="alert" className="text-[13px] text-history-secondary">
+		<div className="atw:flex atw:flex-col atw:gap-2">
+			<p role="alert" className="atw:text-[13px] atw:text-history-secondary">
 				Your reply wasn’t sent: this conversation isn’t available anymore. The
 				text is kept here so you can copy it.
 			</p>
@@ -398,7 +398,7 @@ function LiveConversation({
 	};
 	return (
 		<Column>
-			<div className="flex flex-col gap-2.5">
+			<div className="atw:flex atw:flex-col atw:gap-2.5">
 				<ConversationTitle
 					title={title}
 					readOnly={atelier.readOnly}
@@ -432,7 +432,7 @@ function LiveConversation({
 						}}
 					/>
 				) : resolved?.kind === "row" ? (
-					<p className="text-[13px] text-history-secondary">
+					<p className="atw:text-[13px] atw:text-history-secondary">
 						On a row of {resolved.relation ?? "another table"}
 					</p>
 				) : null}
@@ -549,7 +549,7 @@ function LiveThread({
 			comments.length === 0 ? null : (
 				<ResolveButton
 					labelled
-					className="-mt-3 self-end"
+					className="atw:-mt-3 atw:self-end"
 					onResolve={() =>
 						void setConversationResolved(lix, conversation.id, true, draft)
 							.then(() => {
@@ -715,7 +715,8 @@ function ConversationTitle({
 			buttonRef.current?.focus();
 		}
 	}, [editing]);
-	const heading = "text-[26px] leading-[1.2] tracking-[-0.015em] outline-none";
+	const heading =
+		"atw:text-[26px] atw:leading-[1.2] atw:tracking-[-0.015em] atw:outline-none";
 	if (editing) {
 		const finish = async (save: boolean, refocus: boolean) => {
 			if (doneRef.current) return;
@@ -747,7 +748,7 @@ function ConversationTitle({
 						void finish(false, true);
 					}
 				}}
-				className={`conversation-title-input w-full bg-transparent p-0 font-bold text-fg ${heading}`}
+				className={`conversation-title-input atw:w-full atw:bg-transparent atw:p-0 atw:font-bold atw:text-fg ${heading}`}
 			/>
 		);
 	}
@@ -760,14 +761,14 @@ function ConversationTitle({
 	};
 	return (
 		<>
-			<h1 className="m-0">
+			<h1 className="atw:m-0">
 				{title ? (
 					<button
 						ref={buttonRef}
 						type="button"
 						onClick={begin}
 						disabled={readOnly || !onSave}
-						className={`block w-full cursor-text p-0 text-left font-bold text-fg disabled:cursor-default ${heading}`}
+						className={`atw:block atw:w-full atw:cursor-text atw:p-0 atw:text-left atw:font-bold atw:text-fg atw:disabled:cursor-default ${heading}`}
 					>
 						{title}
 					</button>
@@ -777,13 +778,13 @@ function ConversationTitle({
 						type="button"
 						onClick={begin}
 						disabled={readOnly || !onSave}
-						className={`flex cursor-text items-center gap-2.5 p-0 text-left font-semibold text-history-flag disabled:cursor-default ${heading}`}
+						className={`atw:flex atw:cursor-text atw:items-center atw:gap-2.5 atw:p-0 atw:text-left atw:font-semibold atw:text-history-flag atw:disabled:cursor-default ${heading}`}
 					>
 						{readOnly || !onSave ? (
 							"Untitled"
 						) : (
 							<span>
-								<span className="sr-only">Untitled conversation, </span>
+								<span className="atw:sr-only">Untitled conversation, </span>
 								Add a title
 							</span>
 						)}
@@ -791,7 +792,7 @@ function ConversationTitle({
 							<svg
 								aria-hidden="true"
 								viewBox="0 0 24 24"
-								className="size-4"
+								className="atw:size-4"
 								fill="none"
 								stroke="currentColor"
 								strokeWidth={2}
@@ -804,7 +805,7 @@ function ConversationTitle({
 				)}
 			</h1>
 			{error ? (
-				<p role="alert" className="text-[12px] text-danger">
+				<p role="alert" className="atw:text-[12px] atw:text-danger">
 					{error}
 				</p>
 			) : null}
@@ -820,7 +821,7 @@ function FileIcon({ path }: { readonly path: string | null }) {
 			src={fileIconUrl(path ?? "file")}
 			alt=""
 			aria-hidden="true"
-			className="size-[13px] shrink-0"
+			className="atw:size-[13px] atw:shrink-0"
 		/>
 	);
 }
@@ -830,7 +831,7 @@ function Flag() {
 		<svg
 			aria-hidden="true"
 			viewBox="0 0 16 16"
-			className="size-3 shrink-0 text-accent"
+			className="atw:size-3 atw:shrink-0 atw:text-accent"
 		>
 			<path
 				fill="currentColor"
@@ -851,7 +852,7 @@ function ContextLink({
 		<button
 			type="button"
 			onClick={onClick}
-			className="conversation-context-link cursor-pointer p-0 leading-4 font-semibold text-fg-muted"
+			className="conversation-context-link atw:cursor-pointer atw:p-0 atw:leading-4 atw:font-semibold atw:text-fg-muted"
 		>
 			{children}
 		</button>
@@ -860,7 +861,7 @@ function ContextLink({
 
 function Separator() {
 	return (
-		<span aria-hidden="true" className="text-fg-faint">
+		<span aria-hidden="true" className="atw:text-fg-faint">
 			›
 		</span>
 	);
@@ -889,7 +890,7 @@ function ContextLine({
 	const line = (children: ReactNode) => (
 		<nav
 			aria-label="Attached to"
-			className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px] leading-4 text-history-secondary"
+			className="atw:flex atw:min-w-0 atw:flex-wrap atw:items-center atw:gap-1.5 atw:text-[13px] atw:leading-4 atw:text-history-secondary"
 		>
 			{children}
 		</nav>
@@ -957,18 +958,20 @@ function CheckpointFiles({
 	return (
 		<ul
 			aria-label="Files in this checkpoint"
-			className="-mx-2 -mt-1 flex flex-col"
+			className="atw:-mx-2 atw:-mt-1 atw:flex atw:flex-col"
 		>
 			{shown.map((file) => (
 				<li key={file.id}>
 					<button
 						type="button"
 						onClick={() => onOpen(file.path)}
-						className="conversation-row flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-0 text-left text-[12.5px] text-fg-muted"
+						className="conversation-row atw:flex atw:h-[30px] atw:w-full atw:cursor-pointer atw:items-center atw:gap-2 atw:rounded-[6px] atw:px-2 atw:py-0 atw:text-left atw:text-[12.5px] atw:text-fg-muted"
 					>
 						<FileIcon path={file.path} />
-						<span className="min-w-0 truncate">{fileName(file.path)}</span>
-						<span className="flex-1" />
+						<span className="atw:min-w-0 atw:truncate">
+							{fileName(file.path)}
+						</span>
+						<span className="atw:flex-1" />
 						<DiffGlyph kind={file.changeKind} size={11} />
 					</button>
 				</li>
@@ -978,7 +981,7 @@ function CheckpointFiles({
 					<button
 						type="button"
 						onClick={() => setShowAll(!showAll)}
-						className="cursor-pointer rounded-[6px] px-2 py-1 text-[12.5px] font-medium text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="atw:cursor-pointer atw:rounded-[6px] atw:px-2 atw:py-1 atw:text-[12.5px] atw:font-medium atw:text-accent-hover atw:hover:underline atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 					>
 						{showAll ? "Show less" : `Show ${hiddenCount} more files`}
 					</button>
@@ -1010,12 +1013,14 @@ function AnchorDetail({
 			<button
 				type="button"
 				onClick={() => onOpen()}
-				className={`conversation-well cursor-pointer rounded-panel px-3.5 py-2.5 text-left text-[14.5px] leading-[1.6] whitespace-pre-line ${
-					removed ? "text-history-secondary line-through" : "text-fg"
+				className={`conversation-well atw:cursor-pointer atw:rounded-panel atw:px-3.5 atw:py-2.5 atw:text-left atw:text-[14.5px] atw:leading-[1.6] atw:whitespace-pre-line ${
+					removed
+						? "atw:text-history-secondary atw:line-through"
+						: "atw:text-fg"
 				}`}
 			>
 				{/* The text is the button's name; the action is said first. */}
-				<span className="sr-only">
+				<span className="atw:sr-only">
 					{removed
 						? `Open ${fileName(anchor.filePath)}. Removed ${blockKindLabel(anchor.blockKind)}: `
 						: `Open ${fileName(anchor.filePath)} at this ${blockKindLabel(anchor.blockKind)}: `}
@@ -1056,11 +1061,11 @@ function CsvRowTable({
 		<button
 			type="button"
 			onClick={onOpen}
-			className={`block w-full cursor-pointer overflow-hidden rounded-panel border border-border p-0 text-left text-[12.5px] leading-[1.2] ${
-				removed ? "line-through" : ""
+			className={`atw:block atw:w-full atw:cursor-pointer atw:overflow-hidden atw:rounded-panel atw:border atw:border-border atw:p-0 atw:text-left atw:text-[12.5px] atw:leading-[1.2] ${
+				removed ? "atw:line-through" : ""
 			}`}
 		>
-			<span className="sr-only">
+			<span className="atw:sr-only">
 				{isHeader
 					? `Open ${name} at its header: ${anchor.header.join(", ")}`
 					: `Open ${name} at row ${anchor.rowNumber}${removed ? " (removed)" : ""}: ${anchor.header
@@ -1072,14 +1077,16 @@ function CsvRowTable({
 			</span>
 			<span
 				aria-hidden="true"
-				className={`grid bg-bg-subtle text-[10.5px] font-bold tracking-[0.04em] text-fg-muted uppercase ${
-					isHeader ? "" : "border-b border-border"
+				className={`atw:grid atw:bg-bg-subtle atw:text-[10.5px] atw:font-bold atw:tracking-[0.04em] atw:text-fg-muted atw:uppercase ${
+					isHeader ? "" : "atw:border-b atw:border-border"
 				}`}
 				style={{ gridTemplateColumns: template }}
 			>
-				<span className="px-2.5 py-2">{isHeader ? "Header" : "Row"}</span>
+				<span className="atw:px-2.5 atw:py-2">
+					{isHeader ? "Header" : "Row"}
+				</span>
 				{columns.map((index) => (
-					<span key={index} className="truncate px-2.5 py-2">
+					<span key={index} className="atw:truncate atw:px-2.5 atw:py-2">
 						{anchor.header[index] ?? ""}
 					</span>
 				))}
@@ -1087,10 +1094,10 @@ function CsvRowTable({
 			{isHeader ? null : (
 				<span
 					aria-hidden="true"
-					className={`grid ${removed ? "text-history-secondary" : "text-fg"}`}
+					className={`atw:grid ${removed ? "atw:text-history-secondary" : "atw:text-fg"}`}
 					style={{ gridTemplateColumns: template }}
 				>
-					<span className="px-2.5 py-[9px] font-mono text-history-secondary">
+					<span className="atw:px-2.5 atw:py-[9px] atw:font-mono atw:text-history-secondary">
 						{anchor.rowNumber}
 					</span>
 					{columns.map((index) => {
@@ -1098,9 +1105,9 @@ function CsvRowTable({
 						return (
 							<span
 								key={index}
-								className={`truncate px-2.5 py-[9px] ${
-									index === 0 ? "font-semibold" : ""
-								} ${looksLiteral(value) ? "font-mono" : ""}`}
+								className={`atw:truncate atw:px-2.5 atw:py-[9px] ${
+									index === 0 ? "atw:font-semibold" : ""
+								} ${looksLiteral(value) ? "atw:font-mono" : ""}`}
 							>
 								{value}
 							</span>
@@ -1111,7 +1118,7 @@ function CsvRowTable({
 			{hidden > 0 ? (
 				<span
 					aria-hidden="true"
-					className="block border-t border-border-subtle px-2.5 py-1.5 text-[11.5px] text-history-secondary"
+					className="atw:block atw:border-t atw:border-border-subtle atw:px-2.5 atw:py-1.5 atw:text-[11.5px] atw:text-history-secondary"
 				>
 					{`+${hidden} more ${hidden === 1 ? "column" : "columns"} in ${name}`}
 				</span>
@@ -1121,7 +1128,7 @@ function CsvRowTable({
 }
 
 function Hairline() {
-	return <div aria-hidden="true" className="h-px bg-border-subtle" />;
+	return <div aria-hidden="true" className="atw:h-px atw:bg-border-subtle" />;
 }
 
 /* ── Comments and the reply box ─────────────────────────────────────── */
@@ -1137,7 +1144,7 @@ function Thread({
 }) {
 	if (comments.length === 0) {
 		return (
-			<p className="text-[13.5px] leading-[1.2] text-history-secondary">
+			<p className="atw:text-[13.5px] atw:leading-[1.2] atw:text-history-secondary">
 				No comments yet.
 			</p>
 		);

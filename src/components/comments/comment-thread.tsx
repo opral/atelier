@@ -137,7 +137,7 @@ function CommentBody({ body }: { readonly body: unknown }) {
 	}, [html]);
 	if (html === null) {
 		return (
-			<p className="comment-body-text text-danger">
+			<p className="comment-body-text atw:text-danger">
 				This comment could not be displayed.
 			</p>
 		);
@@ -177,7 +177,7 @@ export type CommentThreadSize = "compact" | "document" | "view";
  * row, which is gone: a ring for the keyboard, none for the mouse.
  */
 const REVEALED_FOCUS =
-	"rounded-[6px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
+	"atw:rounded-[6px] atw:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring";
 
 function CommentRow({
 	comment,
@@ -211,7 +211,7 @@ function CommentRow({
 				data-comment-id={comment.id}
 				data-comment-grouped=""
 				{...focus}
-				className={`comment-row ${inDocument ? "-mt-1.5 pl-7" : "-mt-2 pl-[48px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
+				className={`comment-row ${inDocument ? "atw:-mt-1.5 atw:pl-7" : "atw:-mt-2 atw:pl-[48px] atw:pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 			>
 				<CommentBody body={comment.body} />
 				{actions}
@@ -222,18 +222,18 @@ function CommentRow({
 		<li
 			data-comment-id={comment.id}
 			{...focus}
-			className={`comment-row ${inDocument ? "flex gap-2" : "flex gap-[7px] pl-[23px] pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
+			className={`comment-row ${inDocument ? "atw:flex atw:gap-2" : "atw:flex atw:gap-[7px] atw:pl-[23px] atw:pr-2"} ${revealed ? REVEALED_FOCUS : ""}`}
 		>
 			<CommentAvatar
 				name={name}
 				profileUri={comment.author_profile_uri}
 				size={inDocument ? "lg" : "md"}
 			/>
-			<div className="min-w-0 flex-1">
-				<div className="flex items-baseline gap-1.5 leading-[18px]">
+			<div className="atw:min-w-0 atw:flex-1">
+				<div className="atw:flex atw:items-baseline atw:gap-1.5 atw:leading-[18px]">
 					<span
-						className={`truncate font-semibold text-fg ${
-							inDocument ? "text-[12.5px]" : "text-[12px]"
+						className={`atw:truncate atw:font-semibold atw:text-fg ${
+							inDocument ? "atw:text-[12.5px]" : "atw:text-[12px]"
 						}`}
 					>
 						{name}
@@ -242,8 +242,8 @@ function CommentRow({
 						<time
 							dateTime={comment.lixcol_created_at}
 							title={new Date(comment.lixcol_created_at).toLocaleString()}
-							className={`comment-secondary shrink-0 ${
-								inDocument ? "text-[11.5px]" : "text-[11px]"
+							className={`comment-secondary atw:shrink-0 ${
+								inDocument ? "atw:text-[11.5px]" : "atw:text-[11px]"
 							}`}
 						>
 							{formatCommentTime(comment.lixcol_created_at)}
@@ -276,7 +276,7 @@ function ViewCommentRow({
 				data-comment-id={comment.id}
 				data-comment-grouped=""
 				{...focus}
-				className={`comment-row -mt-3.5 pl-[34px] ${revealed ? REVEALED_FOCUS : ""}`}
+				className={`comment-row atw:-mt-3.5 atw:pl-[34px] ${revealed ? REVEALED_FOCUS : ""}`}
 			>
 				<CommentBody body={comment.body} />
 				{actions}
@@ -288,23 +288,23 @@ function ViewCommentRow({
 		<li
 			data-comment-id={comment.id}
 			{...focus}
-			className={`comment-row flex gap-2.5 ${revealed ? REVEALED_FOCUS : ""}`}
+			className={`comment-row atw:flex atw:gap-2.5 ${revealed ? REVEALED_FOCUS : ""}`}
 		>
 			<CommentAvatar
 				name={name}
 				profileUri={comment.author_profile_uri}
 				size="2xl"
 			/>
-			<div className="min-w-0 flex-1">
-				<div className="flex items-baseline gap-2 leading-4">
-					<span className="truncate text-[13px] font-semibold text-fg">
+			<div className="atw:min-w-0 atw:flex-1">
+				<div className="atw:flex atw:items-baseline atw:gap-2 atw:leading-4">
+					<span className="atw:truncate atw:text-[13px] atw:font-semibold atw:text-fg">
 						{name}
 					</span>
 					{comment.lixcol_created_at ? (
 						<time
 							dateTime={comment.lixcol_created_at}
 							title={new Date(comment.lixcol_created_at).toLocaleString()}
-							className="comment-secondary shrink-0 text-[12px]"
+							className="comment-secondary atw:shrink-0 atw:text-[12px]"
 						>
 							{formatCheckpointRelativeTime(comment.lixcol_created_at)}
 						</time>
@@ -337,7 +337,7 @@ function ViewFoldRow({
 		? `Hide ${hidden.length} ${noun}`
 		: `${hidden.length} more ${noun}`;
 	return (
-		<li className="-mx-2.5">
+		<li className="atw:-mx-2.5">
 			<button
 				type="button"
 				onClick={onToggle}
@@ -345,15 +345,15 @@ function ViewFoldRow({
 				aria-label={
 					expanded ? label : `Show ${label} from ${authors.join(", ")}`
 				}
-				className="comment-fold-view flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-control px-2.5 py-0 text-left text-[13px] font-semibold text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="comment-fold-view atw:flex atw:h-8 atw:w-full atw:cursor-pointer atw:items-center atw:gap-2.5 atw:rounded-control atw:px-2.5 atw:py-0 atw:text-left atw:text-[13px] atw:font-semibold atw:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 			>
 				<span
 					aria-hidden="true"
-					className="comment-secondary flex w-6 justify-center"
+					className="comment-secondary atw:flex atw:w-6 atw:justify-center"
 				>
 					<svg
 						viewBox="0 0 24 24"
-						className={`size-[11px] ${expanded ? "rotate-90" : ""}`}
+						className={`atw:size-[11px] ${expanded ? "atw:rotate-90" : ""}`}
 						fill="none"
 						stroke="currentColor"
 						strokeWidth={2.4}
@@ -361,11 +361,11 @@ function ViewFoldRow({
 						<path d="m9 6 6 6-6 6" />
 					</svg>
 				</span>
-				<span aria-hidden="true" className="flex">
+				<span aria-hidden="true" className="atw:flex">
 					{authors.slice(0, 3).map((name, index) => (
 						<span
 							key={name}
-							className={`comment-fold-avatar comment-fold-avatar-view flex rounded-full ${index > 0 ? "-ml-1.5" : ""}`}
+							className={`comment-fold-avatar comment-fold-avatar-view atw:flex atw:rounded-full ${index > 0 ? "atw:-ml-1.5" : ""}`}
 						>
 							<CommentAvatar
 								name={name}
@@ -396,18 +396,18 @@ function FoldRow({
 	const authors = [...new Set(hidden.map(authorName))];
 	const label = `${hidden.length} more ${hidden.length === 1 ? "comment" : "comments"}`;
 	return (
-		<li className={size === "document" ? undefined : "mr-2 ml-[23px]"}>
+		<li className={size === "document" ? undefined : "atw:mr-2 atw:ml-[23px]"}>
 			<button
 				type="button"
 				onClick={onExpand}
 				aria-label={`Show ${label} from ${authors.join(", ")}`}
-				className="comment-fold flex h-6.5 w-full cursor-pointer items-center gap-2 rounded-[6px] px-[7px] text-left text-[11.5px] font-semibold text-accent-hover hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="comment-fold atw:flex atw:h-6.5 atw:w-full atw:cursor-pointer atw:items-center atw:gap-2 atw:rounded-[6px] atw:px-[7px] atw:text-left atw:text-[11.5px] atw:font-semibold atw:text-accent-hover atw:hover:underline atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 			>
-				<span aria-hidden="true" className="flex">
+				<span aria-hidden="true" className="atw:flex">
 					{authors.slice(0, 3).map((name, index) => (
 						<span
 							key={name}
-							className={`comment-fold-avatar flex rounded-full ${index > 0 ? "-ml-[5px]" : ""}`}
+							className={`comment-fold-avatar atw:flex atw:rounded-full ${index > 0 ? "atw:-ml-[5px]" : ""}`}
 						>
 							<CommentAvatar
 								name={name}
@@ -582,12 +582,12 @@ export function CommentThread({
 			aria-label={label}
 			data-tone={tone}
 			data-size={size}
-			className={`comment-surface flex flex-col ${
+			className={`comment-surface atw:flex atw:flex-col ${
 				size === "view"
-					? "gap-5"
+					? "atw:gap-5"
 					: size === "document"
-						? "gap-2.5"
-						: "gap-3.5 pt-0.5"
+						? "atw:gap-2.5"
+						: "atw:gap-3.5 atw:pt-0.5"
 			} ${className}`}
 		>
 			{rows(head, 0)}

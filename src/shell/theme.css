@@ -2,26 +2,24 @@
  * Atelier design tokens. Plain CSS: no build step, no framework. Every colour,
  * radius, size, shadow and duration the workspace uses is named here, and only
  * here — nowhere else in this package, or in a host, or in an extension, is a
- * colour written as a literal. Consumers say `var(--atelier-…)`; Tailwind users get
- * the same names as utilities through ./tailwind.css.
+ * colour written as a literal. Consumers say `var(--atelier-…)`; internal Tailwind utilities map to
+ * these same values through ./tailwind.css.
  *
  * Naming: property → role → emphasis → state. `fg` is text and icons alike;
  * `panel` is an island on the `bg` canvas; `subtle` is a tint, `strong` a
  * heavier edge. Each token says, at the end of its line, when to use it.
  *
- * Dark values ride along in light-dark(), but the scheme is pinned to light:
+ * Dark values ride along in light-dark(); mounted roots pin the scheme to light.
  * the dark palette is a first pass nobody has designed yet, so no operating
- * system preference may turn it on. When it is ready, this line becomes
- * `color-scheme: light dark` and `.dark { color-scheme: dark }` (index.css)
- * is the only switch a host needs; nothing else changes.
+ * system preference may turn it on. When it is ready, mounted roots may use
+ * `color-scheme: light dark`. A `.dark` root or ancestor switches mounted
+ * roots to dark (index.css); importing tokens alone never switches a host.
  *
  * A second name for the same role is not a token, it is a future bug. The few
  * aliases below say why they exist.
  */
 :root,
 :host {
-	color-scheme: light;
-
 	/* ── Surfaces ─────────────────────────────────────────────────────── */
 	--atelier-bg: light-dark(
 		rgb(244 242 239),
@@ -261,28 +259,6 @@
 		rgb(96 165 250),
 		rgb(125 180 255)
 	); /* the folder glyph, everywhere a folder is drawn */
-	/* Library kinds: the glyph that stands for a kind of thing, wherever the
-	   Library names one (its sidebar, a tab, an empty state). */
-	--atelier-kind-pages: light-dark(
-		rgb(194 65 12),
-		rgb(251 146 60)
-	); /* pages: documents written in Markdown */
-	--atelier-kind-tables: light-dark(
-		rgb(47 125 91),
-		rgb(110 200 155)
-	); /* tables: CSV files */
-	--atelier-kind-drawings: light-dark(
-		rgb(180 83 9),
-		rgb(245 170 90)
-	); /* drawings: Excalidraw scenes */
-	--atelier-kind-media: light-dark(
-		rgb(107 87 166),
-		rgb(180 165 230)
-	); /* media: images, video, PDFs */
-	--atelier-kind-database: light-dark(
-		rgb(29 111 165),
-		rgb(120 185 230)
-	); /* the database: tables without a path */
 
 	/* ── Shell ────────────────────────────────────────────────────────── */
 	--atelier-panel-header-height: 40px; /* every panel's header row, so tabs and toolbars align across panels */

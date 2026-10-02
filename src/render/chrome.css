@@ -1,0 +1,152 @@
+.atelier-render {
+	--atelier-doc-font-size: 14px;
+	font-family: var(--atelier-font-sans);
+	font-size: 14px;
+	line-height: 1.62;
+	color: var(--atelier-fg);
+}
+.atelier-render *,
+.atelier-render *::before,
+.atelier-render *::after {
+	box-sizing: border-box;
+}
+/* A card is narrow, and a word it cannot break would push the change off
+   it; the editor scrolls instead. */
+.atelier-render .md-diff {
+	overflow-wrap: anywhere;
+}
+.atelier-render .md-diff pre code {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* A card has no page around it: the document starts and ends flush. */
+.atelier-render .md-diff > *:first-child {
+	margin-top: 0;
+}
+.atelier-render .md-diff > *:last-child {
+	margin-bottom: 0;
+}
+
+/* Raw source (frontmatter, inline HTML) is shown as source, quietly. */
+.atelier-render .md-diff .md-diff-raw {
+	color: var(--atelier-fg-subtle);
+	white-space: pre-wrap;
+}
+.atelier-render .md-diff .md-diff-missing {
+	color: var(--atelier-fg-subtle);
+	font-style: italic;
+}
+
+/* An image, named rather than loaded. */
+.atelier-render .md-diff .md-diff-image {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 5px;
+	margin: 0 4px 6px 0;
+	padding: 1px 7px 1px 6px;
+	border: 1px solid var(--atelier-border);
+	border-radius: 6px;
+	color: var(--atelier-fg-muted);
+	font-size: 0.93em;
+}
+.atelier-render .md-diff .md-diff-image::before {
+	content: "▨";
+	color: var(--atelier-fg-subtle);
+}
+.atelier-render .md-diff .md-diff-image-src {
+	color: var(--atelier-fg-subtle);
+	font-size: 0.86em;
+}
+/* The frame belongs to the wrapper: a collapsed table ignores a radius, and
+   the wrapper is what clips. */
+.atelier-render .csv-diff {
+	overflow-x: auto;
+	border: 1px solid var(--atelier-border);
+	border-radius: var(--atelier-radius-panel);
+}
+.atelier-render .csv-diff table {
+	width: 100%;
+	border: 0;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+.atelier-render .csv-diff th,
+.atelier-render .csv-diff td {
+	padding: 7px 9px;
+	border-bottom: 1px solid var(--atelier-border-subtle);
+	text-align: left;
+	vertical-align: top;
+	white-space: pre-wrap;
+	/* A wide column wraps rather than pushing the change off the card. */
+	max-width: 24ch;
+	overflow-wrap: anywhere;
+	/* A cell is written in whatever direction its language runs. */
+	unicode-bidi: plaintext;
+}
+.atelier-render .csv-diff thead th {
+	background: var(--atelier-bg-subtle);
+	font-weight: 600;
+}
+.atelier-render .csv-diff tbody tr:last-child > td {
+	border-bottom: 0;
+}
+/* The rows the trim left out, named where they were — the table's own
+   version of a document's pruned run. */
+.atelier-render .csv-diff tr.csv-diff-gap > td {
+	background: var(--atelier-bg-subtle);
+	color: var(--atelier-fg-subtle);
+	font-size: 12px;
+	max-width: none;
+}
+.atelier-render .csv-diff [data-diff-status="added"] {
+	background: var(--atelier-diff-added-subtle);
+	color: var(--atelier-diff-added);
+}
+.atelier-render .csv-diff [data-diff-status="removed"] {
+	background: var(--atelier-diff-removed-subtle);
+	color: var(--atelier-diff-removed);
+}
+.atelier-render .csv-diff [data-diff-mode="words"] [data-diff-status="removed"],
+.atelier-render .csv-diff tr[data-diff-status="removed"] > td {
+	text-decoration: line-through;
+	text-decoration-color: var(--atelier-diff-removed);
+}
+.atelier-render .csv-diff [data-diff-mode="words"] [data-diff-status="added"] {
+	text-decoration: none;
+}
+.atelier-render .csv-diff [data-diff-status="modified"] {
+	background: var(--atelier-accent-subtle);
+}
+/* Two versions of a cell sit side by side: without this "lead" and
+   "qualified" read as one word. */
+.atelier-render .csv-diff td span[data-diff-status],
+.atelier-render .csv-diff th span[data-diff-status] {
+	padding: 0 2px;
+	margin: 0 -1px;
+	border-radius: var(--atelier-radius-tag);
+	/* Each version is its own run: without isolation, a removed and an added
+	   Arabic word reorder into each other, letter by letter. */
+	unicode-bidi: isolate;
+}
+.atelier-render .csv-diff td[data-diff-status],
+.atelier-render .csv-diff th[data-diff-status] {
+	border-radius: 0;
+}
+/* The row a gap stands for, named rather than silently missing. */
+.atelier-render .csv-diff tr.csv-diff-gap > td {
+	color: var(--atelier-fg-subtle);
+	font-size: 12px;
+	text-align: center;
+}
+/* The columns the trim left out, named once in the header and held open by a
+   cell of its own in every row, so the table keeps its shape. */
+.atelier-render .csv-diff .csv-diff-gap-column {
+	background: var(--atelier-bg-subtle);
+	color: var(--atelier-fg-subtle);
+	font-size: 12px;
+	font-weight: 400;
+	white-space: nowrap;
+	text-align: center;
+	max-width: none;
+}

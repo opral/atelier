@@ -168,8 +168,8 @@ function DocumentSlotView({
 			// Only visibility changes when a prepared document is promoted. If the
 			// shown slot returns to normal flow here, `h-full` depends on an
 			// indirect/auto height and can collapse the editor after a review step.
-			className={`absolute inset-0 flex min-h-0 flex-col ${
-				hidden ? "invisible pointer-events-none" : "visible"
+			className={`atw:absolute atw:inset-0 atw:flex atw:min-h-0 atw:flex-col ${
+				hidden ? "atw:invisible atw:pointer-events-none" : "atw:visible"
 			}`}
 			aria-hidden={hidden || undefined}
 			{...{ [attribute]: slotKey }}

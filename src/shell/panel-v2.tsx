@@ -429,7 +429,7 @@ export function PanelV2({
 
 	const ContainerElement =
 		side === "main" ? ("section" as const) : ("aside" as const);
-	const hostTextClass = side === "main" ? "text-fg" : "text-fg-muted";
+	const hostTextClass = side === "main" ? "atw:text-fg" : "atw:text-fg-muted";
 
 	const contentHandlers =
 		onActiveViewInteraction && activeInstance
@@ -510,7 +510,7 @@ export function PanelV2({
 		side !== "main" && hasViews && contentVisible ? (
 			<div
 				data-atelier-part="section-header"
-				className="flex items-start justify-between gap-2"
+				className="atw:flex atw:items-start atw:justify-between atw:gap-2"
 			>
 				<SidebarSectionPicker
 					side={side}
@@ -534,13 +534,19 @@ export function PanelV2({
 			aria-label={ariaLabel}
 			data-area-side={side}
 			onClickCapture={() => onFocusArea(side)}
-			className={clsx("flex h-full w-full flex-col", hostTextClass)}
+			className={clsx(
+				"atw:flex atw:h-full atw:w-full atw:flex-col",
+				hostTextClass,
+			)}
 		>
 			{sideSectionPicker}
 			{/* Main tabs remain the only document tab strip. Side areas use the
 			    section picker above so their views do not read as documents. */}
 			{showTabBar && customTabStrip !== undefined ? (
-				<div data-atelier-part="custom-tab-strip" className="w-full min-w-0">
+				<div
+					data-atelier-part="custom-tab-strip"
+					className="atw:w-full atw:min-w-0"
+				>
 					{customTabStrip}
 				</div>
 			) : showTabBar ? (
@@ -619,9 +625,11 @@ export function PanelV2({
 				inert={contentVisible ? undefined : true}
 				aria-hidden={contentVisible ? undefined : true}
 				className={clsx(
-					"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px]",
-					side === "main" ? "border border-border bg-panel" : "bg-transparent",
-					isOver && "ring-2 ring-ring ring-inset",
+					"atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden atw:rounded-[10px]",
+					side === "main"
+						? "atw:border atw:border-border atw:bg-panel"
+						: "atw:bg-transparent",
+					isOver && "atw:ring-2 atw:ring-ring atw:ring-inset",
 				)}
 			>
 				{hasViews ? (
@@ -652,7 +660,7 @@ export function PanelV2({
 								outgoing && handover && outgoingContext ? (
 									<div
 										key={handover.outgoingKey}
-										className="contents"
+										className="atw:contents"
 										data-atelier-view-leaving=""
 									>
 										<ViewRenderer
@@ -669,10 +677,10 @@ export function PanelV2({
 									key={viewSlots.get(entry.instance) ?? entry.instance}
 									className={
 										arriving
-											? "pointer-events-none absolute inset-0 flex min-h-0 flex-col opacity-0"
+											? "atw:pointer-events-none atw:absolute atw:inset-0 atw:flex atw:min-h-0 atw:flex-col atw:opacity-0"
 											: isActive
-												? "contents"
-												: "hidden"
+												? "atw:contents"
+												: "atw:hidden"
 									}
 									aria-hidden={isActive && !arriving ? undefined : true}
 									data-atelier-view-arriving={arriving || undefined}
@@ -751,8 +759,8 @@ export type PanelV2Props = {
 // Reference rows are regular-weight with muted icons; only the active row is
 // semibold. Anything heavier makes the whole menu read as bold.
 const sectionPickerItemClasses =
-	"h-[30px] rounded-md px-2 text-[12.5px] font-normal text-fg-muted focus:bg-bg-hover focus:text-fg";
-const sectionPickerIconClasses = "size-3.25 text-fg-subtle";
+	"atw:h-[30px] atw:rounded-md atw:px-2 atw:text-[12.5px] atw:font-normal atw:text-fg-muted atw:focus:bg-bg-hover atw:focus:text-fg";
+const sectionPickerIconClasses = "atw:size-3.25 atw:text-fg-subtle";
 const EMPTY_EXTENSION_PREFERENCES: AtelierExtensionPreferences = {
 	get: () => undefined,
 	set: () => undefined,
@@ -824,12 +832,12 @@ function SidebarSectionPicker({
 					// while open, which is the whole affordance. px-1.5 puts the label
 					// text on the sidebar's content column — the same x as the tree
 					// rows' icons, whose centers sit under the top bar's mark.
-					className="group/section flex w-fit items-center gap-[5px] self-start rounded-[5px] px-1.5 py-1 text-[11px] font-bold uppercase tracking-[0.07em] text-fg-faint transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:text-fg-muted"
+					className="atw:group/section atw:flex atw:w-fit atw:items-center atw:gap-[5px] atw:self-start atw:rounded-[5px] atw:px-1.5 atw:py-1 atw:text-[11px] atw:font-bold atw:uppercase atw:tracking-[0.07em] atw:text-fg-faint atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:data-[state=open]:text-fg-muted"
 				>
 					<span>{activeLabel}</span>
 					<ChevronDown
 						aria-hidden="true"
-						className="size-2.25 text-fg-faint transition-[transform,color] group-hover/section:text-fg-muted group-data-[state=open]/section:rotate-180 group-data-[state=open]/section:text-fg-muted"
+						className="atw:size-2.25 atw:text-fg-faint atw:transition-[transform,color] atw:group-hover/section:text-fg-muted atw:group-data-[state=open]/section:rotate-180 atw:group-data-[state=open]/section:text-fg-muted"
 						strokeWidth={2.6}
 					/>
 				</button>
@@ -861,7 +869,7 @@ function SidebarSectionPicker({
 						focusVisible: false,
 					} as FocusOptions);
 				}}
-				className="w-[212px] rounded-[10px] border border-border bg-panel p-1.5 shadow-lg"
+				className="atw:w-[212px] atw:rounded-[10px] atw:border atw:border-border atw:bg-panel atw:p-1.5 atw:shadow-lg"
 			>
 				{/* Open views and openable views read as one list: the picker answers
 				    "what is this sidebar showing?", not "what is already loaded?". */}
@@ -876,20 +884,20 @@ function SidebarSectionPicker({
 							onSelect={() => onSelectView(entry.instance)}
 							className={clsx(
 								sectionPickerItemClasses,
-								isActive && "bg-bg-hover font-semibold text-fg",
+								isActive && "atw:bg-bg-hover atw:font-semibold atw:text-fg",
 							)}
 						>
 							<definition.icon
 								className={clsx(
-									"size-3.25",
-									isActive ? "text-fg-muted" : "text-fg-subtle",
+									"atw:size-3.25",
+									isActive ? "atw:text-fg-muted" : "atw:text-fg-subtle",
 								)}
 							/>
-							<span className="truncate">{label}</span>
+							<span className="atw:truncate">{label}</span>
 							{isActive ? (
 								<Check
 									aria-hidden="true"
-									className="ml-auto size-3 text-link"
+									className="atw:ml-auto atw:size-3 atw:text-link"
 									strokeWidth={2.6}
 								/>
 							) : null}
@@ -904,30 +912,30 @@ function SidebarSectionPicker({
 								className={sectionPickerItemClasses}
 							>
 								<definition.icon className={sectionPickerIconClasses} />
-								<span className="truncate">{definition.label}</span>
+								<span className="atw:truncate">{definition.label}</span>
 							</DropdownMenuItem>
 						))
 					: null}
 				{extensionMenuItems.length > 0 ? (
 					<>
-						<div className="my-1.5 mx-1 h-px bg-border-subtle" />
+						<div className="atw:my-1.5 atw:mx-1 atw:h-px atw:bg-border-subtle" />
 						<ExtensionDropdownMenuItems
 							items={extensionMenuItems}
 							itemClassName={sectionPickerItemClasses}
-							separatorClassName="mx-1 my-1"
+							separatorClassName="atw:mx-1 atw:my-1"
 						/>
 					</>
 				) : null}
 				{onHidePanel ? (
 					<>
-						<div className="my-1.5 mx-1 h-px bg-border-subtle" />
+						<div className="atw:my-1.5 atw:mx-1 atw:h-px atw:bg-border-subtle" />
 						<DropdownMenuItem
 							onSelect={() => onHidePanel()}
 							className={sectionPickerItemClasses}
 						>
 							<PanelIcon side={side} className={sectionPickerIconClasses} />
 							<span>Hide sidebar</span>
-							<span className="ml-auto text-[11px] font-medium text-fg-faint">
+							<span className="atw:ml-auto atw:text-[11px] atw:font-medium atw:text-fg-faint">
 								{panelShortcutHint(side)}
 							</span>
 						</DropdownMenuItem>
@@ -1170,9 +1178,9 @@ function AddViewMenu({
 					title="Add view"
 					aria-label="Add view"
 					data-attr="panel-add-view"
-					className="flex size-[26px] flex-none items-center justify-center rounded-md text-fg-faint hover:bg-bg-hover-strong hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-panel"
+					className="atw:flex atw:size-[26px] atw:flex-none atw:items-center atw:justify-center atw:rounded-md atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-panel"
 				>
-					<Plus aria-hidden="true" className="size-3.25" strokeWidth={2} />
+					<Plus aria-hidden="true" className="atw:size-3.25" strokeWidth={2} />
 				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
@@ -1186,12 +1194,12 @@ function AddViewMenu({
 						triggerRef.current?.focus({ preventScroll: true });
 					}, 0);
 				}}
-				className="w-44 border border-border bg-panel p-1 shadow-lg"
+				className="atw:w-44 atw:border atw:border-border atw:bg-panel atw:p-1 atw:shadow-lg"
 			>
 				{availableViews.length === 0 ? (
 					<DropdownMenuItem
 						disabled
-						className="h-7 rounded-control px-2 text-xs font-medium text-fg-subtle"
+						className="atw:h-7 atw:rounded-control atw:px-2 atw:text-xs atw:font-medium atw:text-fg-subtle"
 					>
 						No views available
 					</DropdownMenuItem>
@@ -1203,9 +1211,9 @@ function AddViewMenu({
 								selectedViewRef.current = true;
 								onAddView(ext.kind);
 							}}
-							className="h-7 rounded-control px-2 text-xs font-medium text-fg-muted focus:bg-bg-hover focus:text-fg"
+							className="atw:h-7 atw:rounded-control atw:px-2 atw:text-xs atw:font-medium atw:text-fg-muted atw:focus:bg-bg-hover atw:focus:text-fg"
 						>
-							<ext.icon className="h-4 w-4" />
+							<ext.icon className="atw:h-4 atw:w-4" />
 							<span>{ext.label}</span>
 						</DropdownMenuItem>
 					))
@@ -1255,25 +1263,25 @@ function DefaultPanelEmptyState({
 		side === "main" ? "This is a panel." : `This is the ${side} sidebar.`;
 
 	return (
-		<div className="@container min-h-0 flex-1 overflow-y-auto">
-			<div className="flex min-h-full items-center justify-center px-5 py-10 @max-[300px]:px-4 @max-[300px]:py-7">
+		<div className="atw:@container atw:min-h-0 atw:flex-1 atw:overflow-y-auto">
+			<div className="atw:flex atw:min-h-full atw:items-center atw:justify-center atw:px-5 atw:py-10 atw:@max-[300px]:px-4 atw:@max-[300px]:py-7">
 				<section
 					aria-labelledby={headingId}
 					data-attr="panel-empty-state"
 					data-area-side={side}
-					className="flex w-full max-w-64 flex-col items-center pb-10 text-center @max-[300px]:max-w-56 @max-[300px]:pb-4"
+					className="atw:flex atw:w-full atw:max-w-64 atw:flex-col atw:items-center atw:pb-10 atw:text-center atw:@max-[300px]:max-w-56 atw:@max-[300px]:pb-4"
 				>
 					<SidebarIllustration
 						side={illustrationSide}
-						className="w-40 max-w-full @max-[300px]:w-32"
+						className="atw:w-40 atw:max-w-full atw:@max-[300px]:w-32"
 					/>
 					<h2
 						id={headingId}
-						className="mt-6 text-xl font-bold tracking-[-0.025em] text-fg @max-[300px]:mt-5 @max-[300px]:text-lg"
+						className="atw:mt-6 atw:text-xl atw:font-bold atw:tracking-[-0.025em] atw:text-fg atw:@max-[300px]:mt-5 atw:@max-[300px]:text-lg"
 					>
 						{hasAvailableViews ? sideLabel : "No views available"}
 					</h2>
-					<p className="mt-2 text-sm leading-5 text-fg-subtle">
+					<p className="atw:mt-2 atw:text-sm atw:leading-5 atw:text-fg-subtle">
 						{hasAvailableViews
 							? "Open a view to get started."
 							: "Available views will appear here."}
@@ -1281,7 +1289,7 @@ function DefaultPanelEmptyState({
 					{hasAvailableViews ? (
 						// One chip per view: opening is a single click, and the chips
 						// double as the list of what this sidebar can show.
-						<div className="mt-7 flex flex-wrap items-center justify-center gap-2 @max-[300px]:mt-6">
+						<div className="atw:mt-7 atw:flex atw:flex-wrap atw:items-center atw:justify-center atw:gap-2 atw:@max-[300px]:mt-6">
 							{availableViews.map((ext) => (
 								<button
 									key={ext.kind}
@@ -1289,9 +1297,9 @@ function DefaultPanelEmptyState({
 									data-attr="panel-empty-open-view"
 									data-view-kind={ext.kind}
 									onClick={() => onAddView(ext.kind)}
-									className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-strong bg-panel px-3.5 text-[12.5px] font-semibold text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
+									className="atw:inline-flex atw:h-8 atw:items-center atw:gap-1.5 atw:rounded-full atw:border atw:border-border-strong atw:bg-panel atw:px-3.5 atw:text-[12.5px] atw:font-semibold atw:text-fg-muted atw:transition-colors atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-bg"
 								>
-									<ext.icon className="size-3.5 text-fg-subtle" />
+									<ext.icon className="atw:size-3.5 atw:text-fg-subtle" />
 									{ext.label}
 								</button>
 							))}
@@ -1535,7 +1543,7 @@ function TabBar({
 	return (
 		<div
 			ref={rootRef}
-			className={clsx(styles.tabBar, height === "topbar" && "h-[40px]")}
+			className={clsx(styles.tabBar, height === "topbar" && "atw:h-[40px]")}
 			data-height={height}
 			data-overflow-left={overflow.left ? "true" : undefined}
 			data-overflow-right={overflow.right ? "true" : undefined}
@@ -1657,7 +1665,7 @@ function PanelContent({
 	return (
 		<div
 			className={clsx(
-				"relative flex min-h-0 flex-1 flex-col overflow-hidden",
+				"atw:relative atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden",
 				className,
 			)}
 			{...rest}
@@ -1719,7 +1727,7 @@ function ViewRenderer({
 			data-view-key={instance.kind}
 			data-area-side={side}
 			data-active={isActive ? "true" : undefined}
-			className="flex min-h-0 flex-1 flex-col overflow-hidden"
+			className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden"
 		>
 			{view.Component ? (
 				<DeclarativeExtension
@@ -1754,7 +1762,7 @@ interface SortableTabProps extends PanelTabPreviewProps {
 }
 
 const tabMenuItemClasses =
-	"gap-2 rounded-[6px] px-2 py-[5px] text-[12.5px] leading-tight text-fg-muted [&_svg]:size-3.25 [&_svg]:text-fg-subtle";
+	"atw:gap-2 atw:rounded-[6px] atw:px-2 atw:py-[5px] atw:text-[12.5px] atw:leading-tight atw:text-fg-muted atw:[&_svg]:size-3.25 atw:[&_svg]:text-fg-subtle";
 
 /**
  * Right-click menu for tab chips. Pinned tabs (no onClose) drop the Close
@@ -1783,7 +1791,7 @@ function TabContextMenu({
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
 			<ContextMenuContent
-				className="w-[182px] min-w-[182px] rounded-[9px] p-1 shadow-lg"
+				className="atw:w-[182px] atw:min-w-[182px] atw:rounded-[9px] atw:p-1 atw:shadow-lg"
 				data-attr="panel-tab-context-menu"
 				onCloseAutoFocus={(event) => {
 					if (!renameSelected.current) return;
@@ -1796,9 +1804,9 @@ function TabContextMenu({
 						<ExtensionContextMenuItems
 							items={extensionMenuItems}
 							itemClassName={tabMenuItemClasses}
-							separatorClassName="mx-1.5 my-1"
+							separatorClassName="atw:mx-1.5 atw:my-1"
 						/>
-						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
+						<ContextMenuSeparator className="atw:mx-1.5 atw:my-1 atw:bg-border-subtle" />
 					</>
 				) : null}
 				{onRename ? (
@@ -1814,7 +1822,7 @@ function TabContextMenu({
 							<Pencil aria-hidden="true" />
 							Rename
 						</ContextMenuItem>
-						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
+						<ContextMenuSeparator className="atw:mx-1.5 atw:my-1 atw:bg-border-subtle" />
 					</>
 				) : null}
 				{onClose ? (
@@ -1827,7 +1835,7 @@ function TabContextMenu({
 							<X aria-hidden="true" />
 							Close
 						</ContextMenuItem>
-						<ContextMenuSeparator className="mx-1.5 my-1 bg-border-subtle" />
+						<ContextMenuSeparator className="atw:mx-1.5 atw:my-1 atw:bg-border-subtle" />
 					</>
 				) : null}
 				<ContextMenuItem
@@ -2075,15 +2083,15 @@ const TabRenameField = forwardRef<
 			className={clsx(
 				tabBaseClasses,
 				tabStateClasses.focused,
-				"gap-1.5 px-2.5",
-				rejected && "border-danger",
+				"atw:gap-1.5 atw:px-2.5",
+				rejected && "atw:border-danger",
 			)}
 		>
 			<span
 				data-tab-icon
-				className="relative flex size-3.25 items-center justify-center"
+				className="atw:relative atw:flex atw:size-3.25 atw:items-center atw:justify-center"
 			>
-				<Icon className="size-3.25" />
+				<Icon className="atw:size-3.25" />
 			</span>
 			<input
 				ref={inputRef}
@@ -2095,7 +2103,7 @@ const TabRenameField = forwardRef<
 				autoComplete="off"
 				data-attr="panel-tab-rename-input"
 				style={{ width: `${Math.max(value.length, 6)}ch` }}
-				className="max-w-40 min-w-0 bg-transparent text-[12.5px] font-semibold text-fg outline-none"
+				className="atw:max-w-40 atw:min-w-0 atw:bg-transparent atw:text-[12.5px] atw:font-semibold atw:text-fg atw:outline-none"
 				onChange={(event) => {
 					setRejected(false);
 					setValue(event.target.value);
@@ -2130,16 +2138,16 @@ const TabRenameField = forwardRef<
 TabRenameField.displayName = "TabRenameField";
 
 const tabBaseClasses =
-	"group relative flex h-7 flex-none max-w-80 items-center rounded-control border text-[12.5px] font-medium transition-[color,background-color,border-color,padding] duration-200 ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg";
+	"atw:group atw:relative atw:flex atw:h-7 atw:flex-none atw:max-w-80 atw:items-center atw:rounded-control atw:border atw:text-[12.5px] atw:font-medium atw:transition-[color,background-color,border-color,padding] atw:duration-200 atw:ease-out atw:whitespace-nowrap atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-bg";
 
 const tabStateClasses = {
 	// The visible view's chip always reads as a white card over the canvas;
 	// keyboard focus adds a ring on top of the same look.
 	focused:
-		"border-border bg-panel font-semibold text-fg [&_[data-tab-icon]]:text-fg-muted",
+		"atw:border-border atw:bg-panel atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
 	active:
-		"border-border bg-panel font-semibold text-fg [&_[data-tab-icon]]:text-fg-muted",
-	idle: "border-transparent bg-transparent text-fg-subtle hover:bg-bg-hover-strong hover:text-fg",
+		"atw:border-border atw:bg-panel atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
+	idle: "atw:border-transparent atw:bg-transparent atw:text-fg-subtle atw:hover:bg-bg-hover-strong atw:hover:text-fg",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {
@@ -2234,12 +2242,12 @@ const TabButtonBase = forwardRef<
 					tabStateClasses[state],
 					// A compact pinned tab is icon-only; center the icon so the chip
 					// (and its hover fill) stays a square instead of a wide pill.
-					isCompact ? "px-[6.5px]" : "px-2.5",
+					isCompact ? "atw:px-[6.5px]" : "atw:px-2.5",
 					// The label animates via margin, so pinned tabs opt out of gap;
 					// the classes are mutually exclusive because stylesheet order,
 					// not clsx order, would decide a gap-1.5/gap-0 conflict.
-					isPinned ? "gap-0" : "gap-1.5",
-					isDragging && "opacity-50 cursor-grabbing",
+					isPinned ? "atw:gap-0" : "atw:gap-1.5",
+					isDragging && "atw:opacity-50 atw:cursor-grabbing",
 					className,
 				)}
 				style={style}
@@ -2249,21 +2257,21 @@ const TabButtonBase = forwardRef<
 				<span
 					data-tab-icon
 					data-attr="panel-tab-select"
-					className="relative flex size-3.25 items-center justify-center"
+					className="atw:relative atw:flex atw:size-3.25 atw:items-center atw:justify-center"
 				>
-					<Icon className="size-3.25" />
+					<Icon className="atw:size-3.25" />
 				</span>
 				<span
 					data-attr="panel-tab-select"
 					aria-hidden={isCompact ? true : undefined}
 					className={clsx(
-						"overflow-hidden truncate whitespace-nowrap transition-[max-width,opacity,margin-left] duration-200 ease-out",
+						"atw:overflow-hidden atw:truncate atw:whitespace-nowrap atw:transition-[max-width,opacity,margin-left] atw:duration-200 atw:ease-out",
 						isPinned
 							? isCompact
-								? "ml-0 max-w-0 opacity-0"
-								: "ml-1.5 max-w-[10rem] opacity-100"
-							: "max-w-[10rem]",
-						isPending && "italic",
+								? "atw:ml-0 atw:max-w-0 atw:opacity-0"
+								: "atw:ml-1.5 atw:max-w-[10rem] atw:opacity-100"
+							: "atw:max-w-[10rem]",
+						isPending && "atw:italic",
 					)}
 					title={tooltip ?? label}
 				>
@@ -2277,45 +2285,45 @@ const TabButtonBase = forwardRef<
 					<span
 						role="button"
 						aria-label={`Close ${label}`}
-						className="absolute -top-1 -right-1 z-10 hidden size-3.5 items-center justify-center rounded-full border border-border bg-panel text-fg-subtle shadow-sm transition-colors group-hover:flex group-focus-visible:flex hover:bg-bg-hover hover:text-fg-muted"
+						className="atw:absolute atw:-top-1 atw:-right-1 atw:z-10 atw:hidden atw:size-3.5 atw:items-center atw:justify-center atw:rounded-full atw:border atw:border-border atw:bg-panel atw:text-fg-subtle atw:shadow-sm atw:transition-colors atw:group-hover:flex atw:group-focus-visible:flex atw:hover:bg-bg-hover atw:hover:text-fg-muted"
 						onClick={(event) => {
 							event.stopPropagation();
 							onClose();
 						}}
 					>
-						<X data-attr="panel-tab-close" className="size-[9px]" />
+						<X data-attr="panel-tab-close" className="atw:size-[9px]" />
 					</span>
 				) : isActive ? (
 					// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all.
 					<span
 						role="button"
 						aria-label={`Close ${label}`}
-						className="ml-0.5 flex size-4 flex-none items-center justify-center rounded-[4px] text-fg-subtle transition-colors hover:text-fg-muted"
+						className="atw:ml-0.5 atw:flex atw:size-4 atw:flex-none atw:items-center atw:justify-center atw:rounded-[4px] atw:text-fg-subtle atw:transition-colors atw:hover:text-fg-muted"
 						onClick={(event) => {
 							event.stopPropagation();
 							onClose();
 						}}
 					>
-						<X data-attr="panel-tab-close" className="size-[11px]" />
+						<X data-attr="panel-tab-close" className="atw:size-[11px]" />
 					</span>
 				) : (
 					<>
 						<span
 							aria-hidden="true"
 							data-attr="panel-tab-close-fade"
-							className="pointer-events-none absolute inset-y-0 right-1.5 z-[1] w-12 bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover-strong)_72%)] opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100"
+							className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:right-1.5 atw:z-[1] atw:w-12 atw:bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover-strong)_72%)] atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:opacity-100 atw:group-focus-visible:opacity-100"
 						/>
 						{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all. */}
 						<span
 							role="button"
 							aria-label={`Close ${label}`}
-							className="pointer-events-none absolute right-1.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-[5px] bg-bg-hover-strong text-fg-subtle opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:opacity-100 hover:text-fg-muted"
+							className="atw:pointer-events-none atw:absolute atw:right-1.5 atw:top-1/2 atw:z-10 atw:flex atw:size-5 atw:-translate-y-1/2 atw:items-center atw:justify-center atw:rounded-[5px] atw:bg-bg-hover-strong atw:text-fg-subtle atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:group-focus-visible:pointer-events-auto atw:group-focus-visible:opacity-100 atw:hover:text-fg-muted"
 							onClick={(event) => {
 								event.stopPropagation();
 								onClose();
 							}}
 						>
-							<X data-attr="panel-tab-close" className="size-[11px]" />
+							<X data-attr="panel-tab-close" className="atw:size-[11px]" />
 						</span>
 					</>
 				)}

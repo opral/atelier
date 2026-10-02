@@ -384,7 +384,7 @@ export function SlashCommandMenu() {
 				<span>↵ Select</span>
 				<span>Esc Close</span>
 			</div>
-			<div className="sr-only" role="status" aria-live="polite">
+			<div className="atw:sr-only" role="status" aria-live="polite">
 				{selectedCommand
 					? `${selectedCommand.label}: ${selectedCommand.description}`
 					: ""}

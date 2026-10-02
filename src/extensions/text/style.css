@@ -1,6 +1,6 @@
 @import "../../shell/layers.css";
 
-@layer atelier {
+@layer components.atelier.components {
 	@scope (.atelier-root) {
 		.atelier-text-view,
 		.atelier-text-surface {
