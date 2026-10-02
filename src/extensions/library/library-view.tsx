@@ -2284,5 +2284,5 @@ function RowList({
 
 /** The list's Folder column; it gives way first in a narrow tab. */
 const LIST_FOLDER_COLUMN =
-	"atw:w-[28%] atw:min-w-0 atw:shrink-0 atw:truncate atw:@max-[560px]:hidden";
+	"atw:w-[28%] atw:min-w-0 atw:shrink-0 atw:truncate atw:pr-4 atw:@max-[560px]:hidden";
 const LIST_TIME_COLUMN = "atw:w-24";
