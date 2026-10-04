@@ -12,6 +12,7 @@ import {
 } from "react";
 import { ArrowLeftRight, History } from "lucide-react";
 import type {
+	AtelierArea,
 	AtelierDiffSession,
 	AtelierExtensionPreferences,
 	AtelierJsonValue,
@@ -236,6 +237,13 @@ const CheckpointRowMemoryContext = createContext<CheckpointRowMemory | null>(
 	null,
 );
 
+/**
+ * In the main area History is the page being read, so opening a checkpoint
+ * also opens its first changed file: the checkpoint view. In a side panel
+ * the document beside it stays, as the review float steps through files.
+ */
+const OpenCheckpointFileContext = createContext(false);
+
 function useCheckpointRowMemory(): CheckpointRowMemory {
 	const memory = useContext(CheckpointRowMemoryContext);
 	const [fallback] = useState<CheckpointRowMemory>(() => ({
@@ -249,9 +257,12 @@ function useCheckpointRowMemory(): CheckpointRowMemory {
 export function HistoryView({
 	atelier,
 	preferences,
+	area,
 }: {
 	readonly atelier: HistoryRuntime;
 	readonly preferences?: AtelierExtensionPreferences;
+	/** Where the view sits; the main area opens a checkpoint's files. */
+	readonly area?: AtelierArea;
 }) {
 	const containerRef = useRef<HTMLElement>(null);
 	const [wide, setWide] = useState(false);
@@ -303,19 +314,23 @@ export function HistoryView({
 			className="atw:min-h-0 atw:flex-1 atw:overflow-y-auto atw:py-2 atw:pr-1"
 		>
 			<CheckpointRowMemoryContext.Provider value={rowMemory}>
-				<div
-					className={
-						wide ? "atw:w-full atw:max-w-[60rem] atw:pr-5" : "atw:w-full"
-					}
-				>
-					<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
-					<CheckpointList
-						key={file?.id ?? "repository"}
-						atelier={atelier}
-						wide={wide}
-						file={file}
-					/>
-				</div>
+				<OpenCheckpointFileContext.Provider value={area === "main"}>
+					<div
+						className={
+							wide
+								? "atw:mx-auto atw:w-full atw:max-w-[60rem] atw:pr-5"
+								: "atw:w-full"
+						}
+					>
+						<WorkingChangesRow atelier={atelier} wide={wide} file={file} />
+						<CheckpointList
+							key={file?.id ?? "repository"}
+							atelier={atelier}
+							wide={wide}
+							file={file}
+						/>
+					</div>
+				</OpenCheckpointFileContext.Provider>
 			</CheckpointRowMemoryContext.Provider>
 		</section>
 	);
@@ -952,6 +967,7 @@ function CheckpointItem({
 	// that rule reads as open too.
 	const openConversations = conversations;
 	const rowMemory = useCheckpointRowMemory();
+	const opensCheckpointFile = useContext(OpenCheckpointFileContext);
 	const [draft, setDraftState] = useState<ConversationDraft>(
 		() => rowMemory.drafts.get(checkpoint.commit_id) ?? emptyCommentDocument(),
 	);
@@ -1067,7 +1083,7 @@ function CheckpointItem({
 			setTitleSaving(false);
 		}
 	}
-	function openCheckpoint() {
+	function openCheckpoint({ showFile = false } = {}) {
 		// Focus on another checkpoint (its row, or its field, which would go
 		// as it closes) follows to the row that was pressed, where it can be
 		// seen. Focus outside the list (the document) stays where it is.
@@ -1081,6 +1097,9 @@ function CheckpointItem({
 			.open({
 				base: previousCommitId ? { commitId: previousCommitId } : null,
 				target: { commitId: checkpoint.commit_id },
+				...(showFile && opensCheckpointFile && !fileChange
+					? { reveal: true }
+					: {}),
 			})
 			.then(() => {
 				if (fileChange?.path) atelier.diff.openFile(fileChange.path);
@@ -1204,7 +1223,7 @@ function CheckpointItem({
 							atelier.diff.exit();
 							return;
 						}
-						void openCheckpoint();
+						void openCheckpoint({ showFile: true });
 					}}
 					onMouseDown={(event) => {
 						// A click leaves focus in the document being read. Focus
@@ -1308,7 +1327,7 @@ function CheckpointItem({
 							setHoldFocus(false);
 						});
 					}}
-					className="atw:pointer-events-none atw:absolute atw:top-1.5 atw:right-[5px] atw:inline-flex atw:h-[22px] atw:cursor-pointer atw:items-center atw:gap-[5px] atw:rounded-[6px] atw:bg-panel atw:px-[7px] atw:text-[11px] atw:font-semibold atw:text-fg-muted atw:opacity-0 atw:ring-1 atw:ring-border-strong atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:hover:text-fg atw:focus-visible:pointer-events-auto atw:focus-visible:opacity-100 atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
+					className={`atw:pointer-events-none atw:absolute ${wide ? "atw:top-[9px]" : "atw:top-1.5"} atw:right-[5px] atw:inline-flex atw:h-[22px] atw:cursor-pointer atw:items-center atw:gap-[5px] atw:rounded-[6px] atw:bg-panel atw:px-[7px] atw:text-[11px] atw:font-semibold atw:text-fg-muted atw:opacity-0 atw:ring-1 atw:ring-border-strong atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:hover:text-fg atw:focus-visible:pointer-events-auto atw:focus-visible:opacity-100 atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring`}
 				>
 					<CommentBubble plus className="atw:size-3" />
 					Comment
@@ -1653,7 +1672,11 @@ export const extension = createReactExtensionDefinition({
 	description: "Browse repository checkpoints.",
 	icon: History,
 	component: ({ atelier, view }) => (
-		<HistoryView atelier={atelier} preferences={view.preferences} />
+		<HistoryView
+			atelier={atelier}
+			preferences={view.preferences}
+			area={view.area}
+		/>
 	),
 	headerAccessory: ({ atelier, view }) => (
 		<HistoryScopeSwitch atelier={atelier} preferences={view.preferences} />

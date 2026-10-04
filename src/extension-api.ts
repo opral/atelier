@@ -164,9 +164,16 @@ export type AtelierDocumentOpenOptions = {
 	readonly navigationCause?: AtelierDocumentNavigationCause;
 	/**
 	 * Appends a new main tab instead of navigating the active tab in place.
-	 * Appends a new main tab instead of navigating the active tab.
 	 */
 	readonly newTab?: boolean;
+	/**
+	 * Opens in the preview tab, as IDEs do for a file picked from a list: the
+	 * next preview replaces it instead of adding a tab. The tab is kept once
+	 * the person works in the document (a click, a key) or double-clicks its
+	 * tab. A document already open is brought to the front as it is.
+	 * `newTab` wins over it.
+	 */
+	readonly preview?: boolean;
 };
 
 export type AtelierViewOpenOptions = {
@@ -456,6 +463,15 @@ export type AtelierExtensionRuntime = {
 			readonly instanceId: string;
 			readonly state: AtelierExtensionState;
 		} | null;
+		/**
+		 * The views a person can open in the main area — what an add-view menu
+		 * lists — so a navigation surface can offer them itself.
+		 */
+		readonly mainViews?: readonly {
+			readonly extensionId: string;
+			readonly name: string;
+			readonly icon?: ComponentType<{ className?: string }>;
+		}[];
 	};
 	/** Host contributions to the bundled Library view. */
 	readonly library?: AtelierLibraryOptions;

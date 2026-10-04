@@ -14,6 +14,13 @@ import {
 	Trash2,
 } from "lucide-react";
 import { DiffGlyph } from "@/components/diff-glyph";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useLix } from "@/lib/lix-react";
 import {
 	ContextMenu,
@@ -64,7 +71,7 @@ import { DeleteDialog, ToastLine, type LibraryToast } from "./dialogs";
 import { NEW_FILE, isTypingTarget } from "./new-file";
 
 /** With a host Home, Home takes All's place at the top. */
-const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
+const SIDEBAR_KINDS: readonly (LibraryKind | "database" | "history")[] = [
 	"all",
 	"pages",
 	"tables",
@@ -72,8 +79,35 @@ const SIDEBAR_KINDS: readonly (LibraryKind | "database")[] = [
 	"media",
 	"files",
 	"database",
+	"history",
 	"other",
 ];
+
+/** Sidebar rows that open a repository view rather than a Library section. */
+const SIDEBAR_VIEWS = {
+	database: {
+		label: "Database",
+		extensionId: ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer,
+	},
+	history: {
+		label: "History",
+		extensionId: ATELIER_BUILTIN_EXTENSION_IDS.history,
+	},
+} as const;
+
+/** Other's menu reads like the sidebar's other menus (Recent's, the tab's). */
+const OTHER_MENU_ITEM = "atw:py-1 atw:text-[13px]";
+
+/**
+ * Main views the sidebar lists itself (the file explorer is its Files row);
+ * Other offers the rest.
+ */
+const LISTED_VIEW_IDS: ReadonlySet<string> = new Set([
+	LIBRARY_EXTENSION_ID,
+	ATELIER_BUILTIN_EXTENSION_IDS.files,
+	ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer,
+	ATELIER_BUILTIN_EXTENSION_IDS.history,
+]);
 
 export function isNewTabClick(event: MouseEvent): boolean {
 	return event.metaKey || event.ctrlKey || event.button === 1;
@@ -170,12 +204,31 @@ export function LibrarySidebar({
 			? "added"
 			: "modified";
 	const active = atelier.views.activeMain;
-	const activeKind: LibraryKind | "database" | null =
+	// Every other main view — those not in the list above — sits behind
+	// Other, beside the files no kind claims, so the tab strip needs no "+".
+	const otherViews = (atelier.views.mainViews ?? []).filter(
+		(view) => !LISTED_VIEW_IDS.has(view.extensionId),
+	);
+	const activeKind: LibraryKind | "database" | "history" | null =
 		active?.extensionId === LIBRARY_EXTENSION_ID
 			? libraryLocationFromState(active.state, { hasHome }).kind
 			: active?.extensionId === ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer
 				? "database"
-				: null;
+				: active?.extensionId === ATELIER_BUILTIN_EXTENSION_IDS.history
+					? "history"
+					: otherViews.some((view) => view.extensionId === active?.extensionId)
+						? "other"
+						: null;
+	const otherMenuPointer = useRef(false);
+	const openView = (extensionId: string, label: string) => {
+		void atelier.views
+			// Activated if open; otherwise beside what is in front, never in
+			// its place.
+			.open(extensionId, { newTab: true })
+			.catch((error: unknown) => {
+				console.error(`library: unable to open ${label}`, error);
+			});
+	};
 	const recent = data
 		? visibleRecentFiles(
 				data,
@@ -247,11 +300,15 @@ export function LibrarySidebar({
 			window.removeEventListener("keydown", onKeyDown, { capture: true });
 	}, [atelier.documents, data, defaultFolders, lix, libraryInFront, readOnly]);
 
-	const openFile = (file: LibraryFile) => {
-		// A file opens in a tab of its own (activated if already open), never
-		// in the place of what is in front.
+	const openFile = (file: LibraryFile, newTab = false) => {
+		// A file opens in the preview tab (activated if already open), never in
+		// the place of what is in front: stepping through Recent replaces the
+		// preview until the person works in it. ⌘-click keeps a tab of its own.
 		void atelier.documents
-			.open(file.path, { fileId: file.id, newTab: true })
+			.open(file.path, {
+				fileId: file.id,
+				...(newTab ? { newTab: true } : { preview: true }),
+			})
 			.catch((error: unknown) => {
 				console.error("library: unable to open", error);
 			});
@@ -266,16 +323,79 @@ export function LibrarySidebar({
 			<ul className="atw:flex atw:flex-col atw:gap-px">
 				{sections.map((kind) => {
 					const isActive = activeKind === kind;
-					const label =
-						kind === "database" ? "Database" : LIBRARY_KIND_COPY[kind].label;
+					// Database and History are views of the repository, not kinds
+					// of file: they open their own tab and carry no change mark.
+					const isView = kind === "database" || kind === "history";
+					const label = isView
+						? SIDEBAR_VIEWS[kind].label
+						: LIBRARY_KIND_COPY[kind].label;
 					// Files holds everything, so it rolls up every change; Home and
 					// All sum the workspace up and carry no mark of their own.
 					const rollup =
 						kind === "files"
 							? filesRollup
-							: kind !== "database" && kind !== "all" && kind !== "home"
+							: !isView && kind !== "all" && kind !== "home"
 								? marks.kinds.get(kind)
 								: undefined;
+					if (kind === "other" && otherViews.length > 0) {
+						return (
+							<li key={kind}>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<SidebarRow
+											active={isActive}
+											// Its views are never part of a review: it stays lit.
+											dimmed={false}
+											icon={<KindIcon kind={kind} />}
+											label={label}
+											testId="library-kind-other"
+											trailing={
+												rollup ? <DiffGlyph kind={rollup} size={11} /> : null
+											}
+											onClick={() => {}}
+										/>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										side="right"
+										align="start"
+										className="atw:min-w-48"
+										data-testid="library-other-menu"
+										// A pick with the mouse leaves no focus ring on the row;
+										// Esc and the keyboard still return to it.
+										onCloseAutoFocus={(event) => {
+											if (otherMenuPointer.current) event.preventDefault();
+											otherMenuPointer.current = false;
+										}}
+										onPointerDown={() => {
+											otherMenuPointer.current = true;
+										}}
+									>
+										<DropdownMenuItem
+											className={OTHER_MENU_ITEM}
+											onSelect={() => openLibraryLocation(atelier, "other")}
+										>
+											<KindIcon kind="file" />
+											{LIBRARY_KIND_COPY.other.label} files
+										</DropdownMenuItem>
+										<DropdownMenuSeparator />
+										{otherViews.map((view) => {
+											const Icon = view.icon;
+											return (
+												<DropdownMenuItem
+													key={view.extensionId}
+													className={OTHER_MENU_ITEM}
+													onSelect={() => openView(view.extensionId, view.name)}
+												>
+													{Icon ? <Icon className="atw:size-3.5" /> : null}
+													{view.name}
+												</DropdownMenuItem>
+											);
+										})}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</li>
+						);
+					}
 					return (
 						<li key={kind}>
 							<SidebarRow
@@ -283,7 +403,7 @@ export function LibrarySidebar({
 								dimmed={
 									marks.active &&
 									rollup === undefined &&
-									kind !== "database" &&
+									!isView &&
 									kind !== "all" &&
 									kind !== "home"
 								}
@@ -292,19 +412,9 @@ export function LibrarySidebar({
 								testId={`library-kind-${kind}`}
 								trailing={rollup ? <DiffGlyph kind={rollup} size={11} /> : null}
 								onClick={(event) => {
-									if (kind === "database") {
-										void atelier.views
-											.open(ATELIER_BUILTIN_EXTENSION_IDS.sqlExplorer, {
-												// Activated if open; otherwise beside what is in
-												// front, never in its place.
-												newTab: true,
-											})
-											.catch((error: unknown) => {
-												console.error(
-													"library: unable to open the SQL Explorer",
-													error,
-												);
-											});
+									if (isView) {
+										const sidebarView = SIDEBAR_VIEWS[kind];
+										openView(sidebarView.extensionId, sidebarView.label);
 										return;
 									}
 									openLibraryLocation(atelier, kind, {
@@ -380,7 +490,9 @@ export function LibrarySidebar({
 												trailing={
 													glyph ? <DiffGlyph kind={glyph} size={10} /> : null
 												}
-												onClick={() => openFile(file)}
+												onClick={(event) =>
+													openFile(file, isNewTabClick(event))
+												}
 												{...(readOnly
 													? {}
 													: { onDoubleClick: () => setRenamingId(file.id) })}
@@ -390,7 +502,7 @@ export function LibrarySidebar({
 											className="atw:min-w-44 atw:text-[13px]"
 											data-testid="library-recent-menu"
 										>
-											<ContextMenuItem onSelect={() => openFile(file)}>
+											<ContextMenuItem onSelect={() => openFile(file, true)}>
 												<SquareArrowOutUpRight aria-hidden="true" />
 												Open in new tab
 											</ContextMenuItem>

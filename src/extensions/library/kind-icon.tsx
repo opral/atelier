@@ -1,7 +1,7 @@
 import type { LibraryKind } from "./kinds";
 
 /** "file": a file no kind claims, where one is listed (Recent). */
-export type LibraryNavKind = LibraryKind | "database" | "file";
+export type LibraryNavKind = LibraryKind | "database" | "history" | "file";
 
 /**
  * The glyph for a kind of thing — not a file icon: a document, a table, a
@@ -72,6 +72,11 @@ export function KindIcon({
 				<>
 					<ellipse cx="12" cy="6" rx="8" ry="3" />
 					<path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
+				</>
+			) : kind === "history" ? (
+				<>
+					<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5" />
+					<path d="M3.5 4v4.5H8M12 7.5V12l3 2" />
 				</>
 			) : (
 				<>

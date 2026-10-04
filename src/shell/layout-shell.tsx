@@ -102,6 +102,7 @@ import {
 	FILE_EXTENSION_KIND,
 	FILES_EXTENSION_KIND,
 	HISTORY_EXTENSION_KIND,
+	LIBRARY_EXTENSION_KIND,
 	activeFileIdFromExtensionInstance,
 	isDocumentView,
 } from "../extension-runtime/extension-instance-helpers";
@@ -1353,6 +1354,17 @@ function LayoutShellLoadedContentResolved({
 	const preserveUnknownExtensionKinds =
 		installedExtensionLoad.status !== "ready";
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
+	const mainViews = useMemo(
+		() =>
+			visibleExtensions
+				.filter((view) => view.placement?.includes("main"))
+				.map((view) => ({
+					extensionId: view.kind,
+					name: view.label,
+					icon: view.icon,
+				})),
+		[visibleExtensions],
+	);
 	const mainAreaOptions = configuration.mainArea;
 	const mainBehavior = useMemo<CentralSlotBehavior>(() => {
 		const mainKinds = new Set<ExtensionKind>();
@@ -1466,6 +1478,15 @@ function LayoutShellLoadedContentResolved({
 	const rightPanel = effectiveWorkspace.areas.right;
 	const focusedArea = effectiveWorkspace.focusedArea;
 	const isLeftCollapsed = panelSizes.left <= MIN_VISIBLE_PANEL_SIZE;
+	// The Library in the left area offers every main view (its Other menu),
+	// so the tab strip drops its "+" while the Library is showing there.
+	const libraryOffersViews =
+		!isLeftCollapsed &&
+		leftPanel.views.some(
+			(view) =>
+				view.kind === LIBRARY_EXTENSION_KIND &&
+				view.instance === leftPanel.activeInstance,
+		);
 	const isRightCollapsed = panelSizes.right <= MIN_VISIBLE_PANEL_SIZE;
 	const [sidePanelRevealIntent, setSidePanelRevealIntent] = useState({
 		left: false,
@@ -1654,6 +1675,10 @@ function LayoutShellLoadedContentResolved({
 	const preHistoricalDocumentsRef = useRef<readonly PreHistoricalDocument[]>(
 		[],
 	);
+	// The non-document tab (History, Library, a host view) a historical file
+	// opened beside; Exit returns to it wherever it sits in the strip.
+	const historicalOriginRef = useRef<string | null>(null);
+	const activateMainViewRef = useRef<((instance: string) => void) | null>(null);
 	const restoreLiveDocumentsRef = useRef<
 		| ((
 				documents: readonly PreHistoricalDocument[],
@@ -1666,6 +1691,8 @@ function LayoutShellLoadedContentResolved({
 			const restoreLiveDocument = options?.restoreLiveDocument ?? true;
 			historicalRequestRef.current += 1;
 			historicalOpenPathRef.current = null;
+			const origin = historicalOriginRef.current;
+			historicalOriginRef.current = null;
 			// State updaters must stay pure: read the current review through the
 			// ref and run the close/restore side effects here, outside React's
 			// updater pass, or their queued panel updates can be dropped.
@@ -1688,6 +1715,8 @@ function LayoutShellLoadedContentResolved({
 						focusActive: restoreLiveDocument,
 					});
 				}
+				if (origin && restoreLiveDocument)
+					activateMainViewRef.current?.(origin);
 			}
 			setDiffReview(null);
 		},
@@ -2355,6 +2384,7 @@ function LayoutShellLoadedContentResolved({
 						(preserveActiveView && active && !isDocumentView(active)
 							? true
 							: undefined),
+					preview: pending,
 					documentOrigin,
 				});
 				return {
@@ -2458,6 +2488,18 @@ function LayoutShellLoadedContentResolved({
 		[openResolvedFileView, updateWorkspace],
 	);
 	restoreLiveDocumentsRef.current = restoreLiveDocuments;
+	activateMainViewRef.current = (instance: string) =>
+		updateWorkspace((current) =>
+			current.areas.main.views.some((view) => view.instance === instance)
+				? {
+						...current,
+						areas: {
+							...current.areas,
+							main: { ...current.areas.main, activeInstance: instance },
+						},
+					}
+				: current,
+		);
 	const navigationActiveView = mainArea.views.find(
 		(view) => view.instance === mainArea.activeInstance,
 	);
@@ -2676,6 +2718,7 @@ function LayoutShellLoadedContentResolved({
 				(options.navigationCause === "route" && activeView && !alreadyOpen
 					? true
 					: undefined);
+			const preview = options.preview === true && !newTab;
 			if (
 				!options.newTab &&
 				!hasHistoricalEditorRevisionState(state) &&
@@ -2710,6 +2753,7 @@ function LayoutShellLoadedContentResolved({
 					filePath: historicalFile.path,
 					state,
 					focus: options.focus ?? true,
+					pending: preview,
 					documentOrigin: options.documentOrigin ?? "existing",
 					navigationCause: options.navigationCause,
 					newTab,
@@ -2723,6 +2767,7 @@ function LayoutShellLoadedContentResolved({
 				signal: options.signal,
 				state,
 				focus: options.focus ?? true,
+				pending: preview,
 				documentOrigin: options.documentOrigin ?? "existing",
 				navigationCause: options.navigationCause,
 				newTab,
@@ -2954,10 +2999,19 @@ function LayoutShellLoadedContentResolved({
 				const historicalPath = snapshotPaths.get(file.id);
 				if (!historicalPath) return;
 				historicalOpenPathRef.current = historicalPath;
+				const main = panelStatesRef.current.main;
+				const active = main.views.find(
+					(view) => view.instance === main.activeInstance,
+				);
+				if (active && !isDocumentView(active))
+					historicalOriginRef.current = active.instance;
 				openResolvedFileView({
 					area: "main",
 					fileId: file.id,
 					filePath: historicalPath,
+					// Opened from the History tab, the checkpoint's files open
+					// beside it, so leaving the checkpoint returns to the list.
+					preserveActiveView: true,
 					state: historicalRevisionStateForPath(
 						historicalPath,
 						historicalRange.afterCommitId,
@@ -4347,9 +4401,15 @@ function LayoutShellLoadedContentResolved({
 				filePath: documentPathFromView(entry) ?? null,
 				...(entry.state ? { state: entry.state } : {}),
 			});
-			setAreaState("main", (area) => activatePanelExtension(area, key), {
-				focus: true,
-			});
+			// Selecting a preview tab shows it; only working in it keeps it.
+			setAreaState(
+				"main",
+				(area) =>
+					area.views.some((view) => view.instance === key)
+						? { ...area, activeInstance: key }
+						: area,
+				{ focus: true },
+			);
 		},
 		[emitEvent, setAreaState],
 	);
@@ -4477,13 +4537,17 @@ function LayoutShellLoadedContentResolved({
 				isFocused={focusedArea === "main"}
 				onSelectView={handleSelectCentralView}
 				onRemoveView={(instance) => handleRemoveView("main", instance)}
-				onAddView={addViewOnCentral}
+				{...(libraryOffersViews ? {} : { onAddView: addViewOnCentral })}
 				onRenameTab={isHostReadOnly ? undefined : handleRenameTab}
+				onKeepView={(instance) =>
+					setAreaState("main", (area) => activatePanelExtension(area, instance))
+				}
 				preferencesFor={preferencesFor}
 			/>
 		);
 	}, [
 		addViewOnCentral,
+		libraryOffersViews,
 		handleRenameTab,
 		isHostReadOnly,
 		mainArea,
@@ -4494,6 +4558,7 @@ function LayoutShellLoadedContentResolved({
 		handleSelectCentralView,
 		renderHostTabStrip,
 		preferencesFor,
+		setAreaState,
 		visibleExtensions,
 		currentFilePathsById,
 	]);
@@ -4624,6 +4689,17 @@ function LayoutShellLoadedContentResolved({
 				previousCommitId: base?.commitId ?? null,
 				...(createdAt ? { createdAt } : {}),
 			});
+			// A newer open or an Exit may have superseded this one while it
+			// read; reveal only the checkpoint that was asked for.
+			const session = diffReviewRef.current;
+			const first =
+				session?.kind === "historical" &&
+				session.range?.afterCommitId === options.target.commitId
+					? session.files[0]
+					: null;
+			if (options.reveal && first) {
+				openHistoricalCheckpointFileRef.current?.(first.path);
+			}
 		},
 		[handleOpenWorkingChangesReview, handleViewCheckpoint, lix],
 	);
@@ -4836,6 +4912,7 @@ function LayoutShellLoadedContentResolved({
 								state: activeMainState ?? {},
 							}
 						: null,
+				mainViews,
 			},
 			preferences: {
 				get: (extensionId: string, key: string) =>
@@ -4874,6 +4951,7 @@ function LayoutShellLoadedContentResolved({
 			activeMainKind,
 			activeMainInstance,
 			activeMainState,
+			mainViews,
 			activeCentralFileId,
 			openFileIds,
 			activeDocumentPath,

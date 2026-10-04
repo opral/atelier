@@ -75,6 +75,20 @@ test("the sole packed stylesheet is complete and isolated in every host", async 
 			);
 		}
 		assert.ok(rules.includes(".atw\\:flex"), "missing private utility");
+		// Utilities that only set private variables keep their class; only
+		// Tailwind's initial-value fallback lives on the universal scope.
+		assert.ok(rules.includes(".atw\\:ring-accent"), "missing ring colour");
+		assert.ok(rules.includes(".atw\\:ring-inset"), "missing ring-inset");
+		postcss.parse(component).walkRules((rule) => {
+			if (!rule.selector.includes(":where(.atelier-root")) return;
+			if (!rule.selector.includes("*")) return;
+			rule.walkDecls((decl) => {
+				assert.ok(
+					!decl.value.includes("var(--atelier-") && decl.value !== "inset",
+					`universal scope sets ${decl.prop}: ${decl.value}`,
+				);
+			});
+		});
 		assert.ok(component.includes("--atw-tw-enter-opacity"));
 		assert.ok(
 			!component.includes("--tw-"),

@@ -362,9 +362,14 @@ export function LibraryView({
 				atelier.diff.openFile(file.path);
 				return;
 			}
-			// A file opens beside the Library, so the Library stays a tab away.
+			// A file opens beside the Library, so the Library stays a tab away:
+			// in the preview tab, which the next file replaces until the person
+			// works in it, or in a tab of its own on ⌘-click.
 			void atelier.documents
-				.open(file.path, { fileId: file.id, newTab: true })
+				.open(file.path, {
+					fileId: file.id,
+					...(newTab ? { newTab: true } : { preview: true }),
+				})
 				.catch((caught: unknown) => {
 					console.error("library: unable to open", caught);
 				});
@@ -1333,7 +1338,9 @@ const NewButton = forwardRef<
 			data-attr="file-new-wide"
 			data-testid="library-new"
 			title="Create something new"
-			className="atw:h-8 atw:px-3 atw:py-0 atw:text-[13px]"
+			// A header control beside Search: the accent says primary, without
+			// the glow the empty-state actions carry.
+			className="atw:h-8 atw:rounded-[8px] atw:px-3 atw:py-0 atw:text-[13px] atw:font-semibold atw:shadow-sm"
 			{...props}
 		>
 			<Plus aria-hidden="true" className="atw:size-3.5" strokeWidth={2.4} />
@@ -2161,7 +2168,7 @@ function RowList({
 								</span>
 							) : null}
 							<span
-								className={`atw:shrink-0 atw:text-right atw:text-[12px] atw:text-fg-faint ${variant === "list" ? LIST_TIME_COLUMN : ""}`}
+								className={`atw:shrink-0 atw:text-fg-faint ${variant === "list" ? `atw:text-left atw:text-[13px] ${LIST_TIME_COLUMN}` : "atw:text-right atw:text-[12px]"}`}
 							>
 								{meta}
 							</span>
@@ -2204,18 +2211,18 @@ function RowList({
 	return (
 		<div className="atw:-mx-3 atw:flex atw:flex-col">
 			{variant === "list" ? (
-				// Column heads, set like the rows so each sits over its column.
+				// Column heads, set like the rows so each starts where its column
+				// starts: Name at the icon, under the page title's edge.
 				<div
 					aria-hidden="true"
 					data-testid="library-list-head"
 					className="atw:mb-1 atw:flex atw:h-8 atw:items-center atw:gap-3 atw:border-b atw:border-border-subtle atw:pr-11 atw:pl-3 atw:text-[12px] atw:font-medium atw:text-fg-subtle"
 				>
-					<span className="atw:w-[18px] atw:shrink-0" />
 					<span className="atw:min-w-0 atw:flex-1">Name</span>
 					<span className={`${LIST_FOLDER_COLUMN} atw:text-[12px]`}>
 						Folder
 					</span>
-					<span className={`atw:shrink-0 atw:text-right ${LIST_TIME_COLUMN}`}>
+					<span className={`atw:shrink-0 ${LIST_TIME_COLUMN}`}>
 						Last edited
 					</span>
 					<span className="atw:w-3.5 atw:shrink-0" />
@@ -2282,5 +2289,5 @@ function RowList({
 
 /** The list's Folder column; it gives way first in a narrow tab. */
 const LIST_FOLDER_COLUMN =
-	"atw:w-[28%] atw:min-w-0 atw:shrink-0 atw:truncate atw:@max-[560px]:hidden";
+	"atw:w-[28%] atw:min-w-0 atw:shrink-0 atw:truncate atw:pr-4 atw:@max-[560px]:hidden";
 const LIST_TIME_COLUMN = "atw:w-24";
