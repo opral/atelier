@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQueryResult } from "@/lib/lix-react";
-import { qb } from "@/lib/lix-kysely";
+import { qb, sql } from "@/lib/lix-kysely";
 import { selectFilesStateAt } from "@/queries";
 import { useExtensionRegistry } from "../../extension-runtime/extension-registry";
 import type { ExtensionRuntime } from "../../extension-runtime/types";
@@ -40,14 +40,8 @@ export type LibraryData = {
 	readonly directories: readonly LibraryDirectory[];
 };
 
-type FileRow = {
-	readonly id: string;
-	readonly path: string;
-	readonly name: string;
-	readonly updated_at: string | null;
-};
-
-type DirectoryRow = {
+type LiveLibraryRow = {
+	readonly kind: "file" | "directory";
 	readonly id: string;
 	readonly path: string;
 	readonly name: string;
@@ -70,14 +64,25 @@ export function useLibraryData(commitId: string | null = null): {
 	readonly error: Error | null;
 } {
 	const { extensionMap } = useExtensionRegistry();
-	const files = useQueryResult<FileRow>(
-		(lix) =>
-			qb(lix)
+	const liveEntries = useQueryResult<LiveLibraryRow>(
+		(lix) => {
+			const files = qb(lix)
 				.selectFrom("lix_file")
 				.select(["id", "path", "name"])
-				.select((eb) => eb.ref("lixcol_updated_at").as("updated_at"))
-				.$castTo<FileRow>(),
-		{ reuseObservedResult: false, enabled: commitId === null },
+				.select((eb) => [
+					sql<LiveLibraryRow["kind"]>`'file'`.as("kind"),
+					eb.ref("lixcol_updated_at").as("updated_at"),
+				]);
+			const directories = qb(lix)
+				.selectFrom("lix_directory")
+				.select(["id", "path", "name"])
+				.select((eb) => [
+					sql<LiveLibraryRow["kind"]>`'directory'`.as("kind"),
+					eb.ref("lixcol_updated_at").as("updated_at"),
+				]);
+			return files.unionAll(directories).$castTo<LiveLibraryRow>();
+		},
+		{ enabled: commitId === null },
 	);
 	const historicalFiles = useQueryResult<{
 		readonly id: string;
@@ -86,15 +91,6 @@ export function useLibraryData(commitId: string | null = null): {
 		(lix) =>
 			selectFilesStateAt(lix, commitId ?? "").select(["id", "path"]) as never,
 		{ enabled: commitId !== null },
-	);
-	const directories = useQueryResult<DirectoryRow>(
-		(lix) =>
-			qb(lix)
-				.selectFrom("lix_directory")
-				.select(["id", "path", "name"])
-				.select((eb) => eb.ref("lixcol_updated_at").as("updated_at"))
-				.$castTo<DirectoryRow>(),
-		{ reuseObservedResult: false, enabled: commitId === null },
 	);
 	const extensions = useMemo(() => [...extensionMap.values()], [extensionMap]);
 	const data = useMemo<LibraryData | null>(() => {
@@ -138,10 +134,13 @@ export function useLibraryData(commitId: string | null = null): {
 					.sort((left, right) => left.name.localeCompare(right.name)),
 			};
 		}
-		if (files.status !== "success" || directories.status !== "success")
-			return null;
+		if (liveEntries.status !== "success") return null;
+		const files = liveEntries.rows.filter((row) => row.kind === "file");
+		const directories = liveEntries.rows.filter(
+			(row) => row.kind === "directory",
+		);
 		return {
-			files: files.rows
+			files: files
 				.filter((row) => typeof row.path === "string")
 				.map((row) => {
 					const kind = libraryKindOfPath(extensions, row.path);
@@ -157,7 +156,7 @@ export function useLibraryData(commitId: string | null = null): {
 					};
 				})
 				.sort(newestFirst),
-			directories: directories.rows
+			directories: directories
 				.filter((row) => typeof row.path === "string")
 				.map((row) => ({
 					id: row.id,
@@ -168,15 +167,13 @@ export function useLibraryData(commitId: string | null = null): {
 				}))
 				.sort((left, right) => left.name.localeCompare(right.name)),
 		};
-	}, [commitId, directories, extensions, files, historicalFiles]);
+	}, [commitId, extensions, historicalFiles, liveEntries]);
 	const error =
 		historicalFiles.status === "error"
 			? historicalFiles.error
-			: files.status === "error"
-				? files.error
-				: directories.status === "error"
-					? directories.error
-					: null;
+			: liveEntries.status === "error"
+				? liveEntries.error
+				: null;
 	return { data, error: error instanceof Error ? error : null };
 }
 
