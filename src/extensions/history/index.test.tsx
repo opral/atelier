@@ -1176,7 +1176,8 @@ describe("checkpoint conversation flows", () => {
 		);
 		try {
 			const thread = await screen.findByRole("list", { name: "Comments" });
-			const row = (await within(thread).findByText("Mine only")).closest("li")!;
+			const row = await within(thread).findByRole("listitem");
+			expect(within(row).getByText("Mine only")).toBeInTheDocument();
 			fireEvent.click(
 				within(row).getByRole("button", { name: "Comment actions" }),
 			);
