@@ -3,7 +3,11 @@ import { act, render, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { Search } from "lucide-react";
 import { AtelierRenderContext } from "../atelier-render-context";
-import type { ExtensionRuntime, ExtensionView } from "./types";
+import type {
+	ExtensionDefinition,
+	ExtensionRuntime,
+	ExtensionView,
+} from "./types";
 import { DeclarativeExtension } from "./declarative-extension";
 import { PreparedFileSurface } from "./prepared-file";
 import { openLix } from "../test-utils/node-lix-sdk";
@@ -16,8 +20,51 @@ const view = {
 	isFocused: true,
 } as ExtensionView;
 
+function controlledObservation() {
+	const waiters: Array<(result: IteratorResult<unknown>) => void> = [];
+	let closed = false;
+	const next = vi.fn(
+		() =>
+			new Promise<IteratorResult<unknown>>((resolve) => {
+				if (closed) resolve({ done: true, value: undefined });
+				else waiters.push(resolve);
+			}),
+	);
+	const returnIterator = vi.fn(async () => {
+		closed = true;
+		for (const resolve of waiters.splice(0))
+			resolve({ done: true, value: undefined });
+		return { done: true, value: undefined } as const;
+	});
+	const iterator: AsyncIterableIterator<unknown> = {
+		next,
+		return: returnIterator,
+		[Symbol.asyncIterator]() {
+			return this;
+		},
+	};
+	return {
+		iterator,
+		next,
+		returnIterator,
+		emit() {
+			const resolve = waiters.shift();
+			if (!resolve) throw new Error("No observation read is waiting");
+			resolve({ done: false, value: undefined });
+		},
+	};
+}
+
+function deferredRead<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((done) => {
+		resolve = done;
+	});
+	return { promise, resolve };
+}
+
 describe("declarative extension hydration", () => {
-	test("loads once for the initial observation and shows visible feedback until ready", async () => {
+	test("shows visible feedback while the initial read is pending", async () => {
 		const lix = await openLix();
 		let finish!: (data: string) => void;
 		const load = vi.fn(
@@ -60,7 +107,7 @@ describe("declarative extension hydration", () => {
 				"atw:sr-only",
 			);
 			await waitFor(() => expect(load).toHaveBeenCalled());
-			// Let the observer's initial frame settle while the document fetch is blocked.
+			// Let the observer's initial frame settle while the first read is blocked.
 			await act(async () => {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 			});
@@ -83,6 +130,165 @@ describe("declarative extension hydration", () => {
 		} finally {
 			await act(async () => mounted.unmount());
 			await lix.close();
+		}
+	});
+
+	test("starts reading after observation begins and coalesces catch-up frames", async () => {
+		const observer = controlledObservation();
+		let current = "snapshot 1";
+		const reads: Array<{
+			snapshot: string;
+			complete: (value: string) => void;
+		}> = [];
+		const load = vi.fn(() => {
+			const snapshot = current;
+			const read = deferredRead<string>();
+			reads.push({ snapshot, complete: read.resolve });
+			return read.promise;
+		});
+		const emit = vi.fn();
+		const observe = vi.fn(() => observer.iterator);
+		const atelier = {
+			events: { emit },
+			lix: { observe },
+			branches: { activeId: "main" },
+		} as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			load,
+			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+		};
+		const mounted = render(
+			<AtelierRenderContext.Provider value={{}}>
+				<DeclarativeExtension
+					definition={definition}
+					atelier={atelier}
+					view={view}
+				/>
+			</AtelierRenderContext.Provider>,
+		);
+		try {
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+			expect(observer.next).toHaveBeenCalledTimes(1);
+			expect(observer.next.mock.invocationCallOrder[0]).toBeLessThan(
+				load.mock.invocationCallOrder[0]!,
+			);
+			expect(mounted.getByRole("status")).toHaveTextContent(
+				"Opening document…",
+			);
+
+			// The first observer frame represents a change after the initial read
+			// began. It marks that read dirty without starting a concurrent load.
+			current = "snapshot 2";
+			await act(async () => observer.emit());
+			await waitFor(() => expect(observer.next).toHaveBeenCalledTimes(2));
+			await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+			expect(load).toHaveBeenCalledTimes(1);
+
+			await act(async () => reads[0]!.complete(reads[0]!.snapshot));
+			expect(await mounted.findByRole("heading")).toHaveTextContent(
+				"snapshot 1",
+			);
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+			expect(reads[1]!.snapshot).toBe("snapshot 2");
+
+			// A second frame during catch-up schedules one more read. The completed
+			// catch-up remains visible while that latest read is still pending.
+			current = "snapshot 3";
+			await act(async () => observer.emit());
+			await waitFor(() => expect(observer.next).toHaveBeenCalledTimes(3));
+			await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+			expect(load).toHaveBeenCalledTimes(2);
+
+			await act(async () => reads[1]!.complete(reads[1]!.snapshot));
+			expect(mounted.getByRole("heading")).toHaveTextContent("snapshot 2");
+			await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
+			expect(reads[2]!.snapshot).toBe("snapshot 3");
+			await act(async () => reads[2]!.complete(reads[2]!.snapshot));
+			expect(mounted.getByRole("heading")).toHaveTextContent("snapshot 3");
+		} finally {
+			await act(async () => mounted.unmount());
+			expect(observer.returnIterator).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	test("aborts stale loads on a file switch and on unmount", async () => {
+		const observers: ReturnType<typeof controlledObservation>[] = [];
+		const reads: Array<{
+			path: string;
+			signal: AbortSignal;
+			complete: (value: string) => void;
+		}> = [];
+		const load = vi.fn(
+			({
+				location,
+				signal,
+			}: Parameters<NonNullable<ExtensionDefinition["load"]>>[0]) => {
+				const path = "path" in location ? location.path : "revision";
+				const read = deferredRead<string>();
+				reads.push({ path, signal, complete: read.resolve });
+				return read.promise;
+			},
+		);
+		const emit = vi.fn();
+		const lix = {
+			observe: vi.fn(() => {
+				const observer = controlledObservation();
+				observers.push(observer);
+				return observer.iterator;
+			}),
+		};
+		const atelier = {
+			events: { emit },
+			lix,
+			branches: { activeId: "main" },
+		} as unknown as ExtensionRuntime;
+		const definition = {
+			kind: "custom",
+			label: "Custom",
+			description: "Custom",
+			icon: Search,
+			load,
+			Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+		};
+		const tree = (fileId: string, filePath: string) => (
+			<AtelierRenderContext.Provider value={{}}>
+				<DeclarativeExtension
+					definition={definition}
+					atelier={atelier}
+					view={{ ...view, state: { fileId, filePath } }}
+				/>
+			</AtelierRenderContext.Provider>
+		);
+		const mounted = render(tree("file-1", "/one.md"));
+		let unmounted = false;
+		try {
+			await waitFor(() => expect(reads).toHaveLength(1));
+			mounted.rerender(tree("file-2", "/two.md"));
+			await waitFor(() => expect(reads).toHaveLength(2));
+			expect(reads[0]!.signal.aborted).toBe(true);
+			expect(observers[0]!.returnIterator).toHaveBeenCalledTimes(1);
+
+			await act(async () => reads[1]!.complete("File two"));
+			expect(await mounted.findByRole("heading")).toHaveTextContent("File two");
+			await act(async () => reads[0]!.complete("Late file one"));
+			expect(mounted.getByRole("heading")).toHaveTextContent("File two");
+
+			mounted.rerender(tree("file-3", "/three.md"));
+			await waitFor(() => expect(reads).toHaveLength(3));
+			const emittedBeforeUnmount = emit.mock.calls.length;
+			await act(async () => mounted.unmount());
+			unmounted = true;
+			expect(reads[2]!.signal.aborted).toBe(true);
+			expect(observers[2]!.returnIterator).toHaveBeenCalledTimes(1);
+			await act(async () => reads[2]!.complete("Late file three"));
+			expect(emit).toHaveBeenCalledTimes(emittedBeforeUnmount);
+		} finally {
+			if (!unmounted)
+				await act(async () => mounted.unmount());
 		}
 	});
 
@@ -195,14 +401,15 @@ describe("declarative extension hydration", () => {
 	});
 
 	test("keeps the document mounted while a revision change loads again", async () => {
-		const lix = await openLix();
+		const observer = controlledObservation();
+		const lix = { observe: vi.fn(() => observer.iterator) };
 		const completions: Array<(data: string) => void> = [];
 		const load = vi.fn(
 			() => new Promise<string>((resolve) => completions.push(resolve)),
 		);
 		const atelier = {
 			lix,
-			branches: { activeId: await lix.activeBranchId() },
+			branches: { activeId: "main" },
 		} as unknown as ExtensionRuntime;
 		const definition = {
 			kind: "custom",
@@ -269,7 +476,6 @@ describe("declarative extension hydration", () => {
 			expect(mounted.getByRole("heading")).toHaveTextContent("Other document");
 		} finally {
 			await act(async () => mounted.unmount());
-			await lix.close();
 		}
 	});
 
