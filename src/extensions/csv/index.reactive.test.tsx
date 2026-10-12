@@ -1,3 +1,4 @@
+import { Value, type JsonValue } from "@lix-js/sdk";
 import {
 	CompactSelection,
 	type CellClickedEventArgs,
@@ -821,7 +822,7 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 		await lix.execute(
 			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
 			[
-				{
+				Value.jsonb({
 					atelier_csv: {
 						version: 1,
 						columns: [
@@ -834,7 +835,7 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 							},
 						],
 					},
-				},
+				} as JsonValue),
 				fakeUuid("file_csv_snapshot"),
 			],
 		);
@@ -848,14 +849,14 @@ test("renders a read-only historical CSV snapshot from afterCommitId", async () 
 		await lix.execute(
 			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
 			[
-				{
+				Value.jsonb({
 					atelier_csv: {
 						version: 1,
 						columns: [
 							{ id: "value", header: "value", index: 1, type: "number" },
 						],
 					},
-				},
+				} as JsonValue),
 				fakeUuid("file_csv_snapshot"),
 			],
 		);
@@ -1377,7 +1378,12 @@ async function renderMetadataCsv(
 	const fileId = fakeUuid("csv_metadata_integration");
 	await lix.execute(
 		"INSERT INTO lix_file (id, path, content, lixcol_metadata) VALUES ($1, $2, $3, $4)",
-		[fileId, "/table.csv", new TextEncoder().encode(source), root as never],
+		[
+			fileId,
+			"/table.csv",
+			new TextEncoder().encode(source),
+			Value.jsonb(root as JsonValue),
+		],
 	);
 	const rendered = render(
 		<LixProvider lix={lix}>
@@ -3069,7 +3075,7 @@ test("a removed row keeps the height its wrapped value needs", async () => {
 		await lix.execute(
 			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
 			[
-				{
+				Value.jsonb({
 					atelier_csv: {
 						version: 1,
 						columns: [
@@ -3082,7 +3088,7 @@ test("a removed row keeps the height its wrapped value needs", async () => {
 							},
 						],
 					},
-				},
+				} as JsonValue),
 				fileId,
 			],
 		);

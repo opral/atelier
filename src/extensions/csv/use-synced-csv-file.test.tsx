@@ -1,3 +1,4 @@
+import { Value, type JsonValue } from "@lix-js/sdk";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -34,7 +35,9 @@ async function setup(initialMetadata: unknown = null, initialReadOnly = false) {
 			fileId,
 			"/test.csv",
 			new TextEncoder().encode(text),
-			initialMetadata as never,
+			initialMetadata === null
+				? null
+				: Value.jsonb(initialMetadata as JsonValue),
 		],
 	);
 	const hook = renderHook(
@@ -115,7 +118,10 @@ test("metadata-only save preserves CSV bytes and merges the latest unrelated met
 	try {
 		await fixture.lix.execute(
 			"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
-			[{ other: "newer", another: true }, fixture.fileId],
+			[
+				Value.jsonb({ other: "newer", another: true } as JsonValue),
+				fixture.fileId,
+			],
 		);
 		await act(async () => fixture.hook.result.current.persist(text, metadata));
 		await waitFor(
@@ -190,7 +196,7 @@ test("read-only views reject mutations but follow external metadata changes", as
 		await act(async () => {
 			await fixture.lix.execute(
 				"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2",
-				[{ atelier_csv: metadata }, fixture.fileId],
+				[Value.jsonb({ atelier_csv: metadata } as JsonValue), fixture.fileId],
 			);
 		});
 		await waitFor(() =>
@@ -261,7 +267,7 @@ test("metadata-only saves retry a concurrent revision and preserve external CSV 
 						"UPDATE lix_file SET content = $1, lixcol_metadata = $2 WHERE id = $3",
 						[
 							new TextEncoder().encode("name,stage\nExternal,trial\n"),
-							{ other: "concurrent", new_key: true },
+							Value.jsonb({ other: "concurrent", new_key: true } as JsonValue),
 							fixture.fileId,
 						],
 					);
@@ -321,7 +327,7 @@ test("reconciles external column metadata observed while a content save is runni
 		await savedGate;
 		await act(async () => {
 			await execute("UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2", [
-				{ atelier_csv: metadata },
+				Value.jsonb({ atelier_csv: metadata } as JsonValue),
 				fixture.fileId,
 			]);
 		});
@@ -452,7 +458,7 @@ test("a delayed reconciliation read cannot overwrite a newer observed external e
 		await waitFor(() => expect(saved).toBe(true));
 		await act(async () => {
 			await execute("UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2", [
-				{ other: true },
+				Value.jsonb({ other: true } as JsonValue),
 				fixture.fileId,
 			]);
 		});

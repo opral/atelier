@@ -1,4 +1,4 @@
-import type { Lix } from "@lix-js/sdk";
+import { Value, type JsonValue, type Lix } from "@lix-js/sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLix } from "@/lib/lix-react";
 import { decodeFileDataToText } from "@/lib/decode-file-data";
@@ -324,7 +324,7 @@ async function writeCsvMetadata(
 					"UPDATE lix_file SET content = $1, lixcol_metadata = $2 WHERE id = $3 AND lixcol_change_id = $4",
 					[
 						new TextEncoder().encode(next.text),
-						merged,
+						Value.jsonb(merged as JsonValue),
 						fileId,
 						row.lixcol_change_id as string,
 					],
@@ -332,7 +332,11 @@ async function writeCsvMetadata(
 				)
 			: await lix.execute(
 					"UPDATE lix_file SET lixcol_metadata = $1 WHERE id = $2 AND lixcol_change_id = $3",
-					[merged, fileId, row.lixcol_change_id as string],
+					[
+						Value.jsonb(merged as JsonValue),
+						fileId,
+						row.lixcol_change_id as string,
+					],
 					{ originKey },
 				);
 		if (result.rowsAffected === 1)

@@ -1315,7 +1315,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 	const editor = await createEditorFromFile({
 		lix,
 		fileId,
-		persistDebounceMs: 60_000,
+		persistDebounceMs: 50,
 	});
 	// TipTap emits create asynchronously; settle its baseline before replacing timers.
 	while (!editor.isInitialized)
@@ -1341,7 +1341,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 		expect(await readMarkdown(lix, fileId)).toBe("Start");
 
 		editor.destroy();
-		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.advanceTimersByTimeAsync(50);
 	} finally {
 		vi.useRealTimers();
 	}

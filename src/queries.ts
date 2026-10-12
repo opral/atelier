@@ -266,22 +266,15 @@ export async function selectWorkingFileDiffContent(
 	beforeCommitId: string,
 	afterCommitId: string,
 ): Promise<WorkingFileDiffContentRow> {
-	const { results } = await lix.executeBatch([
-		{
-			sql: "SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $1) WHERE id = $2",
-			params: [beforeCommitId, fileId],
-		},
-		{
-			sql: "SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $1) WHERE id = $2",
-			params: [afterCommitId, fileId],
-		},
-	]);
-	return {
-		from_metadata: results[0]?.rows[0]?.lixcol_metadata,
-		to_metadata: results[1]?.rows[0]?.lixcol_metadata,
-		from_content: results[0]?.rows[0]?.content ?? null,
-		to_content: results[1]?.rows[0]?.content ?? null,
-	};
+	const result = await lix.execute<WorkingFileDiffContentRow>(
+		`SELECT before.content AS from_content, before.lixcol_metadata AS from_metadata,
+		        after.content AS to_content, after.lixcol_metadata AS to_metadata
+		 FROM (SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $1) WHERE id = $3) AS before
+		 FULL OUTER JOIN (SELECT content, lixcol_metadata FROM lix_as_of('lix_file', $2) WHERE id = $3) AS after
+		 ON true`,
+		[beforeCommitId, afterCommitId, fileId],
+	);
+	return result.rows[0] ?? { from_content: null, to_content: null };
 }
 
 /**

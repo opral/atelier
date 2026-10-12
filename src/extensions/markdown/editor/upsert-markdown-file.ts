@@ -1,10 +1,4 @@
-import type {
-	CommitSpan,
-	Lix,
-	LixBatchStatement,
-	LixTransaction,
-	SqlParam,
-} from "@lix-js/sdk";
+import type { CommitSpan, Lix, LixTransaction, SqlParam } from "@lix-js/sdk";
 
 type MarkdownFileWriteArgs = {
 	lix: Lix;
@@ -83,7 +77,7 @@ function isTransactionConflict(error: unknown): boolean {
  * meantime (a reply, an agent, another tab) and is not retried by Lix, so
  * the whole transaction is run again. If it keeps losing, the text is saved
  * with only the participant's last-resort statements, in one automatically
- * retried batch; the participant is told. A transaction is pinned to the
+ * retried write; the participant is told. A transaction is pinned to the
  * branch it began on: when the handle has switched branches since, nothing
  * is written and the draft stays in the editor.
  */
@@ -93,7 +87,7 @@ export async function upsertMarkdownFileWith(
 	},
 ): Promise<MarkdownFileWriteReceipt> {
 	const { lix, fileId, markdown, originKey, participant } = args;
-	const write: LixBatchStatement = {
+	const write = {
 		sql: "UPDATE lix_file SET content = $1 WHERE id = $2",
 		params: [new TextEncoder().encode(markdown), fileId],
 	};
@@ -130,10 +124,10 @@ export async function upsertMarkdownFileWith(
 	// The last resort: the text on its own, automatically retried. What it
 	// detaches the participant puts back afterwards.
 	if ((await lix.activeBranchId()) !== branchId) throw branchChanged;
-	const batch = await lix.executeBatch([write], options);
+	const result = await lix.execute(write.sql, write.params, options);
 	participant.degraded(cause);
 	return {
-		written: (batch.results.at(-1)?.rowsAffected ?? 0) > 0,
-		commit: batch.commit ?? null,
+		written: result.rowsAffected > 0,
+		commit: result.commit ?? null,
 	};
 }

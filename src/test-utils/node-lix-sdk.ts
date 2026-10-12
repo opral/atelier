@@ -1,3 +1,4 @@
+import { Value, type JsonValue } from "@lix-js/sdk";
 import type {
 	Lix,
 	OpenLixOptions as SdkOpenLixOptions,
@@ -8,7 +9,7 @@ export type { Lix } from "@lix-js/sdk";
 
 type OpenLixKeyValueEntry = {
 	key: string;
-	value: SqlParam;
+	value: SqlParam | JsonValue;
 	lixcol_untracked?: boolean;
 	lixcol_global?: boolean;
 };
@@ -50,7 +51,12 @@ async function seedKeyValues(
 			"INSERT INTO lix_key_value (key, value, lixcol_global, lixcol_untracked) VALUES ($1, $2, $3, $4)",
 			[
 				entry.key,
-				entry.value,
+				typeof entry.value === "object" &&
+				entry.value !== null &&
+				!(entry.value instanceof Uint8Array) &&
+				!(entry.value instanceof Value)
+					? Value.jsonb(entry.value)
+					: entry.value,
 				entry.lixcol_global ?? true,
 				entry.lixcol_untracked ?? true,
 			],
