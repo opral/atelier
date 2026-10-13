@@ -13,7 +13,10 @@ import type {
 	AtelierExtensionRegistration,
 	AtelierJsonValue,
 } from "./extension-api";
-import { AtelierErrorBoundary } from "./atelier-error-boundary";
+import {
+	AtelierErrorBoundary,
+	type AtelierErrorInfo,
+} from "./atelier-error-boundary";
 import { LixProvider, useQueryResult } from "./lib/lix-react";
 import { qb } from "./lib/lix-kysely";
 import { cn } from "./lib/utils";
@@ -51,6 +54,7 @@ export type AtelierFileProps = {
 	readonly branchSession?: AtelierBranchSession;
 	readonly className?: string;
 	readonly fallback?: ReactNode;
+	readonly onError?: (error: unknown, info: AtelierErrorInfo) => void;
 	readonly onOpenFile?: (path: string) => void | Promise<void>;
 	/**
 	 * The host's file URLs. Without them a link to a file of this workspace is
@@ -109,7 +113,7 @@ export function AtelierFile(props: AtelierFileProps) {
 				props.className,
 			)}
 		>
-			<AtelierErrorBoundary key={lixKey(props.lix)}>
+			<AtelierErrorBoundary key={lixKey(props.lix)} onError={props.onError}>
 				<LixProvider lix={props.lix}>
 					<Suspense fallback={loading}>
 						<ExtensionRegistryProvider hostExtensions={extensions}>

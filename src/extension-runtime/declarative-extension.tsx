@@ -9,7 +9,10 @@ import {
 } from "react";
 import type { AtelierJsonValue } from "../extension-api";
 import type { AtelierLocation } from "../atelier-state";
-import { AtelierErrorBoundary } from "../atelier-error-boundary";
+import {
+	AtelierErrorBoundary,
+	useAtelierErrorReporter,
+} from "../atelier-error-boundary";
 import { LixProvider } from "../lib/lix-react";
 import type {
 	ExtensionDefinition,
@@ -42,6 +45,10 @@ export function DeclarativeExtension({
 		state: ExtensionState;
 	} | null>(null);
 	const [error, setError] = useState<Error | null>(null);
+	const [retry, setRetry] = useState(0);
+	const reportError = useAtelierErrorReporter();
+	const reportErrorRef = useRef(reportError);
+	reportErrorRef.current = reportError;
 	const documentPath =
 		typeof view.state.filePath === "string" ? view.state.filePath : undefined;
 	// The document's Lix handle is scoped from what it depends on — the base
@@ -168,10 +175,17 @@ export function DeclarativeExtension({
 						setLoaded({ key, fileKey, data: next, ...viewStateRef.current });
 						if (!observationFailed) setError(null);
 					} catch (cause) {
-						if (!disposed && !request.signal.aborted)
+						if (!disposed && !request.signal.aborted) {
 							setError(
 								cause instanceof Error ? cause : new Error(String(cause)),
 							);
+							reportErrorRef.current?.(cause, {
+								componentStack: "DeclarativeExtension load",
+								operation: "extension_load",
+								viewKind: definition.kind,
+								fileId: documentFileId,
+							});
+						}
 					}
 				} while (dirty);
 			} finally {
@@ -203,6 +217,12 @@ export function DeclarativeExtension({
 			} catch (cause) {
 				if (!disposed) {
 					observationFailed = true;
+					reportErrorRef.current?.(cause, {
+						componentStack: "DeclarativeExtension observe",
+						operation: "extension_observe",
+						viewKind: definition.kind,
+						fileId: documentFileId,
+					});
 					setError(cause instanceof Error ? cause : new Error(String(cause)));
 				}
 			}
@@ -213,25 +233,54 @@ export function DeclarativeExtension({
 			clearTimeout(timer);
 			void events.return?.();
 		};
-	}, [documentAtelier.lix, definition, fileKey, key, location]);
+	}, [
+		documentAtelier.lix,
+		definition,
+		documentFileId,
+		fileKey,
+		key,
+		location,
+		retry,
+	]);
 
+	const retryRead = () => {
+		setError(null);
+		setRetry((value) => value + 1);
+	};
 	const Component = definition.Component!;
 	const settled =
 		error !== null ||
 		!definition.load ||
 		(shown !== undefined && !shown.held && data !== undefined);
 	return (
-		<AtelierErrorBoundary>
+		<AtelierErrorBoundary
+			onError={(cause, info) =>
+				reportError?.(cause, {
+					...info,
+					operation: "extension_render",
+					viewKind: definition.kind,
+					fileId: documentFileId,
+				})
+			}
+		>
 			<Suspense fallback={<DocumentLoading />}>
 				<LixProvider lix={documentAtelier.lix}>
 					{error && data !== undefined && !shown?.held ? (
 						<div role="alert">
-							Could not refresh {definition.label}: {error.message}
+							Could not refresh {definition.label}: {error.message}{" "}
+							<button type="button" onClick={retryRead}>
+								Retry
+							</button>
 						</div>
 					) : null}
 					{settled ? <DocumentShown key={key} onShown={onShown} /> : null}
 					{error && (data === undefined || shown?.held) ? (
-						<div role="alert">{error.message}</div>
+						<div role="alert">
+							{error.message}{" "}
+							<button type="button" onClick={retryRead}>
+								Retry
+							</button>
+						</div>
 					) : definition.load && (shown === undefined || data === undefined) ? (
 						<DocumentLoading />
 					) : (

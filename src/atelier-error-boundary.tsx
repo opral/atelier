@@ -1,4 +1,28 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import {
+	Component,
+	createContext,
+	useContext,
+	type ErrorInfo,
+	type ReactNode,
+	type ContextType,
+} from "react";
+
+export type AtelierErrorInfo = ErrorInfo & {
+	readonly operation?:
+		| "extension_load"
+		| "extension_observe"
+		| "extension_render";
+	readonly viewKind?: string;
+	readonly fileId?: string;
+};
+
+type ErrorReporter = (error: unknown, info: AtelierErrorInfo) => void;
+const ErrorReporterContext = createContext<ErrorReporter | undefined>(
+	undefined,
+);
+export function useAtelierErrorReporter() {
+	return useContext(ErrorReporterContext);
+}
 
 export type AtelierErrorFallbackContext = {
 	readonly error: unknown;
@@ -10,7 +34,7 @@ export type AtelierErrorFallback =
 
 export type AtelierErrorBoundaryProps = {
 	readonly children: ReactNode;
-	readonly onError?: (error: unknown, errorInfo: ErrorInfo) => void;
+	readonly onError?: ErrorReporter;
 	readonly errorFallback?: AtelierErrorFallback;
 };
 
@@ -22,6 +46,8 @@ export class AtelierErrorBoundary extends Component<
 	AtelierErrorBoundaryProps,
 	AtelierErrorBoundaryState
 > {
+	static contextType = ErrorReporterContext;
+	declare context: ContextType<typeof ErrorReporterContext>;
 	state: AtelierErrorBoundaryState = { error: null };
 
 	static getDerivedStateFromError(error: unknown): AtelierErrorBoundaryState {
@@ -29,7 +55,7 @@ export class AtelierErrorBoundary extends Component<
 	}
 
 	componentDidCatch(error: unknown, errorInfo: ErrorInfo): void {
-		this.props.onError?.(error, errorInfo);
+		(this.props.onError ?? this.context)?.(error, errorInfo);
 	}
 
 	render(): ReactNode {
@@ -40,7 +66,11 @@ export class AtelierErrorBoundary extends Component<
 				? fallback({ error })
 				: (fallback ?? <AtelierRenderError error={error} />);
 		}
-		return this.props.children;
+		return (
+			<ErrorReporterContext.Provider value={this.props.onError ?? this.context}>
+				{this.props.children}
+			</ErrorReporterContext.Provider>
+		);
 	}
 }
 

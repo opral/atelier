@@ -7,7 +7,6 @@ import {
 	useSyncExternalStore,
 	type ComponentPropsWithRef,
 	type ComponentType,
-	type ErrorInfo,
 	type ReactNode,
 } from "react";
 import { LixProvider } from "@/lib/lix-react";
@@ -22,6 +21,7 @@ import { TopBar } from "@/shell/top-bar";
 import {
 	AtelierErrorBoundary,
 	type AtelierErrorFallback,
+	type AtelierErrorInfo,
 } from "./atelier-error-boundary";
 import type { AtelierExtensionState, AtelierJsonValue } from "./extension-api";
 import {
@@ -120,8 +120,8 @@ export type AtelierProps = AtelierOptions & {
 	readonly slots?: AtelierSlots;
 	/** Props forwarded to Atelier's semantic top-bar header. */
 	readonly topBarProps?: AtelierTopBarProps;
-	/** Called when the Atelier shell or one of its rendered views throws. */
-	readonly onError?: (error: unknown, errorInfo: ErrorInfo) => void;
+	/** Reports shell/render errors and handled extension load/observe failures. */
+	readonly onError?: (error: unknown, errorInfo: AtelierErrorInfo) => void;
 	/** Replaces the default visible render-error state. */
 	readonly errorFallback?: AtelierErrorFallback;
 };
