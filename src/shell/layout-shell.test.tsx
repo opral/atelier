@@ -945,7 +945,7 @@ describe("diff review navigation", () => {
 		}
 	});
 
-	test("checkpoints an added active file without reading its absent history", async () => {
+	test("checkpoints an added active file without waiting for standalone history reads", async () => {
 		const lix = await openLix();
 		const sessionStateStore =
 			createMemorySessionStateStore(filesSidebarState());
@@ -994,7 +994,14 @@ describe("diff review navigation", () => {
 			});
 			let blockedHistoryReadCount = 0;
 			vi.spyOn(lix, "execute").mockImplementation(async (statement, params) => {
-				if (String(statement).includes("lix_as_of('lix_file'")) {
+				// A joined diff read is atomic; only separate history reads are held.
+				if (
+					String(statement)
+						.trim()
+						.startsWith(
+							"SELECT content, lixcol_metadata FROM lix_as_of('lix_file'",
+						)
+				) {
 					blockedHistoryReadCount += 1;
 					await historyReadGate;
 				}

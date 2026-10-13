@@ -1,15 +1,14 @@
-import type {
-	CommitSpan,
-	Lix,
-	LixBatchStatement,
-	LixTransaction,
-	SqlParam,
-} from "@lix-js/sdk";
+import type { CommitSpan, Lix, LixTransaction } from "@lix-js/sdk";
+import { presentableDiff } from "@codemirror/merge";
+import { ChangeSet, Text } from "@codemirror/state";
+import { decodeFileDataToText } from "@/lib/decode-file-data";
 
 type MarkdownFileWriteArgs = {
 	lix: Lix;
 	fileId: string;
 	markdown: string;
+	/** Source the editor actually edited, before any newer external writes. */
+	baseMarkdown?: string;
 	originKey?: string;
 };
 
@@ -32,18 +31,77 @@ export type MarkdownFileWriteReceipt = {
 export async function upsertMarkdownFile(
 	args: MarkdownFileWriteArgs,
 ): Promise<MarkdownFileWriteReceipt> {
-	const { lix, fileId, markdown, originKey } = args;
+	const { lix, fileId, markdown, baseMarkdown, originKey } = args;
+	const options = originKey ? { originKey } : undefined;
 	const data = new TextEncoder().encode(markdown);
-	const params: SqlParam[] = [data, fileId];
+	// Most saves still take one statement. A changed file must not turn text
+	// the editor never saw into a deletion: rebase that edit atomically instead.
 	const result = await lix.execute(
+		baseMarkdown === undefined
+			? "UPDATE lix_file SET content = $1 WHERE id = $2"
+			: "UPDATE lix_file SET content = $1 WHERE id = $2 AND content = $3",
+		baseMarkdown === undefined
+			? [data, fileId]
+			: [data, fileId, new TextEncoder().encode(baseMarkdown)],
+		options,
+	);
+	if (result.rowsAffected > 0 || baseMarkdown === undefined)
+		return { written: result.rowsAffected > 0, commit: result.commit ?? null };
+	const receipt = await lix.transaction(async (transaction) =>
+		writeMarkdownInTransaction(transaction, args),
+	);
+	return { written: receipt.value, commit: receipt.commit ?? null };
+}
+
+async function writeMarkdownInTransaction(
+	transaction: LixTransaction,
+	args: MarkdownFileWriteArgs,
+): Promise<boolean> {
+	const { fileId, baseMarkdown, originKey } = args;
+	let markdown = args.markdown;
+	if (baseMarkdown !== undefined) {
+		const result = await transaction.execute(
+			"SELECT content FROM lix_file WHERE id = $1",
+			[fileId],
+		);
+		if (!result.rows[0]) return false;
+		const current = decodeFileDataToText(result.rows[0].content);
+		if (current !== baseMarkdown && current !== markdown) {
+			const local = presentableDiff(baseMarkdown, markdown, {
+				scanLimit: 4096,
+			});
+			// Preserve independent external edits. A replacement of the same
+			// source range remains this writer's explicit later replacement.
+			const external = presentableDiff(baseMarkdown, current, {
+				scanLimit: 4096,
+			}).filter(
+				(remote) =>
+					!local.some(
+						(edit) => remote.toA > edit.fromA && remote.fromA < edit.toA,
+					),
+			);
+			const changes = (edits: typeof local, next: string) =>
+				ChangeSet.of(
+					edits.map((change) => ({
+						from: change.fromA,
+						to: change.toA,
+						insert: next.slice(change.fromB, change.toB),
+					})),
+					baseMarkdown.length,
+				);
+			const remoteChanges = changes(external, current);
+			markdown = changes(local, markdown)
+				.map(remoteChanges)
+				.apply(remoteChanges.apply(Text.of(baseMarkdown.split("\n"))))
+				.toString();
+		}
+	}
+	const result = await transaction.execute(
 		"UPDATE lix_file SET content = $1 WHERE id = $2",
-		params,
+		[new TextEncoder().encode(markdown), fileId],
 		originKey ? { originKey } : undefined,
 	);
-	return {
-		written: result.rowsAffected > 0,
-		commit: result.commit ?? null,
-	};
+	return result.rowsAffected > 0;
 }
 
 /**
@@ -83,7 +141,7 @@ function isTransactionConflict(error: unknown): boolean {
  * meantime (a reply, an agent, another tab) and is not retried by Lix, so
  * the whole transaction is run again. If it keeps losing, the text is saved
  * with only the participant's last-resort statements, in one automatically
- * retried batch; the participant is told. A transaction is pinned to the
+ * retried write; the participant is told. A transaction is pinned to the
  * branch it began on: when the handle has switched branches since, nothing
  * is written and the draft stays in the editor.
  */
@@ -92,12 +150,7 @@ export async function upsertMarkdownFileWith(
 		readonly participant: MarkdownFileWriteParticipant;
 	},
 ): Promise<MarkdownFileWriteReceipt> {
-	const { lix, fileId, markdown, originKey, participant } = args;
-	const write: LixBatchStatement = {
-		sql: "UPDATE lix_file SET content = $1 WHERE id = $2",
-		params: [new TextEncoder().encode(markdown), fileId],
-	};
-	const options = originKey ? { originKey } : undefined;
+	const { lix, participant } = args;
 	const branchId = await lix.activeBranchId();
 	const branchChanged = new Error(
 		"Could not save because the branch changed while saving. Your draft is still in this editor.",
@@ -108,12 +161,8 @@ export async function upsertMarkdownFileWith(
 			throw branchChanged;
 		const transaction = await lix.beginTransaction();
 		try {
-			const result = await transaction.execute(
-				write.sql,
-				[...write.params!],
-				options,
-			);
-			if (result.rowsAffected === 0) {
+			const written = await writeMarkdownInTransaction(transaction, args);
+			if (!written) {
 				await transaction.rollback();
 				return { written: false, commit: null };
 			}
@@ -130,10 +179,7 @@ export async function upsertMarkdownFileWith(
 	// The last resort: the text on its own, automatically retried. What it
 	// detaches the participant puts back afterwards.
 	if ((await lix.activeBranchId()) !== branchId) throw branchChanged;
-	const batch = await lix.executeBatch([write], options);
+	const receipt = await upsertMarkdownFile(args);
 	participant.degraded(cause);
-	return {
-		written: (batch.results.at(-1)?.rowsAffected ?? 0) > 0,
-		commit: batch.commit ?? null,
-	};
+	return receipt;
 }

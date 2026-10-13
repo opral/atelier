@@ -453,7 +453,13 @@ export function createEditor(args: CreateEditorArgs): Editor {
 		const participant = editorInstance
 			? saveParticipants.get(editorInstance)?.prepare(doc)
 			: null;
-		const write = { lix, fileId: fileId!, markdown, originKey };
+		const write = {
+			lix,
+			fileId: fileId!,
+			markdown,
+			baseMarkdown: persistenceBaseline.expectedFileMarkdown,
+			originKey,
+		};
 		const receipt = participant
 			? await upsertMarkdownFileWith({ ...write, participant })
 			: await upsertMarkdownFile(write);

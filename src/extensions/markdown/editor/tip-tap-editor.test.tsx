@@ -2749,7 +2749,7 @@ test("applies an authoritative winner delivered before local save acknowledgment
 	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
 		const result = await execute(sql, params, options);
 		if (
-			sql === "UPDATE lix_file SET content = $1 WHERE id = $2" &&
+			sql.startsWith("UPDATE lix_file SET content = $1 WHERE id = $2") &&
 			options?.originKey === "atelier.markdown-editor:test-origin"
 		) {
 			committed();
@@ -2796,7 +2796,7 @@ test("an older save acknowledgment preserves and saves a newer queued user revis
 	const writes: string[] = [];
 	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
 		const isSave =
-			sql === "UPDATE lix_file SET content = $1 WHERE id = $2" &&
+			sql.startsWith("UPDATE lix_file SET content = $1 WHERE id = $2") &&
 			options?.originKey === "atelier.markdown-editor:test-origin";
 		if (isSave)
 			writes.push(new TextDecoder().decode(params?.[0] as Uint8Array));
@@ -2830,6 +2830,68 @@ test("an older save acknowledgment preserves and saves a newer queued user revis
 		"Newer user revision",
 	);
 	expect(writes).toEqual(["First local\n", "Newer user revision\n"]);
+});
+
+test("a queued save rebases on a remote merge while the editor is still dirty", async () => {
+	const fileId = fakeUuid("file_dirty_merged_save");
+	const { lix, editor } = await renderEditorForMarkdownFile({
+		fileId,
+		markdown: "Body\n",
+		persistDebounceMs: 0,
+		withheldObservedMarkdown: "Body local-0\n",
+	});
+	const execute = lix.execute.bind(lix);
+	let release!: () => void;
+	let committed!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const accepted = new Promise<void>((resolve) => {
+		committed = resolve;
+	});
+	let holdFirst = true;
+	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
+		const result = await execute(sql, params, options);
+		if (
+			holdFirst &&
+			sql.startsWith("UPDATE lix_file SET content = $1 WHERE id = $2") &&
+			options?.originKey === "atelier.markdown-editor:test-origin"
+		) {
+			holdFirst = false;
+			committed();
+			await held;
+		}
+		return result;
+	});
+	try {
+		await setEditorText(editor, "Body local-0");
+		await accepted;
+		await act(async () => {
+			editor.commands.setTextSelection(editor.state.doc.content.size);
+			editor.commands.insertContent(" local-2");
+		});
+		await writeMarkdownFileWithOrigin(
+			lix,
+			fileId,
+			"Body local-0 remote-1\n",
+			"remote",
+		);
+		await settleMarkdownObserver();
+		await act(async () => {
+			release();
+		});
+		await waitFor(async () => {
+			const saved = await decodeFileMarkdown(lix, fileId);
+			for (const marker of ["local-0", "local-2", "remote-1"])
+				expect(saved.split(marker)).toHaveLength(2);
+		});
+		await waitFor(() => {
+			for (const marker of ["local-0", "local-2", "remote-1"])
+				expect(editor.state.doc.textContent).toContain(marker);
+		});
+	} finally {
+		release();
+	}
 });
 
 test("a focused independent editor view follows the eventual authoritative file winner", async () => {
@@ -2905,7 +2967,7 @@ test("a delayed acknowledgment read cannot replace a newer observed winner", asy
 	vi.spyOn(lix, "execute").mockImplementation(async (sql, params, options) => {
 		const result = await execute(sql, params, options);
 		if (
-			sql === "UPDATE lix_file SET content = $1 WHERE id = $2" &&
+			sql.startsWith("UPDATE lix_file SET content = $1 WHERE id = $2") &&
 			options?.originKey === "atelier.markdown-editor:test-origin"
 		) {
 			signalSave();

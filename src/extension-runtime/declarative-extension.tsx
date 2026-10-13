@@ -145,6 +145,7 @@ export function DeclarativeExtension({
 		let disposed = false;
 		let loading = false;
 		let dirty = false;
+		let observationFailed = false;
 		let controller: AbortController | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const reload = async () => {
@@ -165,7 +166,7 @@ export function DeclarativeExtension({
 						});
 						if (disposed) return;
 						setLoaded({ key, fileKey, data: next, ...viewStateRef.current });
-						setError(null);
+						if (!observationFailed) setError(null);
 					} catch (cause) {
 						if (!disposed && !request.signal.aborted)
 							setError(
@@ -177,25 +178,33 @@ export function DeclarativeExtension({
 				loading = false;
 			}
 		};
-		// Subscribe before reading to avoid losing writes between the load and its
-		// observer's first frame. That initial frame starts the first load; starting
-		// another load here would fetch the same content twice. Changes during a
-		// fetch coalesce into one follow-up without discarding the completed read.
+		// Initiate observation before the first read so its initial frame (and any
+		// later change during that read) schedules a catch-up. Starting the read
+		// without waiting for that frame keeps opening independent of observer
+		// hydration. Changes during a fetch coalesce into one follow-up, and each
+		// completed read remains visible while that follow-up is in flight.
 		const events = documentAtelier.lix.observe(
 			"SELECT lix_active_branch_commit_id() AS commit_id",
 		);
 		void (async () => {
 			try {
-				for await (const _event of events) {
+				let pending = events.next();
+				void reload();
+				for (;;) {
+					const result = await pending;
+					if (result.done) return;
 					if (disposed) return;
 					clearTimeout(timer);
 					timer = setTimeout(() => {
 						void reload();
 					}, 0);
+					pending = events.next();
 				}
 			} catch (cause) {
-				if (!disposed)
+				if (!disposed) {
+					observationFailed = true;
 					setError(cause instanceof Error ? cause : new Error(String(cause)));
+				}
 			}
 		})();
 		return () => {

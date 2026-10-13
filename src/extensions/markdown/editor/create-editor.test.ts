@@ -879,7 +879,7 @@ test("does not flush stale editor content when destroyed while suspended", async
 	expect(await readMarkdown(lix, fileId)).toBe(externalMarkdown);
 });
 
-test("a user save commits once against the latest local state in acceptance order", async () => {
+test("a user save preserves an independent external edit accepted before it", async () => {
 	const lix = await openLix();
 	const fileId = fakeUuid("autosave_compare_and_swap");
 	const initialMarkdown = "Initial\n";
@@ -929,7 +929,7 @@ test("a user save commits once against the latest local state in acceptance orde
 	editor.commands.setTextSelection(editor.state.doc.content.size);
 	editor.commands.insertContent(" Local edit");
 
-	const expectedLocal = buildNormalizedMarkdownFromEditor(editor);
+	const expectedLocal = "External wins Local edit\n";
 	const persisted = await waitForMarkdown(
 		lix,
 		fileId,
@@ -1315,7 +1315,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 	const editor = await createEditorFromFile({
 		lix,
 		fileId,
-		persistDebounceMs: 60_000,
+		persistDebounceMs: 50,
 	});
 	// TipTap emits create asynchronously; settle its baseline before replacing timers.
 	while (!editor.isInitialized)
@@ -1341,7 +1341,7 @@ test("checkpoint ignores an editor-memory edit until autosave reaches Lix", asyn
 		expect(await readMarkdown(lix, fileId)).toBe("Start");
 
 		editor.destroy();
-		await vi.advanceTimersByTimeAsync(60_000);
+		await vi.advanceTimersByTimeAsync(50);
 	} finally {
 		vi.useRealTimers();
 	}
@@ -1544,6 +1544,10 @@ test("scheduled autosave after destroy does not recreate a deleted file", async 
 			return typeof value === "function" ? value.bind(target) : value;
 		},
 	});
+	let saveFailed!: () => void;
+	const saveFinished = new Promise<void>((resolve) => {
+		saveFailed = resolve;
+	});
 	vi.useFakeTimers();
 	try {
 		const editor = createEditor({
@@ -1551,6 +1555,9 @@ test("scheduled autosave after destroy does not recreate a deleted file", async 
 			fileId,
 			initialMarkdown: "Start",
 			persistDebounceMs: 50,
+			onPersistenceError: (error) => {
+				if (error) saveFailed();
+			},
 		});
 		editor.commands.setTextSelection(editor.state.doc.content.size);
 		editor.commands.insertContent(" Changed");
@@ -1561,6 +1568,7 @@ test("scheduled autosave after destroy does not recreate a deleted file", async 
 	} finally {
 		vi.useRealTimers();
 	}
+	await saveFinished;
 	expect(updateAttempts).toBe(1);
 	const row = await qb(lix)
 		.selectFrom("lix_file")

@@ -512,3 +512,36 @@ describe("selectCheckpointFilePreviewPage", () => {
 		}
 	});
 });
+
+test("diff content preserves deleted files and handles files absent on both sides", async () => {
+	const lix = await openLix();
+	try {
+		const id = fakeUuid("deleted-diff-content");
+		await lix.execute(
+			"INSERT INTO lix_file (id, path, content) VALUES ($1, '/deleted.txt', $2)",
+			[id, new TextEncoder().encode("before")],
+		);
+		const before = (
+			await lix.execute("SELECT lix_active_branch_commit_id() AS id")
+		).rows[0]!.id as string;
+		await lix.execute("DELETE FROM lix_file WHERE id = $1", [id]);
+		const after = (
+			await lix.execute("SELECT lix_active_branch_commit_id() AS id")
+		).rows[0]!.id as string;
+		const deleted = await selectWorkingFileDiffContent(lix, id, before, after);
+		expect(new TextDecoder().decode(deleted.from_content as Uint8Array)).toBe(
+			"before",
+		);
+		expect(deleted.to_content).toBeNull();
+		const absent = await selectWorkingFileDiffContent(
+			lix,
+			fakeUuid("missing-diff-content"),
+			before,
+			after,
+		);
+		expect(absent.from_content).toBeNull();
+		expect(absent.to_content).toBeNull();
+	} finally {
+		await lix.close();
+	}
+});
