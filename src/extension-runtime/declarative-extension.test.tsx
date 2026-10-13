@@ -1,5 +1,5 @@
 /* oxlint-disable react/jsx-no-constructed-context-values -- Test fixtures deliberately replace provider snapshots. */
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { Search } from "lucide-react";
 import { AtelierRenderContext } from "../atelier-render-context";
@@ -8,6 +8,7 @@ import type {
 	ExtensionRuntime,
 	ExtensionView,
 } from "./types";
+import { AtelierErrorBoundary } from "../atelier-error-boundary";
 import { DeclarativeExtension } from "./declarative-extension";
 import { PreparedFileSurface } from "./prepared-file";
 import { openLix } from "../test-utils/node-lix-sdk";
@@ -287,8 +288,7 @@ describe("declarative extension hydration", () => {
 			await act(async () => reads[2]!.complete("Late file three"));
 			expect(emit).toHaveBeenCalledTimes(emittedBeforeUnmount);
 		} finally {
-			if (!unmounted)
-				await act(async () => mounted.unmount());
+			if (!unmounted) await act(async () => mounted.unmount());
 		}
 	});
 
@@ -630,4 +630,183 @@ describe("declarative extension hydration", () => {
 			vi.useRealTimers();
 		}
 	});
+});
+
+test("reports handled load failure and retries without losing the host shell", async () => {
+	const observer = controlledObservation();
+	const failure = Object.assign(
+		new Error("fulfill native read: read operation validity expired"),
+		{ code: "LIX_READ_FULFILLMENT_RESTART" },
+	);
+	const load = vi
+		.fn()
+		.mockRejectedValueOnce(failure)
+		.mockResolvedValue("Recovered");
+	const report = vi.fn();
+	const atelier = {
+		lix: { observe: () => observer.iterator },
+		branches: { activeId: "main" },
+	} as unknown as ExtensionRuntime;
+	const definition = {
+		kind: "custom",
+		label: "Custom",
+		description: "Custom",
+		icon: Search,
+		load,
+		Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+	};
+	const mounted = render(
+		<AtelierErrorBoundary onError={report}>
+			<DeclarativeExtension
+				definition={definition}
+				atelier={atelier}
+				view={view}
+			/>
+		</AtelierErrorBoundary>,
+	);
+	try {
+		expect(await mounted.findByRole("alert")).toHaveTextContent(
+			failure.message,
+		);
+		expect(report).toHaveBeenCalledTimes(1);
+		expect(report).toHaveBeenCalledWith(failure, {
+			componentStack: "DeclarativeExtension load",
+			operation: "extension_load",
+			viewKind: "custom",
+			fileId: undefined,
+		});
+		fireEvent.click(mounted.getByRole("button", { name: "Retry" }));
+		expect(await mounted.findByRole("heading")).toHaveTextContent("Recovered");
+		expect(report).toHaveBeenCalledTimes(1);
+	} finally {
+		mounted.unmount();
+	}
+});
+
+test("reports an observation failure even after a successful load", async () => {
+	const failure = new Error("observer failed");
+	const report = vi.fn();
+	const iterator = {
+		next: vi
+			.fn()
+			.mockImplementation(() => new Promise(() => {}))
+			.mockRejectedValueOnce(failure),
+		return: vi.fn().mockResolvedValue({ done: true }),
+	};
+	const atelier = {
+		lix: { observe: () => iterator },
+		branches: { activeId: "main" },
+	} as unknown as ExtensionRuntime;
+	const definition = {
+		kind: "custom",
+		label: "Custom",
+		description: "Custom",
+		icon: Search,
+		load: async () => "Retained",
+		Component: ({ data }: { data: unknown }) => <h1>{String(data)}</h1>,
+	};
+	const mounted = render(
+		<AtelierErrorBoundary onError={report}>
+			<DeclarativeExtension
+				definition={definition}
+				atelier={atelier}
+				view={view}
+			/>
+		</AtelierErrorBoundary>,
+	);
+	try {
+		await waitFor(() => expect(report).toHaveBeenCalledTimes(1));
+		expect(report).toHaveBeenCalledWith(failure, {
+			componentStack: "DeclarativeExtension observe",
+			operation: "extension_observe",
+			viewKind: "custom",
+			fileId: undefined,
+		});
+		expect(await mounted.findByRole("heading")).toHaveTextContent("Retained");
+		fireEvent.click(mounted.getByRole("button", { name: "Retry" }));
+		await waitFor(() => expect(iterator.next).toHaveBeenCalledTimes(2));
+		expect(report).toHaveBeenCalledTimes(1);
+		expect(mounted.getByRole("heading")).toHaveTextContent("Retained");
+	} finally {
+		mounted.unmount();
+	}
+});
+
+test("reports a renderer failure with the same view context", async () => {
+	const failure = new Error("render failed");
+	const report = vi.fn();
+	const atelier = {
+		lix: {},
+		branches: { activeId: "main" },
+	} as unknown as ExtensionRuntime;
+	const definition = {
+		kind: "custom",
+		label: "Custom",
+		description: "Custom",
+		icon: Search,
+		Component: (): never => {
+			throw failure;
+		},
+	};
+	const mounted = render(
+		<AtelierErrorBoundary onError={report}>
+			<DeclarativeExtension
+				definition={definition}
+				atelier={atelier}
+				view={view}
+			/>
+		</AtelierErrorBoundary>,
+	);
+	try {
+		expect(await mounted.findByRole("alert")).toHaveTextContent(
+			"render failed",
+		);
+		expect(report).toHaveBeenCalledTimes(1);
+		expect(report).toHaveBeenCalledWith(
+			failure,
+			expect.objectContaining({
+				operation: "extension_render",
+				viewKind: "custom",
+			}),
+		);
+	} finally {
+		mounted.unmount();
+	}
+});
+
+test("does not report an abandoned load as a user-visible failure", async () => {
+	const observer = controlledObservation();
+	const report = vi.fn();
+	let reject!: (error: Error) => void;
+	const load = vi.fn(
+		() =>
+			new Promise<string>((_, fail) => {
+				reject = fail;
+			}),
+	);
+	const atelier = {
+		lix: { observe: () => observer.iterator },
+		branches: { activeId: "main" },
+	} as unknown as ExtensionRuntime;
+	const definition = {
+		kind: "custom",
+		label: "Custom",
+		description: "Custom",
+		icon: Search,
+		load,
+		Component: () => null,
+	};
+	const mounted = render(
+		<AtelierErrorBoundary onError={report}>
+			<DeclarativeExtension
+				definition={definition}
+				atelier={atelier}
+				view={view}
+			/>
+		</AtelierErrorBoundary>,
+	);
+	await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+	mounted.unmount();
+	await act(async () => reject(new Error("cancelled read")));
+	expect(report).not.toHaveBeenCalled();
 });
