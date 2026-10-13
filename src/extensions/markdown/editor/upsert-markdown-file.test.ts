@@ -88,3 +88,66 @@ test("a failed write participant rolls back and saves the Markdown with one rece
 		await lix.close();
 	}
 });
+
+test("a stale editor save retains concurrent inserts through subsequent coalesced saves", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("markdown_stale_editor_rebase");
+	const base = "Body\n";
+	const local = "Body local-0\n";
+	try {
+		await lix.execute(
+			"INSERT INTO lix_file(id,path,content) VALUES($1,$2,$3)",
+			[fileId, "/rebase.md", new TextEncoder().encode("Body remote-1\n")],
+		);
+		await upsertMarkdownFile({
+			lix,
+			fileId,
+			baseMarkdown: base,
+			markdown: local,
+		});
+		await upsertMarkdownFile({
+			lix,
+			fileId,
+			baseMarkdown: local,
+			markdown: "Body local-0 local-2\n",
+		});
+		const result = await lix.execute(
+			"SELECT content FROM lix_file WHERE id=$1",
+			[fileId],
+		);
+		const saved = new TextDecoder().decode(
+			result.rows[0]!.content as Uint8Array,
+		);
+		expect(saved).toContain("remote-1");
+		expect(saved).toContain("local-0");
+		expect(saved).toContain("local-2");
+	} finally {
+		await lix.close();
+	}
+});
+
+test("a stale editor deletion does not delete an unseen concurrent insert", async () => {
+	const lix = await openLix();
+	const fileId = fakeUuid("markdown_stale_editor_delete");
+	try {
+		await lix.execute(
+			"INSERT INTO lix_file(id,path,content) VALUES($1,$2,$3)",
+			[fileId, "/delete.md", new TextEncoder().encode("Body local remote\n")],
+		);
+		await upsertMarkdownFile({
+			lix,
+			fileId,
+			baseMarkdown: "Body local\n",
+			markdown: "Body\n",
+		});
+		const result = await lix.execute(
+			"SELECT content FROM lix_file WHERE id=$1",
+			[fileId],
+		);
+		expect(
+			new TextDecoder().decode(result.rows[0]!.content as Uint8Array),
+		).toBe("Body remote\n");
+	} finally {
+		await lix.close();
+	}
+});
