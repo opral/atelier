@@ -32,6 +32,8 @@ type MainAreaProps = {
 	readonly showTabBar?: boolean;
 	/** Host-rendered strip replacing the built-in tab row. */
 	readonly customTabStrip?: ReactNode;
+	/** The island's header row (tabs and panel toggles). */
+	readonly header?: ReactNode;
 };
 
 /**
@@ -59,6 +61,7 @@ export function MainArea({
 	showTabBar = false,
 	customTabStrip,
 	tabTooltip,
+	header,
 }: MainAreaProps) {
 	const finalizePendingIfNeeded = useCallback(
 		(key: string) => {
@@ -101,6 +104,7 @@ export function MainArea({
 			dropId="main-panel"
 			showTabBar={showTabBar}
 			customTabStrip={customTabStrip}
+			islandHeader={header}
 		/>
 	);
 }

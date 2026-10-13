@@ -919,6 +919,39 @@ describe("main tabs with a pinned home", () => {
 		}
 	});
 
+	test("the open sidebar carries the host identity; collapsed, the island header does", async () => {
+		const shell = await renderTabbedShell({
+			slots: {
+				navbarBrand: <span data-testid="host-brand">mark</span>,
+			},
+		});
+		try {
+			const brandIn = () =>
+				screen
+					.getByTestId("host-brand")
+					.closest("[data-atelier-part]")
+					?.getAttribute("data-atelier-part");
+			await screen.findByTestId("host-brand");
+			const startedOpen =
+				document.querySelector('[data-atelier-part="sidebar-header"]') !== null;
+			expect(brandIn()).toBe(startedOpen ? "sidebar-header" : "top-bar");
+
+			await act(async () => {
+				fireEvent.keyDown(window, { key: "1", code: "Digit1", ctrlKey: true });
+			});
+			await waitFor(() =>
+				expect(brandIn()).toBe(startedOpen ? "top-bar" : "sidebar-header"),
+			);
+			// One brand and one left toggle at a time, wherever they sit.
+			expect(screen.getAllByTestId("host-brand")).toHaveLength(1);
+			expect(
+				screen.getAllByRole("button", { name: "Toggle left panel" }),
+			).toHaveLength(1);
+		} finally {
+			await shell.cleanup();
+		}
+	});
+
 	test("omits the top-bar divider when the host claims no identity slots", async () => {
 		const shell = await renderTabbedShell();
 		try {

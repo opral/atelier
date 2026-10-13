@@ -30,6 +30,7 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { KindIcon } from "./kind-icon";
+import { fileIconUrl } from "../files/file-icons";
 import type {
 	ExtensionRuntime,
 	ExtensionView,
@@ -437,8 +438,17 @@ export function LibrarySidebar({
 					>
 						{recent.map((file) => {
 							const glyph = marks.files.get(file.path);
+							// Recent lists documents, so it shows them as the tabs and the
+							// file list do: the file's own icon, not its Library kind.
 							const icon = (
-								<KindIcon kind={file.kind === "other" ? "file" : file.kind} />
+								<img
+									src={fileIconUrl(file.path)}
+									alt=""
+									aria-hidden="true"
+									draggable={false}
+									data-testid="library-recent-icon"
+									className="atw:size-4 atw:shrink-0"
+								/>
 							);
 							if (renamingId === file.id) {
 								return (

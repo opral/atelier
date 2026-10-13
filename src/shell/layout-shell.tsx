@@ -33,7 +33,7 @@ import { tabRename } from "./tab-rename";
 import type { CommitSpan, Lix } from "@lix-js/sdk";
 import { SidePanel } from "./side-panel";
 import { MainArea } from "./main-panel";
-import { TopBar } from "./top-bar";
+import { SidebarHeader, TopBar } from "./top-bar";
 import { CheckpointStatusBar } from "./status-bar";
 import { AtelierAutosaveHint } from "./autosave-hint";
 import { formatCheckpointRelativeTime } from "@/lib/checkpoint-format";
@@ -529,10 +529,14 @@ function useCollapsedPanelFocus(
 		if (!collapsed) return;
 		const active = document.activeElement;
 		const panel = document.querySelector(`aside[data-area-side="${side}"]`);
+		// The left column also holds the sidebar's header, whose toggle is
+		// where the keyboard was when the sidebar was collapsed from it.
+		const column = document.querySelector(`[data-area-column="${side}"]`);
 		const stranded =
 			active === null ||
 			active === document.body ||
-			(panel?.contains(active) ?? false);
+			(panel?.contains(active) ?? false) ||
+			(column?.contains(active) ?? false);
 		if (!stranded) return;
 		document
 			.querySelector<HTMLElement>(`[data-attr="topbar-toggle-${side}-panel"]`)
@@ -5054,24 +5058,10 @@ function LayoutShellLoadedContentResolved({
 				data-review-mode={isReviewMode ? "true" : undefined}
 			>
 				<AtelierAutosaveHint />
-				<TopBar
-					activeFileName={activeFileName}
-					isReadOnly={isHostReadOnly}
-					isReviewing={isReviewMode}
-					reviewTitle={reviewTitle}
-					onToggleLeftSidebar={toggleLeftSidebar}
-					onToggleRightSidebar={toggleRightSidebar}
-					isLeftSidebarVisible={!isLeftCollapsed}
-					isRightSidebarVisible={!isRightCollapsed}
-					navbarBrand={slots?.navbarBrand}
-					navbarRepository={slots?.navbarRepository}
-					navbarStart={slots?.navbarStart}
-					navbarCenter={slots?.navbarCenter}
-					mainTabStrip={mainTabStrip}
-					navbarEnd={slots?.navbarEnd}
-					rootProps={topBarProps}
-				/>
-				<main className="atw:flex atw:flex-1 atw:min-h-0 atw:overflow-hidden atw:px-2">
+				{/* No bar across the top: the sidebar and the main island both
+				    start on the first row, each with its own 40px header — the
+				    sidebar's carries "where you are", the island's the tabs. */}
+				<main className="atw:flex atw:flex-1 atw:min-h-0 atw:overflow-hidden atw:px-2 atw:pt-2">
 					<Group
 						orientation="horizontal"
 						groupRef={panelGroupRef}
@@ -5092,20 +5082,38 @@ function LayoutShellLoadedContentResolved({
 							collapsible
 							collapsedSize={0}
 						>
-							<SidePanel
-								side="left"
-								title="Navigator"
-								area={leftPanel}
-								isFocused={!isLeftCollapsed && focusedArea === "left"}
-								contentVisible={isLeftContentVisible}
-								onFocusArea={focusPanel}
-								onSelectView={handleSelectLeftView}
-								onAddView={addViewOnLeft}
-								onRemoveView={(key) => handleRemoveView("left", key)}
-								onHidePanel={toggleLeftSidebar}
-								viewContext={extensionHostContext}
-								emptyState={renderEmptyPanelSlot("left", slots?.leftPanelEmpty)}
-							/>
+							<div
+								className="atw:flex atw:h-full atw:min-h-0 atw:flex-col"
+								data-area-column="left"
+							>
+								{isLeftContentVisible ? (
+									<SidebarHeader
+										navbarBrand={slots?.navbarBrand}
+										navbarRepository={slots?.navbarRepository}
+										navbarStart={slots?.navbarStart}
+										onToggleLeftSidebar={toggleLeftSidebar}
+									/>
+								) : null}
+								<div className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col">
+									<SidePanel
+										side="left"
+										title="Navigator"
+										area={leftPanel}
+										isFocused={!isLeftCollapsed && focusedArea === "left"}
+										contentVisible={isLeftContentVisible}
+										onFocusArea={focusPanel}
+										onSelectView={handleSelectLeftView}
+										onAddView={addViewOnLeft}
+										onRemoveView={(key) => handleRemoveView("left", key)}
+										onHidePanel={toggleLeftSidebar}
+										viewContext={extensionHostContext}
+										emptyState={renderEmptyPanelSlot(
+											"left",
+											slots?.leftPanelEmpty,
+										)}
+									/>
+								</div>
+							</div>
 						</Panel>
 						{/* A collapsed panel gives its space back — no residual gutter,
 						    the strip aligns with the top-bar mark. */}
@@ -5138,6 +5146,26 @@ function LayoutShellLoadedContentResolved({
 								<MainArea
 									area={mainArea}
 									showTabBar={false}
+									header={
+										<TopBar
+											activeFileName={activeFileName}
+											isReadOnly={isHostReadOnly}
+											isReviewing={isReviewMode}
+											reviewTitle={reviewTitle}
+											onToggleLeftSidebar={toggleLeftSidebar}
+											onToggleRightSidebar={toggleRightSidebar}
+											isLeftSidebarVisible={!isLeftCollapsed}
+											isRightSidebarVisible={!isRightCollapsed}
+											showIdentity={!isLeftContentVisible}
+											navbarBrand={slots?.navbarBrand}
+											navbarRepository={slots?.navbarRepository}
+											navbarStart={slots?.navbarStart}
+											navbarCenter={slots?.navbarCenter}
+											mainTabStrip={mainTabStrip}
+											navbarEnd={slots?.navbarEnd}
+											rootProps={topBarProps}
+										/>
+									}
 									isFocused={focusedArea === "main"}
 									onFocusArea={focusPanel}
 									onSelectView={handleSelectCentralView}
