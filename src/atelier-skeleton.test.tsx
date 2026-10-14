@@ -16,7 +16,9 @@ describe("AtelierSkeleton", () => {
 			'[data-atelier-part="sidebar-header"]',
 		);
 		expect(sidebarHeader).toContainElement(screen.getByText("Brand"));
-		expect(sidebarHeader?.parentElement).toHaveStyle({ width: "25%" });
+		expect(sidebarHeader?.parentElement).toHaveStyle({
+			width: "calc((100% - 8px) * 0.25)",
+		});
 		expect(
 			container.querySelector('[data-atelier-part="top-bar"]'),
 		).toHaveAttribute("data-shows-identity", "false");

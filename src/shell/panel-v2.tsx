@@ -855,7 +855,9 @@ function SidebarSectionPicker({
 					// while open, which is the whole affordance. px-1.5 puts the label
 					// text on the sidebar's content column — the same x as the tree
 					// rows' icons, whose centers sit under the sidebar header's mark.
-					className="atw:group/section atw:flex atw:w-fit atw:items-center atw:gap-[5px] atw:self-start atw:rounded-[5px] atw:px-1.5 atw:py-1 atw:text-[11px] atw:font-bold atw:uppercase atw:tracking-[0.07em] atw:text-fg-faint atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:data-[state=open]:text-fg-muted"
+					// The right area's header row centres it on the island header's
+					// line; under the sidebar's own header it sits at the top.
+					className={`${side === "right" ? "atw:self-center" : "atw:self-start"} atw:group/section atw:flex atw:w-fit atw:items-center atw:gap-[5px] atw:rounded-[5px] atw:px-1.5 atw:py-1 atw:text-[11px] atw:font-bold atw:uppercase atw:tracking-[0.07em] atw:text-fg-faint atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:data-[state=open]:text-fg-muted`}
 				>
 					<span>{activeLabel}</span>
 					<ChevronDown
@@ -2281,6 +2283,15 @@ const TabButtonBase = forwardRef<
 				data-view-instance={dataViewInstance}
 				data-view-key={dataViewKind}
 				data-pinned={isPinned ? "true" : undefined}
+				// The browser scrolls a focused chip into view, except the one
+				// already active: Tab onto it while the strip is scrolled away
+				// and it stayed off-screen, ring and all.
+				onFocus={(event) =>
+					event.currentTarget.scrollIntoView?.({
+						block: "nearest",
+						inline: "nearest",
+					})
+				}
 				className={clsx(
 					tabBaseClasses,
 					tabStateClasses[state],

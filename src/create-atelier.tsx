@@ -465,13 +465,18 @@ export function AtelierSkeleton({
 	return (
 		<div className="atelier-root atw:h-full atw:w-full atw:overflow-hidden">
 			<div className="atw:relative atw:flex atw:h-full atw:min-h-0 atw:flex-col atw:bg-bg atw:text-fg">
-				<main className="atw:flex atw:min-h-0 atw:flex-1 atw:overflow-hidden atw:px-2 atw:pt-2 atw:pb-2">
+				{/* pb-6: the room the workspace's status bar takes under the
+				    island, so the island's bottom edge does not move on load. */}
+				<main className="atw:flex atw:min-h-0 atw:flex-1 atw:overflow-hidden atw:px-2 atw:pt-2 atw:pb-6">
 					{isLeftSidebarVisible ? (
 						// The same column the workspace draws: the panel's width,
 						// then the 4px gutter before the island.
 						<div
 							className="atw:mr-1 atw:flex atw:min-w-0 atw:shrink-0 atw:flex-col"
-							style={{ width: `${leftSidebarSize}%` }}
+							// A panel's percent is of the group less its two 4px gutters.
+							style={{
+								width: `calc((100% - 8px) * ${leftSidebarSize / 100})`,
+							}}
 						>
 							<SidebarHeader
 								navbarBrand={slots?.navbarBrand}
