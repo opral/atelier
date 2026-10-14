@@ -276,6 +276,7 @@ export function SidebarHeader({
 				side="left"
 				isActive={true}
 				onToggle={onToggleLeftSidebar}
+				onCanvas
 			/>
 		</div>
 	);
@@ -285,10 +286,13 @@ function PanelToggleButton({
 	side,
 	isActive,
 	onToggle,
+	onCanvas = false,
 }: {
 	readonly side: "left" | "right";
 	readonly isActive: boolean;
 	readonly onToggle?: () => void;
+	/** The sidebar's header sits on the canvas; the island's on white. */
+	readonly onCanvas?: boolean;
 }) {
 	const shortcut = panelShortcutHint(side);
 	return (
@@ -297,7 +301,10 @@ function PanelToggleButton({
 				<Button
 					variant="ghost"
 					size="icon"
-					className="atw:h-7 atw:w-7 atw:shrink-0 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg"
+					className={cn(
+						"atw:h-7 atw:w-7 atw:shrink-0 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:text-fg",
+						onCanvas ? "atw:hover:bg-bg-hover-strong" : "atw:hover:bg-bg-hover",
+					)}
 					type="button"
 					onClick={onToggle}
 					aria-label={`Toggle ${side} panel`}

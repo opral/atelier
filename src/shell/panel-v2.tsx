@@ -1199,7 +1199,7 @@ function AddViewMenu({
 					title="Add view"
 					aria-label="Add view"
 					data-attr="panel-add-view"
-					className="atw:flex atw:size-[26px] atw:flex-none atw:items-center atw:justify-center atw:rounded-md atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-panel"
+					className="atw:flex atw:size-[26px] atw:flex-none atw:items-center atw:justify-center atw:rounded-md atw:text-fg-faint atw:hover:bg-bg-hover atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-panel"
 				>
 					<Plus aria-hidden="true" className="atw:size-3.25" strokeWidth={2} />
 				</button>
@@ -2305,7 +2305,9 @@ const TabButtonBase = forwardRef<
 				</span>
 				{/* Side-panel tabs keep their floating hover affordance. Active
 				    main tabs reserve inline space, while inactive main tabs
-				    reveal an overlay without changing width. */}
+				    reveal an overlay without changing width. The overlay's fade
+				    and × are the idle chip's hover fill (`bg-hover` on the white
+				    island): any other shade shows as a band over the label. */}
 				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
 					// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all.
 					<span
@@ -2337,13 +2339,13 @@ const TabButtonBase = forwardRef<
 						<span
 							aria-hidden="true"
 							data-attr="panel-tab-close-fade"
-							className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:right-1.5 atw:z-[1] atw:w-12 atw:bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover-strong)_72%)] atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:opacity-100 atw:group-focus-visible:opacity-100"
+							className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:right-1.5 atw:z-[1] atw:w-12 atw:bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover)_72%)] atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:opacity-100 atw:group-focus-visible:opacity-100"
 						/>
 						{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all. */}
 						<span
 							role="button"
 							aria-label={`Close ${label}`}
-							className="atw:pointer-events-none atw:absolute atw:right-1.5 atw:top-1/2 atw:z-10 atw:flex atw:size-5 atw:-translate-y-1/2 atw:items-center atw:justify-center atw:rounded-[5px] atw:bg-bg-hover-strong atw:text-fg-subtle atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:group-focus-visible:pointer-events-auto atw:group-focus-visible:opacity-100 atw:hover:text-fg-muted"
+							className="atw:pointer-events-none atw:absolute atw:right-1.5 atw:top-1/2 atw:z-10 atw:flex atw:size-5 atw:-translate-y-1/2 atw:items-center atw:justify-center atw:rounded-[5px] atw:bg-bg-hover atw:text-fg-subtle atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:group-focus-visible:pointer-events-auto atw:group-focus-visible:opacity-100 atw:hover:text-fg-muted"
 							onClick={(event) => {
 								event.stopPropagation();
 								onClose();
