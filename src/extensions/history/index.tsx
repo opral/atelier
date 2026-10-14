@@ -164,7 +164,7 @@ export function HistoryScopeSwitch({
 			<span
 				data-attr="history-scope-label"
 				aria-label="Showing the repository"
-				className="atw:mr-1.5 atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:self-start atw:px-1.5 atw:text-[11.5px] atw:font-medium atw:text-history-secondary"
+				className="atw:mr-1.5 atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:px-1.5 atw:text-[11.5px] atw:font-medium atw:text-history-secondary"
 			>
 				Repository
 			</span>
@@ -179,7 +179,7 @@ export function HistoryScopeSwitch({
 			title={`Switch to ${other === "file" ? "this file" : "the repository"}`}
 			onMouseDown={(event) => event.preventDefault()}
 			onClick={() => setScope(other)}
-			className="atw:group/scope atw:mr-1.5 atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:gap-1 atw:self-start atw:rounded-[5px] atw:px-1.5 atw:text-[11.5px] atw:font-medium atw:text-history-secondary atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
+			className="atw:group/scope atw:mr-1.5 atw:flex atw:h-6 atw:shrink-0 atw:items-center atw:gap-1 atw:rounded-[5px] atw:px-1.5 atw:text-[11.5px] atw:font-medium atw:text-history-secondary atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring"
 		>
 			<span>{scope === "file" ? "This file" : "Repository"}</span>
 			<ArrowLeftRight

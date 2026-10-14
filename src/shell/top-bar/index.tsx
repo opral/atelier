@@ -88,6 +88,14 @@ export function TopBar({
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
+			// A size container named for hosts, as the sidebar header is: with
+			// the sidebar collapsed a brand can drop what the header has no
+			// room for (`@container atelier-top-bar (width < …)`).
+			style={{
+				containerType: "inline-size",
+				containerName: "atelier-top-bar",
+				...rootProps?.style,
+			}}
 			// Hosts that draw into the window's title bar (an installed app's
 			// window controls) inset whichever row carries the identity.
 			data-shows-identity={showIdentity ? "true" : "false"}
