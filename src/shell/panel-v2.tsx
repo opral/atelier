@@ -513,7 +513,15 @@ export function PanelV2({
 		side !== "main" && hasViews && contentVisible ? (
 			<div
 				data-atelier-part="section-header"
-				className="atw:flex atw:items-start atw:justify-between atw:gap-2"
+				className={clsx(
+					"atw:flex atw:justify-between atw:gap-2",
+					// The right area's first row: as tall as the island's header
+					// beside it, its caption centred on the same line. The left
+					// area's sits under the sidebar's own header row.
+					side === "right"
+						? "atw:h-10 atw:shrink-0 atw:items-center"
+						: "atw:items-start",
+				)}
 			>
 				<SidebarSectionPicker
 					side={side}
@@ -2167,14 +2175,15 @@ const tabBaseClasses =
 
 const tabStateClasses = {
 	// The strip sits in the white island's header, so the visible view's
-	// chip is a canvas-coloured fill rather than a white card; keyboard focus
-	// adds a ring on top of the same look.
+	// chip is a fill rather than a white card: `bg-active`, a clear step
+	// darker than an idle chip's hover (`bg-hover`) — the canvas grey sat a
+	// unit or two from hover and the two read as the same tab state. Keyboard
+	// focus adds a ring on top of the same look.
 	focused:
-		"atw:border-transparent atw:bg-bg atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
+		"atw:border-transparent atw:bg-bg-active atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
 	active:
-		"atw:border-transparent atw:bg-bg atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
-	// Keyboard focus fills like hover: the close × and its fade appear on
-	// either, in the chip's own fill, so neither leaves a band on the label.
+		"atw:border-transparent atw:bg-bg-active atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
+	// Keyboard focus fills like hover, since both reveal the close ×.
 	idle: "atw:border-transparent atw:bg-transparent atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:bg-bg-hover",
 } as const;
 
@@ -2237,6 +2246,13 @@ const TabButtonBase = forwardRef<
 		// Keep the label mounted so the native tab can animate between its full
 		// and compact forms instead of popping in and out of the layout.
 		const isCompact = isPinned && !isActive;
+		// An idle main tab keeps the close ×'s room at its end, empty until
+		// hover or focus shows the × there: an overlay over the label ate short
+		// names ("Fi", "Deb"). 34px is what an active tab spends on its inline
+		// × (6px gap + 2px + 16px + 10px padding), so selecting a tab moves
+		// nothing but its label's weight.
+		const reservesClose =
+			!isActive && !isPinned && !closeOnHoverOnly && onClose !== undefined;
 		return (
 			<button
 				type="button"
@@ -2270,7 +2286,11 @@ const TabButtonBase = forwardRef<
 					tabStateClasses[state],
 					// A compact pinned tab is icon-only; center the icon so the chip
 					// (and its hover fill) stays a square instead of a wide pill.
-					isCompact ? "atw:px-[6.5px]" : "atw:px-2.5",
+					isCompact
+						? "atw:px-[6.5px]"
+						: reservesClose
+							? "atw:pr-[34px] atw:pl-2.5"
+							: "atw:px-2.5",
 					// The label animates via margin, so pinned tabs opt out of gap;
 					// the classes are mutually exclusive because stylesheet order,
 					// not clsx order, would decide a gap-1.5/gap-0 conflict.
@@ -2307,9 +2327,7 @@ const TabButtonBase = forwardRef<
 				</span>
 				{/* Side-panel tabs keep their floating hover affordance. Active
 				    main tabs reserve inline space, while inactive main tabs
-				    reveal an overlay without changing width. The overlay's fade
-				    and × are the idle chip's hover fill (`bg-hover` on the white
-				    island): any other shade shows as a band over the label. */}
+				    show theirs in the room kept at their end (`reservesClose`). */}
 				{isPinned || isCompact || !onClose ? null : closeOnHoverOnly ? (
 					// oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all.
 					<span
@@ -2338,16 +2356,11 @@ const TabButtonBase = forwardRef<
 					</span>
 				) : (
 					<>
-						<span
-							aria-hidden="true"
-							data-attr="panel-tab-close-fade"
-							className="atw:pointer-events-none atw:absolute atw:inset-y-0 atw:right-1.5 atw:z-[1] atw:w-12 atw:bg-[linear-gradient(to_right,transparent_0%,var(--atelier-bg-hover)_72%)] atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:opacity-100 atw:group-focus-visible:opacity-100"
-						/>
 						{/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- The tab button owns the keyboard, and its context menu (Shift+F10) carries Close; a focus stop on every × would double the strip's tab ring. The role and the label are here so the affordance is announced at all. */}
 						<span
 							role="button"
 							aria-label={`Close ${label}`}
-							className="atw:pointer-events-none atw:absolute atw:right-1.5 atw:top-1/2 atw:z-10 atw:flex atw:size-5 atw:-translate-y-1/2 atw:items-center atw:justify-center atw:rounded-[5px] atw:bg-bg-hover atw:text-fg-subtle atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:group-focus-visible:pointer-events-auto atw:group-focus-visible:opacity-100 atw:hover:text-fg-muted"
+							className="atw:pointer-events-none atw:absolute atw:right-2 atw:top-1/2 atw:z-10 atw:flex atw:size-5 atw:-translate-y-1/2 atw:items-center atw:justify-center atw:rounded-[5px] atw:text-fg-subtle atw:opacity-0 atw:transition-opacity atw:duration-150 atw:ease-out atw:group-hover:pointer-events-auto atw:group-hover:opacity-100 atw:group-focus-visible:pointer-events-auto atw:group-focus-visible:opacity-100 atw:hover:text-fg-muted"
 							onClick={(event) => {
 								event.stopPropagation();
 								onClose();

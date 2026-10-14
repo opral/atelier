@@ -26,7 +26,7 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		width: 16px;
+		width: 24px;
 		z-index: 2;
 		pointer-events: none;
 		opacity: 0;
@@ -51,9 +51,11 @@
 		opacity: 1;
 	}
 
+	/* On the row's bottom edge, not its top: in the island's header the top
+	   is the island's rounded border, and a thumb there drew over it. */
 	.indicatorTrack {
 		position: absolute;
-		top: 0;
+		bottom: 0;
 		left: 8px;
 		right: 8px;
 		height: 2px;
@@ -81,6 +83,8 @@
 		   would otherwise cut it off at the strip edges. */
 		padding: 0 4px;
 		overflow-x: auto;
+		/* A chip scrolled into view by focus keeps its ring off the fades. */
+		scroll-padding-inline: 12px;
 		scrollbar-width: none;
 		-ms-overflow-style: none;
 	}

@@ -17,7 +17,7 @@ import {
 import type { AtelierLocation } from "./atelier-state";
 import { qb } from "@/lib/lix-kysely";
 import { V2LayoutShell } from "@/shell/layout-shell";
-import { TopBar } from "@/shell/top-bar";
+import { SidebarHeader, TopBar } from "@/shell/top-bar";
 import {
 	AtelierErrorBoundary,
 	type AtelierErrorFallback,
@@ -437,28 +437,53 @@ export type AtelierSkeletonProps = {
 	>;
 	/** Props forwarded to Atelier's semantic top-bar header. */
 	readonly topBarProps?: AtelierTopBarProps;
+	/**
+	 * Draw the left sidebar open, as the workspace will open it, so the brand
+	 * and the island do not jump when the instance replaces the skeleton.
+	 * A host passes what it hands Atelier as `defaultOpenPanels`.
+	 */
+	readonly isLeftSidebarVisible?: boolean;
+	/** The open sidebar's width, as a percent of the workspace (default 20). */
+	readonly leftSidebarSize?: number;
 	/** Centered in the empty content panel (e.g. a delayed loading label). */
 	readonly children?: ReactNode;
 };
 
 /**
- * The Atelier chrome without an instance: the real top bar plus an empty
- * content panel. Hosts render this while an instance is opening so
+ * The Atelier chrome without an instance: the real sidebar and island
+ * headers around an empty content panel. Hosts render this while an instance is opening so
  * navigation into a workspace keeps a stable layout instead of flashing
  * a bespoke loading screen.
  */
 export function AtelierSkeleton({
 	slots,
 	topBarProps,
+	isLeftSidebarVisible = false,
+	leftSidebarSize = 20,
 	children,
 }: AtelierSkeletonProps) {
 	return (
 		<div className="atelier-root atw:h-full atw:w-full atw:overflow-hidden">
 			<div className="atw:relative atw:flex atw:h-full atw:min-h-0 atw:flex-col atw:bg-bg atw:text-fg">
 				<main className="atw:flex atw:min-h-0 atw:flex-1 atw:overflow-hidden atw:px-2 atw:pt-2 atw:pb-2">
-					<div className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden atw:rounded-[10px] atw:border atw:border-border atw:bg-panel">
+					{isLeftSidebarVisible ? (
+						// The same column the workspace draws: the panel's width,
+						// then the 4px gutter before the island.
+						<div
+							className="atw:mr-1 atw:flex atw:min-w-0 atw:shrink-0 atw:flex-col"
+							style={{ width: `${leftSidebarSize}%` }}
+						>
+							<SidebarHeader
+								navbarBrand={slots?.navbarBrand}
+								navbarRepository={slots?.navbarRepository}
+								navbarStart={slots?.navbarStart}
+							/>
+						</div>
+					) : null}
+					<div className="atw:flex atw:min-h-0 atw:min-w-0 atw:flex-1 atw:flex-col atw:overflow-hidden atw:rounded-[10px] atw:border atw:border-border atw:bg-panel">
 						<TopBar
-							isLeftSidebarVisible={false}
+							showIdentity={!isLeftSidebarVisible}
+							isLeftSidebarVisible={isLeftSidebarVisible}
 							isRightSidebarVisible={false}
 							navbarBrand={slots?.navbarBrand}
 							navbarRepository={slots?.navbarRepository}

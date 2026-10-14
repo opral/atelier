@@ -488,18 +488,16 @@ describe("main tabs with a pinned home", () => {
 			expect(inactiveClose?.parentElement?.className).toContain(
 				"atw:group-hover:opacity-100",
 			);
-			// The × and its fade are the idle chip's own hover fill, so no
-			// darker band shows over the label on the white island.
-			expect(inactiveClose?.parentElement?.className).toMatch(
-				/(^|\s)atw:bg-bg-hover(\s|$)/,
-			);
+			// The idle tab keeps the ×'s room at its end, so the × never
+			// covers the label, and no fade is needed over it.
+			expect(inactiveTab.className).toContain("atw:pr-[34px]");
 			expect(inactiveTab.className).toContain("atw:hover:bg-bg-hover");
-			const closeFade = inactiveTab.querySelector(
-				'[data-attr="panel-tab-close-fade"]',
-			);
-			expect(closeFade).toBeInTheDocument();
-			expect(closeFade?.className).toContain("w-12");
-			expect(closeFade?.className).toContain("var(--atelier-bg-hover)_72%");
+			expect(
+				inactiveTab.querySelector('[data-attr="panel-tab-close-fade"]'),
+			).toBeNull();
+			// Active reads a clear step darker than hover.
+			expect(activeTab.className).toContain("atw:bg-bg-active");
+			expect(activeTab.className).not.toContain("atw:pr-[34px]");
 			const activeClose = activeTab.querySelector(
 				'[data-attr="panel-tab-close"]',
 			);
