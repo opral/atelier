@@ -93,7 +93,9 @@ export function TopBar({
 				<div className="atw:flex atw:min-w-0 atw:items-center atw:gap-1 atw:text-sm">
 					{navbarBrand !== undefined && navbarBrand !== null ? (
 						<div
-							className="atw:flex atw:shrink-0 atw:items-center"
+							// Shrinks before the tabs vanish: in a narrow window the
+							// brand truncates, the tab column keeps its room.
+							className="atw:flex atw:min-w-0 atw:shrink atw:items-center"
 							data-slot="navbar-brand"
 						>
 							{navbarBrand}
@@ -244,7 +246,9 @@ export function SidebarHeader({
 }: SidebarHeaderProps) {
 	return (
 		<div
-			className="atw:flex atw:h-[40px] atw:min-w-0 atw:shrink-0 atw:items-center atw:gap-1 atw:pr-1.5 atw:pl-1.5 atw:text-sm atw:text-fg-muted"
+			// The sidebar can be as narrow as 10% of the window: the brand
+			// truncates and nothing spills over the toggle.
+			className="atw:flex atw:h-[40px] atw:min-w-0 atw:shrink-0 atw:items-center atw:gap-1 atw:overflow-hidden atw:pr-1.5 atw:pl-1.5 atw:text-sm atw:text-fg-muted"
 			data-atelier-part="sidebar-header"
 		>
 			{navbarBrand !== undefined && navbarBrand !== null ? (

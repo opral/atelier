@@ -5116,7 +5116,7 @@ function LayoutShellLoadedContentResolved({
 							</div>
 						</Panel>
 						{/* A collapsed panel gives its space back — no residual gutter,
-						    the strip aligns with the top-bar mark. */}
+						    the island's edge sits on the shell's 8px inset. */}
 						<Separator
 							// A collapsed panel's gutter is zero pixels wide, and a
 							// zero-pixel separator still answered Tab and the arrow

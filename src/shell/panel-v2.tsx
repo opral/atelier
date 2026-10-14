@@ -846,7 +846,7 @@ function SidebarSectionPicker({
 					// Caption, not chrome: no fill, no border. It darkens on hover and
 					// while open, which is the whole affordance. px-1.5 puts the label
 					// text on the sidebar's content column — the same x as the tree
-					// rows' icons, whose centers sit under the top bar's mark.
+					// rows' icons, whose centers sit under the sidebar header's mark.
 					className="atw:group/section atw:flex atw:w-fit atw:items-center atw:gap-[5px] atw:self-start atw:rounded-[5px] atw:px-1.5 atw:py-1 atw:text-[11px] atw:font-bold atw:uppercase atw:tracking-[0.07em] atw:text-fg-faint atw:transition-colors atw:hover:text-fg-muted atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:data-[state=open]:text-fg-muted"
 				>
 					<span>{activeLabel}</span>
@@ -2173,7 +2173,9 @@ const tabStateClasses = {
 		"atw:border-transparent atw:bg-bg atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
 	active:
 		"atw:border-transparent atw:bg-bg atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
-	idle: "atw:border-transparent atw:bg-transparent atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg",
+	// Keyboard focus fills like hover: the close × and its fade appear on
+	// either, in the chip's own fill, so neither leaves a band on the label.
+	idle: "atw:border-transparent atw:bg-transparent atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg atw:focus-visible:bg-bg-hover",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {
