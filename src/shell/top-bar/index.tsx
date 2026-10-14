@@ -79,8 +79,11 @@ export function TopBar({
 			className={cn(
 				"atw:relative atw:grid atw:h-[40px] atw:shrink-0 atw:items-center atw:gap-2 atw:border-b atw:border-border-subtle atw:px-1.5 atw:text-fg-muted",
 				// Without the identity column the tabs start at the island's edge.
+				// Collapsed, the brand gives way first: the tabs keep at least
+				// 120px (less only when the header itself is narrower) and the
+				// brand's column shrinks below its content, truncating it.
 				showIdentity
-					? "atw:grid-cols-[auto_minmax(0,1fr)_auto]"
+					? "atw:grid-cols-[minmax(0,auto)_minmax(min(120px,30%),1fr)_auto]"
 					: "atw:grid-cols-[minmax(0,1fr)_auto]",
 				rootProps?.className,
 			)}
@@ -249,6 +252,13 @@ export function SidebarHeader({
 			// The sidebar can be as narrow as 10% of the window: the brand
 			// truncates and nothing spills over the toggle.
 			className="atw:flex atw:h-[40px] atw:min-w-0 atw:shrink-0 atw:items-center atw:gap-1 atw:overflow-hidden atw:pr-1.5 atw:pl-1.5 atw:text-sm atw:text-fg-muted"
+			// A size container named for hosts: a brand can answer the sidebar's
+			// width (`@container atelier-sidebar-header (width < 180px)`) and
+			// drop what does not fit, which no media query can know.
+			style={{
+				containerType: "inline-size",
+				containerName: "atelier-sidebar-header",
+			}}
 			data-atelier-part="sidebar-header"
 		>
 			{navbarBrand !== undefined && navbarBrand !== null ? (
