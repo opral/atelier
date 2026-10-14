@@ -32,12 +32,20 @@ export type TopBarProps = {
 	readonly navbarCenter?: ReactNode;
 	readonly mainTabStrip?: ReactNode;
 	readonly navbarEnd?: ReactNode;
+	/**
+	 * Whether the header carries "where you are" — the host's brand and
+	 * repository and the left-area toggle. The sidebar owns them while it is
+	 * open (`SidebarHeader`); they fold in here only when it is collapsed.
+	 */
+	readonly showIdentity?: boolean;
 	/** Host props forwarded to the semantic top-bar header. */
 	readonly rootProps?: AtelierTopBarProps;
 };
 
 /**
- * Workspace header with panel toggles and the active file name.
+ * The main island's header: the document tabs, the host's trailing controls
+ * and the right-area toggle. It sits inside the island, on the same 40px row
+ * as the sidebar's header, so the two columns line up.
  *
  * @example
  * <TopBar activeFileName="notes.md" />
@@ -57,78 +65,72 @@ export function TopBar({
 	navbarCenter,
 	mainTabStrip,
 	navbarEnd,
+	showIdentity = true,
 	rootProps,
 }: TopBarProps) {
-	const leftShortcut = panelShortcutHint("left");
-	const rightShortcut = panelShortcutHint("right");
 	const hasHostIdentitySlots =
-		(navbarBrand !== undefined && navbarBrand !== null) ||
-		(navbarStart !== undefined && navbarStart !== null) ||
-		(navbarRepository !== undefined && navbarRepository !== null);
+		showIdentity &&
+		((navbarBrand !== undefined && navbarBrand !== null) ||
+			(navbarStart !== undefined && navbarStart !== null) ||
+			(navbarRepository !== undefined && navbarRepository !== null));
 	return (
 		<header
 			{...rootProps}
 			className={cn(
-				"atw:relative atw:grid atw:h-[40px] atw:shrink-0 atw:grid-cols-[auto_minmax(0,1fr)_auto] atw:items-center atw:gap-2 atw:px-3.5 atw:text-fg-muted",
+				"atw:relative atw:grid atw:h-[40px] atw:shrink-0 atw:items-center atw:gap-2 atw:border-b atw:border-border-subtle atw:px-1.5 atw:text-fg-muted",
+				// Without the identity column the tabs start at the island's edge.
+				showIdentity
+					? "atw:grid-cols-[auto_minmax(0,1fr)_auto]"
+					: "atw:grid-cols-[minmax(0,1fr)_auto]",
 				rootProps?.className,
 			)}
 			data-atelier-part="top-bar"
+			// Hosts that draw into the window's title bar (an installed app's
+			// window controls) inset whichever row carries the identity.
+			data-shows-identity={showIdentity ? "true" : "false"}
 		>
-			<div className="atw:flex atw:min-w-0 atw:items-center atw:gap-1 atw:text-sm">
-				{navbarBrand !== undefined && navbarBrand !== null ? (
-					<div
-						className="atw:flex atw:shrink-0 atw:items-center"
-						data-slot="navbar-brand"
-					>
-						{navbarBrand}
-					</div>
-				) : null}
-				{navbarStart !== undefined && navbarStart !== null ? (
-					<div
-						className="atw:flex atw:shrink-0 atw:items-center"
-						data-slot="navbar-start"
-					>
-						{navbarStart}
-					</div>
-				) : null}
-				<Tooltip delayDuration={500}>
-					<TooltipTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="atw:h-7 atw:w-7 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg"
-							type="button"
-							onClick={onToggleLeftSidebar}
-							aria-label="Toggle left panel"
-							aria-pressed={isLeftSidebarVisible}
-							data-state={isLeftSidebarVisible ? "on" : "off"}
-							data-attr="topbar-toggle-left-panel"
+			{showIdentity ? (
+				<div className="atw:flex atw:min-w-0 atw:items-center atw:gap-1 atw:text-sm">
+					{navbarBrand !== undefined && navbarBrand !== null ? (
+						<div
+							className="atw:flex atw:shrink-0 atw:items-center"
+							data-slot="navbar-brand"
 						>
-							<PanelToggleIcon side="left" isActive={isLeftSidebarVisible} />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent className="atw:bg-overlay atw:text-overlay-fg atw:[&_[class*='bg-bg-subtle']]:bg-overlay atw:[&_[class*='fill-secondary']]:fill-overlay">
-						Toggle left area ({leftShortcut})
-					</TooltipContent>
-				</Tooltip>
-				{navbarRepository !== undefined && navbarRepository !== null ? (
-					<div
-						className="atw:flex atw:min-w-0 atw:shrink atw:items-center"
-						data-slot="navbar-repository"
-					>
-						{navbarRepository}
-					</div>
-				) : null}
-				{/* Keeps "where you are" (host brand and repository) visually separate
-				    from "what's open" (the document tabs). */}
-				{hasHostIdentitySlots && mainTabStrip ? (
-					<span
-						aria-hidden="true"
-						data-atelier-part="top-bar-divider"
-						className="atw:mx-1 atw:h-4 atw:w-px atw:shrink-0 atw:bg-border-strong"
+							{navbarBrand}
+						</div>
+					) : null}
+					{navbarStart !== undefined && navbarStart !== null ? (
+						<div
+							className="atw:flex atw:shrink-0 atw:items-center"
+							data-slot="navbar-start"
+						>
+							{navbarStart}
+						</div>
+					) : null}
+					<PanelToggleButton
+						side="left"
+						isActive={isLeftSidebarVisible}
+						onToggle={onToggleLeftSidebar}
 					/>
-				) : null}
-			</div>
+					{navbarRepository !== undefined && navbarRepository !== null ? (
+						<div
+							className="atw:flex atw:min-w-0 atw:shrink atw:items-center"
+							data-slot="navbar-repository"
+						>
+							{navbarRepository}
+						</div>
+					) : null}
+					{/* Keeps "where you are" (host brand and repository) visually separate
+				    from "what's open" (the document tabs). */}
+					{hasHostIdentitySlots && mainTabStrip ? (
+						<span
+							aria-hidden="true"
+							data-atelier-part="top-bar-divider"
+							className="atw:mx-1 atw:h-4 atw:w-px atw:shrink-0 atw:bg-border-strong"
+						/>
+					) : null}
+				</div>
+			) : null}
 			{mainTabStrip !== undefined && mainTabStrip !== null ? (
 				<div
 					className="atw:flex atw:min-w-0 atw:items-center atw:overflow-hidden"
@@ -210,28 +212,106 @@ export function TopBar({
 						{navbarEnd}
 					</div>
 				) : null}
-				<Tooltip delayDuration={500}>
-					<TooltipTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="atw:h-7 atw:w-7 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg"
-							type="button"
-							onClick={onToggleRightSidebar}
-							aria-label="Toggle right panel"
-							aria-pressed={isRightSidebarVisible}
-							data-state={isRightSidebarVisible ? "on" : "off"}
-							data-attr="topbar-toggle-right-panel"
-						>
-							<PanelToggleIcon side="right" isActive={isRightSidebarVisible} />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent className="atw:bg-overlay atw:text-overlay-fg atw:[&_[class*='bg-bg-subtle']]:bg-overlay atw:[&_[class*='fill-secondary']]:fill-overlay">
-						Toggle right area ({rightShortcut})
-					</TooltipContent>
-				</Tooltip>
+				<PanelToggleButton
+					side="right"
+					isActive={isRightSidebarVisible}
+					onToggle={onToggleRightSidebar}
+				/>
 			</div>
 		</header>
+	);
+}
+
+export type SidebarHeaderProps = Pick<
+	TopBarProps,
+	"navbarBrand" | "navbarStart" | "navbarRepository" | "onToggleLeftSidebar"
+>;
+
+/**
+ * The open sidebar's first row: "where you are" — the host's brand and
+ * repository — and the toggle that collapses the sidebar. It is the same
+ * 40px as the main island's header, so the sidebar and the island start on
+ * one line. Collapsed, the same slots move into the island's header.
+ *
+ * @example
+ * <SidebarHeader navbarBrand={<Logo />} onToggleLeftSidebar={toggle} />
+ */
+export function SidebarHeader({
+	navbarBrand,
+	navbarStart,
+	navbarRepository,
+	onToggleLeftSidebar,
+}: SidebarHeaderProps) {
+	return (
+		<div
+			className="atw:flex atw:h-[40px] atw:min-w-0 atw:shrink-0 atw:items-center atw:gap-1 atw:pr-1.5 atw:pl-1.5 atw:text-sm atw:text-fg-muted"
+			data-atelier-part="sidebar-header"
+		>
+			{navbarBrand !== undefined && navbarBrand !== null ? (
+				<div
+					className="atw:flex atw:min-w-0 atw:shrink atw:items-center"
+					data-slot="navbar-brand"
+				>
+					{navbarBrand}
+				</div>
+			) : null}
+			{navbarStart !== undefined && navbarStart !== null ? (
+				<div
+					className="atw:flex atw:shrink-0 atw:items-center"
+					data-slot="navbar-start"
+				>
+					{navbarStart}
+				</div>
+			) : null}
+			{navbarRepository !== undefined && navbarRepository !== null ? (
+				<div
+					className="atw:flex atw:min-w-0 atw:shrink atw:items-center"
+					data-slot="navbar-repository"
+				>
+					{navbarRepository}
+				</div>
+			) : null}
+			<div className="atw:flex-1" aria-hidden="true" />
+			<PanelToggleButton
+				side="left"
+				isActive={true}
+				onToggle={onToggleLeftSidebar}
+			/>
+		</div>
+	);
+}
+
+function PanelToggleButton({
+	side,
+	isActive,
+	onToggle,
+}: {
+	readonly side: "left" | "right";
+	readonly isActive: boolean;
+	readonly onToggle?: () => void;
+}) {
+	const shortcut = panelShortcutHint(side);
+	return (
+		<Tooltip delayDuration={500}>
+			<TooltipTrigger asChild>
+				<Button
+					variant="ghost"
+					size="icon"
+					className="atw:h-7 atw:w-7 atw:shrink-0 atw:justify-center atw:rounded-control atw:text-fg-faint atw:hover:bg-bg-hover-strong atw:hover:text-fg"
+					type="button"
+					onClick={onToggle}
+					aria-label={`Toggle ${side} panel`}
+					aria-pressed={isActive}
+					data-state={isActive ? "on" : "off"}
+					data-attr={`topbar-toggle-${side}-panel`}
+				>
+					<PanelToggleIcon side={side} isActive={isActive} />
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent className="atw:bg-overlay atw:text-overlay-fg atw:[&_[class*='bg-bg-subtle']]:bg-overlay atw:[&_[class*='fill-secondary']]:fill-overlay">
+				Toggle {side} area ({shortcut})
+			</TooltipContent>
+		</Tooltip>
 	);
 }
 

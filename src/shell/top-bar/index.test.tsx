@@ -1,14 +1,16 @@
 import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
-import { TopBar } from ".";
+import { SidebarHeader, TopBar } from ".";
 
 describe("TopBar", () => {
-	test("matches the panel frame horizontal inset", () => {
+	test("is the island's header row, inset like its chips", () => {
 		const { container } = render(<TopBar />);
 
-		expect(container.querySelector("header")).toHaveClass("atw:px-3.5");
-		expect(container.querySelector("header")).not.toHaveClass("atw:px-2");
+		expect(container.querySelector("header")).toHaveClass(
+			"atw:px-1.5",
+			"atw:border-b",
+		);
 		expect(screen.getByLabelText("Toggle left panel")).toHaveClass(
 			"atw:justify-center",
 		);
@@ -53,7 +55,7 @@ describe("TopBar", () => {
 		expect(header).toHaveAttribute("data-atelier-part", "top-bar");
 		expect(header).toHaveAttribute("data-app-titlebar", "true");
 		expect(header).toHaveAttribute("aria-label", "Repository controls");
-		expect(header).toHaveClass("bg-red-500", "atw:px-3.5");
+		expect(header).toHaveClass("bg-red-500", "atw:px-1.5");
 		expect(ref.current).toBe(header);
 		if (!header) throw new Error("Top bar header is unavailable");
 		fireEvent.pointerDown(header);
@@ -133,5 +135,58 @@ describe("TopBar", () => {
 		render(<TopBar isReviewing={true} />);
 
 		expect(screen.queryByText("Reviewing")).toBeNull();
+	});
+
+	test("leaves brand, repository and the left toggle to an open sidebar", () => {
+		render(
+			<TopBar
+				showIdentity={false}
+				navbarBrand={<span>Brand</span>}
+				navbarRepository={<span>Repository</span>}
+				mainTabStrip={<span>Tabs</span>}
+			/>,
+		);
+
+		expect(screen.queryByText("Brand")).toBeNull();
+		expect(screen.queryByText("Repository")).toBeNull();
+		expect(screen.queryByLabelText("Toggle left panel")).toBeNull();
+		expect(
+			document.querySelector('[data-atelier-part="top-bar-divider"]'),
+		).toBeNull();
+		expect(screen.getByText("Tabs")).toBeVisible();
+		expect(screen.getByLabelText("Toggle right panel")).toBeVisible();
+	});
+});
+
+describe("SidebarHeader", () => {
+	test("carries the host identity, then the toggle that collapses it", () => {
+		const onToggleLeftSidebar = vi.fn();
+		const { container } = render(
+			<SidebarHeader
+				navbarBrand={<span>Brand</span>}
+				navbarRepository={<span>Repository</span>}
+				onToggleLeftSidebar={onToggleLeftSidebar}
+			/>,
+		);
+
+		const header = container.querySelector(
+			'[data-atelier-part="sidebar-header"]',
+		);
+		// Same height as the island's header, so both columns start on one row.
+		expect(header).toHaveClass("atw:h-[40px]");
+		const repository = screen.getByText("Repository");
+		const toggle = screen.getByLabelText("Toggle left panel");
+		expect(toggle).toHaveAttribute("aria-pressed", "true");
+		expect(toggle).toHaveAttribute("data-attr", "topbar-toggle-left-panel");
+		expect(
+			screen.getByText("Brand").compareDocumentPosition(repository) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			repository.compareDocumentPosition(toggle) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		fireEvent.click(toggle);
+		expect(onToggleLeftSidebar).toHaveBeenCalledOnce();
 	});
 });

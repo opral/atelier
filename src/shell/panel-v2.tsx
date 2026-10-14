@@ -253,6 +253,7 @@ export function PanelV2({
 	showTabBar = side === "main",
 	tabBarExtraContent,
 	customTabStrip,
+	islandHeader,
 	contentVisible = true,
 }: PanelV2Props) {
 	const { extensionMap, visibleExtensions } = useExtensionRegistry();
@@ -640,6 +641,7 @@ export function PanelV2({
 					isOver && "atw:ring-2 atw:ring-ring atw:ring-inset",
 				)}
 			>
+				{islandHeader}
 				{hasViews ? (
 					<PanelContent {...contentHandlers}>
 						{area.views.flatMap((entry) => {
@@ -762,6 +764,11 @@ export type PanelV2Props = {
 	readonly customTabStrip?: ReactNode;
 	/** Defers a panel's first extension mount until its content is visible. */
 	readonly contentVisible?: boolean;
+	/**
+	 * The island's first row: the main area's header (tabs, host controls,
+	 * panel toggles) lives inside the white island, not above it.
+	 */
+	readonly islandHeader?: ReactNode;
 };
 
 // Reference rows are regular-weight with muted icons; only the active row is
@@ -2156,16 +2163,17 @@ const TabRenameField = forwardRef<
 TabRenameField.displayName = "TabRenameField";
 
 const tabBaseClasses =
-	"atw:group atw:relative atw:flex atw:h-7 atw:flex-none atw:max-w-80 atw:items-center atw:rounded-control atw:border atw:text-[12.5px] atw:font-medium atw:transition-[color,background-color,border-color,padding] atw:duration-200 atw:ease-out atw:whitespace-nowrap atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-bg";
+	"atw:group atw:relative atw:flex atw:h-7 atw:flex-none atw:max-w-80 atw:items-center atw:rounded-control atw:border atw:text-[12.5px] atw:font-medium atw:transition-[color,background-color,border-color,padding] atw:duration-200 atw:ease-out atw:whitespace-nowrap atw:focus-visible:outline-none atw:focus-visible:ring-2 atw:focus-visible:ring-ring atw:focus-visible:ring-offset-1 atw:focus-visible:ring-offset-panel";
 
 const tabStateClasses = {
-	// The visible view's chip always reads as a white card over the canvas;
-	// keyboard focus adds a ring on top of the same look.
+	// The strip sits in the white island's header, so the visible view's
+	// chip is a canvas-coloured fill rather than a white card; keyboard focus
+	// adds a ring on top of the same look.
 	focused:
-		"atw:border-border atw:bg-panel atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
+		"atw:border-transparent atw:bg-bg atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
 	active:
-		"atw:border-border atw:bg-panel atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
-	idle: "atw:border-transparent atw:bg-transparent atw:text-fg-subtle atw:hover:bg-bg-hover-strong atw:hover:text-fg",
+		"atw:border-transparent atw:bg-bg atw:font-semibold atw:text-fg atw:[&_[data-tab-icon]]:text-fg-muted",
+	idle: "atw:border-transparent atw:bg-transparent atw:text-fg-subtle atw:hover:bg-bg-hover atw:hover:text-fg",
 } as const;
 
 interface TabBaseProps extends PanelTabPreviewProps {

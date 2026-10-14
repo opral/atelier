@@ -17,8 +17,8 @@
 		width: 100%;
 	}
 
-	/* Overflow fades: clipped chips at the strip edges dissolve into the app
-	   background so a half-visible tab reads as "more tabs this way", not as a
+	/* Overflow fades: clipped chips at the strip edges dissolve into the
+	   island's surface so a half-visible tab reads as "more tabs this way", not as a
 	   rendering glitch. Toggled per side via data-overflow-left/right. */
 	.tabBar::before,
 	.tabBar::after {
@@ -35,12 +35,12 @@
 
 	.tabBar::before {
 		left: 0;
-		background: linear-gradient(to right, var(--atelier-bg), transparent);
+		background: linear-gradient(to right, var(--atelier-panel), transparent);
 	}
 
 	.tabBar::after {
 		right: 0;
-		background: linear-gradient(to left, var(--atelier-bg), transparent);
+		background: linear-gradient(to left, var(--atelier-panel), transparent);
 	}
 
 	.tabBar[data-overflow-left="true"]::before {

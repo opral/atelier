@@ -7,7 +7,6 @@ import {
 	useSyncExternalStore,
 	type ComponentPropsWithRef,
 	type ComponentType,
-	type ErrorInfo,
 	type ReactNode,
 } from "react";
 import { LixProvider } from "@/lib/lix-react";
@@ -22,6 +21,7 @@ import { TopBar } from "@/shell/top-bar";
 import {
 	AtelierErrorBoundary,
 	type AtelierErrorFallback,
+	type AtelierErrorInfo,
 } from "./atelier-error-boundary";
 import type { AtelierExtensionState, AtelierJsonValue } from "./extension-api";
 import {
@@ -120,8 +120,8 @@ export type AtelierProps = AtelierOptions & {
 	readonly slots?: AtelierSlots;
 	/** Props forwarded to Atelier's semantic top-bar header. */
 	readonly topBarProps?: AtelierTopBarProps;
-	/** Called when the Atelier shell or one of its rendered views throws. */
-	readonly onError?: (error: unknown, errorInfo: ErrorInfo) => void;
+	/** Reports shell/render errors and handled extension load/observe failures. */
+	readonly onError?: (error: unknown, errorInfo: AtelierErrorInfo) => void;
 	/** Replaces the default visible render-error state. */
 	readonly errorFallback?: AtelierErrorFallback;
 };
@@ -455,18 +455,20 @@ export function AtelierSkeleton({
 	return (
 		<div className="atelier-root atw:h-full atw:w-full atw:overflow-hidden">
 			<div className="atw:relative atw:flex atw:h-full atw:min-h-0 atw:flex-col atw:bg-bg atw:text-fg">
-				<TopBar
-					isLeftSidebarVisible={false}
-					isRightSidebarVisible={false}
-					navbarBrand={slots?.navbarBrand}
-					navbarRepository={slots?.navbarRepository}
-					navbarStart={slots?.navbarStart}
-					navbarEnd={slots?.navbarEnd}
-					rootProps={topBarProps}
-				/>
-				<main className="atw:flex atw:min-h-0 atw:flex-1 atw:overflow-hidden atw:px-2 atw:pb-2">
-					<div className="atw:grid atw:min-h-0 atw:flex-1 atw:place-content-center atw:overflow-hidden atw:rounded-[10px] atw:bg-panel atw:p-6 atw:text-center atw:text-fg-subtle">
-						{children}
+				<main className="atw:flex atw:min-h-0 atw:flex-1 atw:overflow-hidden atw:px-2 atw:pt-2 atw:pb-2">
+					<div className="atw:flex atw:min-h-0 atw:flex-1 atw:flex-col atw:overflow-hidden atw:rounded-[10px] atw:border atw:border-border atw:bg-panel">
+						<TopBar
+							isLeftSidebarVisible={false}
+							isRightSidebarVisible={false}
+							navbarBrand={slots?.navbarBrand}
+							navbarRepository={slots?.navbarRepository}
+							navbarStart={slots?.navbarStart}
+							navbarEnd={slots?.navbarEnd}
+							rootProps={topBarProps}
+						/>
+						<div className="atw:grid atw:min-h-0 atw:flex-1 atw:place-content-center atw:p-6 atw:text-center atw:text-fg-subtle">
+							{children}
+						</div>
 					</div>
 				</main>
 			</div>
